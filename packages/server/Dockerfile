@@ -31,8 +31,8 @@ RUN npm run build -w @dreamtime/server
 # Production stage
 FROM node:20-alpine
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma and wget for healthcheck
+RUN apk add --no-cache openssl wget
 
 WORKDIR /app
 
@@ -54,8 +54,8 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Health check - start-period allows time for migrations to run
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 CMD ["node", "dist/index.js"]
