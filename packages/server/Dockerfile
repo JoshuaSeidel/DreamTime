@@ -1,6 +1,9 @@
 # Build stage
 FROM node:20-alpine AS builder
 
+# Install bash for setup script
+RUN apk add --no-cache bash
+
 WORKDIR /app
 
 # Copy all package files for full workspace resolution
@@ -8,8 +11,9 @@ COPY package*.json ./
 COPY packages/server/package*.json ./packages/server/
 COPY packages/client/package*.json ./packages/client/
 
-# Copy prisma schema
+# Copy prisma files and setup script
 COPY prisma ./prisma
+COPY scripts ./scripts
 
 # Install ALL dependencies (needed for proper hoisting)
 RUN npm ci
@@ -18,8 +22,8 @@ RUN npm ci
 COPY packages/server ./packages/server
 COPY tsconfig.base.json ./
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma schema for PostgreSQL and generate client
+RUN chmod +x scripts/setup-prisma.sh && ./scripts/setup-prisma.sh postgresql
 
 # Build server
 RUN npm run build -w @dreamtime/server
