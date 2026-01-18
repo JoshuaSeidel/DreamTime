@@ -10,7 +10,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { createChild } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
@@ -52,17 +51,38 @@ export default function AddChildDialog({ onChildAdded, trigger }: AddChildDialog
     }
   };
 
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOpen(true);
+  };
+
+  // Clone the trigger element to add onClick handler, or use default button
+  const renderTrigger = () => {
+    if (trigger) {
+      // If trigger is a React element, clone it with onClick
+      if (typeof trigger === 'object' && trigger !== null && 'type' in trigger) {
+        return (
+          <div onClick={handleTriggerClick} style={{ cursor: 'pointer' }}>
+            {trigger}
+          </div>
+        );
+      }
+      return <div onClick={handleTriggerClick}>{trigger}</div>;
+    }
+    return (
+      <Button variant="outline" className="w-full border-dashed" onClick={handleTriggerClick}>
+        <Plus className="w-4 h-4 mr-2" />
+        Add Child
+      </Button>
+    );
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="outline" className="w-full border-dashed">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Child
-          </Button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+    <>
+      {renderTrigger()}
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add Child</DialogTitle>
           <DialogDescription>
@@ -111,7 +131,8 @@ export default function AddChildDialog({ onChildAdded, trigger }: AddChildDialog
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

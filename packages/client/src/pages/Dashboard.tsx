@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, Loader2 } from 'lucide-react';
+import { Moon, Clock, Loader2, Plus, Baby } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
 import CribTimeCountdown from '../components/CribTimeCountdown';
+import AddChildDialog from '../components/AddChildDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
@@ -115,28 +117,32 @@ export default function Dashboard() {
     loadSessionData();
   }, [loadSessionData]);
 
-  const handleAction = async (action: 'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib') => {
+  // Track pending put_down custom time for the sleep type dialog
+  const [pendingPutDownTime, setPendingPutDownTime] = useState<string | null>(null);
+
+  const handleAction = async (action: 'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib', customTime?: string) => {
     if (!accessToken || !selectedChildId) {
       toast.error('No child selected', 'Please select a child first');
       return;
     }
 
     if (action === 'put_down') {
-      // Show sleep type selection dialog
+      // Store custom time if provided, then show sleep type selection dialog
+      setPendingPutDownTime(customTime || null);
       setShowSleepTypeDialog(true);
       return;
     }
 
     setIsActionLoading(true);
-    const now = new Date().toISOString();
+    const eventTime = customTime || new Date().toISOString();
 
     try {
       if (activeSession) {
-        // Update existing session
+        // Update existing session with the event time
         const eventMap = {
-          fell_asleep: { event: 'fell_asleep' as const, asleepAt: now },
-          woke_up: { event: 'woke_up' as const, wokeUpAt: now },
-          out_of_crib: { event: 'out_of_crib' as const, outOfCribAt: now },
+          fell_asleep: { event: 'fell_asleep' as const, asleepAt: eventTime },
+          woke_up: { event: 'woke_up' as const, wokeUpAt: eventTime },
+          out_of_crib: { event: 'out_of_crib' as const, outOfCribAt: eventTime },
         };
 
         const updateData = eventMap[action];
@@ -150,19 +156,23 @@ export default function Dashboard() {
         if (result.success && result.data) {
           setActiveSession(result.data.state === 'COMPLETED' ? null : result.data);
 
+          const timeDisplay = customTime
+            ? new Date(customTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            : null;
+
           switch (action) {
             case 'fell_asleep':
               setCurrentState('asleep');
               // Check if this is baby falling back asleep after a brief wake
               if (activeSession.state === 'AWAKE') {
-                toast.success('Back to sleep', 'Fell asleep again');
+                toast.success('Back to sleep', timeDisplay ? `At ${timeDisplay}` : 'Fell asleep again');
               } else {
-                toast.success('Fell asleep', 'Sweet dreams');
+                toast.success('Fell asleep', timeDisplay ? `At ${timeDisplay}` : 'Sweet dreams');
               }
               break;
             case 'woke_up':
               setCurrentState('awake');
-              toast.info('Woke up', 'Baby is awake in crib');
+              toast.info('Woke up', timeDisplay ? `At ${timeDisplay}` : 'Baby is awake in crib');
               break;
             case 'out_of_crib':
               setCurrentState('awake');
@@ -227,21 +237,29 @@ export default function Dashboard() {
     if (!accessToken || !selectedChildId) return;
 
     setIsActionLoading(true);
-    const now = new Date().toISOString();
+    // Use pending custom time if set, otherwise use current time
+    const putDownTime = pendingPutDownTime || new Date().toISOString();
 
     try {
       const result = await createSession(accessToken, selectedChildId, {
         sessionType,
         napNumber,
-        putDownAt: now,
+        putDownAt: putDownTime,
       });
 
       if (result.success && result.data) {
         setActiveSession(result.data);
         setCurrentState('pending');
+
+        const timeDisplay = pendingPutDownTime
+          ? new Date(pendingPutDownTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          : null;
+
         toast.success(
           sessionType === 'NAP' ? `Nap ${napNumber} started` : 'Bedtime started',
-          'Tap "Fell Asleep" when baby is asleep'
+          timeDisplay
+            ? `Put down at ${timeDisplay}`
+            : 'Tap "Fell Asleep" when baby is asleep'
         );
         loadSessionData();
       } else {
@@ -252,6 +270,7 @@ export default function Dashboard() {
       toast.error('Error', 'Something went wrong');
     } finally {
       setIsActionLoading(false);
+      setPendingPutDownTime(null); // Clear the pending time
     }
   };
 
@@ -276,13 +295,24 @@ export default function Dashboard() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : !selectedChildId ? (
-          <Card>
+          <Card className="border-2 border-dashed border-primary/30">
             <CardContent className="text-center py-12">
-              <Moon className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium">No child selected</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Add a child to start tracking sleep
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <Baby className="w-8 h-8 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Welcome to DreamTime!</h2>
+              <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
+                Add your child to start tracking their sleep patterns and get personalized schedule recommendations.
               </p>
+              <AddChildDialog
+                onChildAdded={() => window.location.reload()}
+                trigger={
+                  <Button size="lg" className="gap-2">
+                    <Plus className="w-5 h-5" />
+                    Add Your Child
+                  </Button>
+                }
+              />
             </CardContent>
           </Card>
         ) : (
