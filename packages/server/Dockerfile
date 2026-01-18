@@ -28,10 +28,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Copy package.json for ESM support and module resolution
+COPY --from=builder /app/packages/server/package.json ./package.json
+
 # Copy built files
 COPY --from=builder /app/packages/server/dist ./dist
+
+# Copy all node_modules (dependencies are hoisted to root in npm workspaces)
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/server/node_modules ./packages/server/node_modules
+
+# Copy prisma files
 COPY --from=builder /app/prisma ./prisma
 
 # Set environment
