@@ -68,31 +68,80 @@ function formatSession(session: {
   notes: string | null;
   totalMinutes: number | null;
   sleepMinutes: number | null;
+  settlingMinutes: number | null;
+  postWakeMinutes: number | null;
+  awakeCribMinutes: number | null;
+  qualifiedRestMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 }): SleepSessionResponse {
   return session;
 }
 
-// Calculate total time in crib and actual sleep time
+// Calculate total time in crib, actual sleep time, and qualified rest
+// Qualified rest = (awake crib time ÷ 2) + actual sleep time
+// This is a sleep training methodology where rest in crib has half value
 function calculateDurations(
   putDownAt: Date | null,
   asleepAt: Date | null,
   wokeUpAt: Date | null,
   outOfCribAt: Date | null
-): { totalMinutes: number | null; sleepMinutes: number | null } {
+): {
+  totalMinutes: number | null;
+  sleepMinutes: number | null;
+  settlingMinutes: number | null;
+  postWakeMinutes: number | null;
+  awakeCribMinutes: number | null;
+  qualifiedRestMinutes: number | null;
+} {
   let totalMinutes: number | null = null;
   let sleepMinutes: number | null = null;
+  let settlingMinutes: number | null = null;
+  let postWakeMinutes: number | null = null;
+  let awakeCribMinutes: number | null = null;
+  let qualifiedRestMinutes: number | null = null;
 
+  // Total time in crib
   if (putDownAt && outOfCribAt) {
     totalMinutes = Math.round((outOfCribAt.getTime() - putDownAt.getTime()) / 60000);
   }
 
+  // Actual sleep time
   if (asleepAt && wokeUpAt) {
     sleepMinutes = Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000);
   }
 
-  return { totalMinutes, sleepMinutes };
+  // Settling time (put down to fell asleep)
+  if (putDownAt && asleepAt) {
+    settlingMinutes = Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000);
+  }
+
+  // Post-wake time (woke up to out of crib)
+  if (wokeUpAt && outOfCribAt) {
+    postWakeMinutes = Math.round((outOfCribAt.getTime() - wokeUpAt.getTime()) / 60000);
+  }
+
+  // Total awake time in crib
+  if (settlingMinutes !== null || postWakeMinutes !== null) {
+    awakeCribMinutes = (settlingMinutes ?? 0) + (postWakeMinutes ?? 0);
+  }
+
+  // Qualified rest = (awake crib time ÷ 2) + actual sleep
+  // This gives "credit" for time spent resting in crib even if not sleeping
+  if (totalMinutes !== null) {
+    const actualSleep = sleepMinutes ?? 0;
+    const awakeCrib = awakeCribMinutes ?? (totalMinutes - actualSleep);
+    qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
+  }
+
+  return {
+    totalMinutes,
+    sleepMinutes,
+    settlingMinutes,
+    postWakeMinutes,
+    awakeCribMinutes,
+    qualifiedRestMinutes,
+  };
 }
 
 export async function listSessions(
@@ -226,6 +275,10 @@ export async function updateSession(
     notes?: string | null;
     totalMinutes?: number | null;
     sleepMinutes?: number | null;
+    settlingMinutes?: number | null;
+    postWakeMinutes?: number | null;
+    awakeCribMinutes?: number | null;
+    qualifiedRestMinutes?: number | null;
   } = {};
 
   // Handle state transition events
@@ -307,19 +360,35 @@ export async function updateSession(
   const finalWokeUpAt = updateData.wokeUpAt ?? session.wokeUpAt;
   const finalOutOfCribAt = updateData.outOfCribAt ?? session.outOfCribAt;
 
-  const { totalMinutes, sleepMinutes } = calculateDurations(
+  const durations = calculateDurations(
     finalPutDownAt,
     finalAsleepAt,
     finalWokeUpAt,
     finalOutOfCribAt
   );
 
-  if (totalMinutes !== null) {
-    updateData.totalMinutes = totalMinutes;
+  if (durations.totalMinutes !== null) {
+    updateData.totalMinutes = durations.totalMinutes;
   }
 
-  if (sleepMinutes !== null) {
-    updateData.sleepMinutes = sleepMinutes;
+  if (durations.sleepMinutes !== null) {
+    updateData.sleepMinutes = durations.sleepMinutes;
+  }
+
+  if (durations.settlingMinutes !== null) {
+    updateData.settlingMinutes = durations.settlingMinutes;
+  }
+
+  if (durations.postWakeMinutes !== null) {
+    updateData.postWakeMinutes = durations.postWakeMinutes;
+  }
+
+  if (durations.awakeCribMinutes !== null) {
+    updateData.awakeCribMinutes = durations.awakeCribMinutes;
+  }
+
+  if (durations.qualifiedRestMinutes !== null) {
+    updateData.qualifiedRestMinutes = durations.qualifiedRestMinutes;
   }
 
   // Update the session

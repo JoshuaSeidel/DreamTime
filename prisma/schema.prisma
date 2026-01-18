@@ -188,8 +188,12 @@ model SleepSession {
   notes         String?
 
   // Calculated fields (stored for convenience)
-  totalMinutes  Int?     // Total time in crib
-  sleepMinutes  Int?     // Actual sleep time
+  totalMinutes         Int?     // Total time in crib (putDown to outOfCrib)
+  sleepMinutes         Int?     // Actual sleep time (asleep to wokeUp)
+  settlingMinutes      Int?     // Time to fall asleep (putDown to asleep)
+  postWakeMinutes      Int?     // Time awake after waking (wokeUp to outOfCrib)
+  awakeCribMinutes     Int?     // Total awake time in crib (settling + postWake)
+  qualifiedRestMinutes Int?     // (awakeCribTime ÷ 2) + sleepMinutes - sleep training metric
 
   child         Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())

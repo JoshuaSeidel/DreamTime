@@ -57,8 +57,13 @@ export interface SleepSessionResponse {
   cryingMinutes: number | null;
   notes: string | null;
 
-  totalMinutes: number | null;
-  sleepMinutes: number | null;
+  // Duration calculations
+  totalMinutes: number | null;      // Total time in crib (putDown to outOfCrib)
+  sleepMinutes: number | null;      // Actual sleep time (asleep to wokeUp)
+  settlingMinutes: number | null;   // Time to fall asleep (putDown to asleep)
+  postWakeMinutes: number | null;   // Time awake in crib after waking (wokeUp to outOfCrib)
+  awakeCribMinutes: number | null;  // Total awake time in crib (settling + postWake)
+  qualifiedRestMinutes: number | null; // (awakeCribTime ÷ 2) + sleepMinutes
 
   createdAt: Date;
   updatedAt: Date;
