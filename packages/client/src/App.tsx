@@ -34,7 +34,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground w-full max-w-full overflow-x-hidden">
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           {/* Public routes */}

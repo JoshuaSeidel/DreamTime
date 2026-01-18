@@ -59,7 +59,6 @@ export default function Analytics() {
       (sum, s) => sum + (s.sleepMinutes || 0),
       0
     );
-    const avgSleepMinutes = totalSleepMinutes / completedSessions.length;
     const napSessions = completedSessions.filter(s => s.sessionType === 'NAP');
     const nightSessions = completedSessions.filter(s => s.sessionType === 'NIGHT_SLEEP');
 

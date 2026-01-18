@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import BottomNav from '../components/BottomNav';

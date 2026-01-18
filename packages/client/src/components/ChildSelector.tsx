@@ -26,7 +26,10 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
         setChildren(result.data);
         // Auto-select first child if none selected
         if (!selectedId && result.data.length > 0) {
-          onSelect(result.data[0].id);
+          const firstChild = result.data[0];
+          if (firstChild) {
+            onSelect(firstChild.id);
+          }
         }
       }
     } catch (err) {
