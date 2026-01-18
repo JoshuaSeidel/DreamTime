@@ -1,15 +1,17 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getVapidPublicKey } from '../config/secrets.js';
-import { authenticateToken } from '../middleware/auth.middleware.js';
 
-// In-memory storage for push subscriptions (in production, use database)
-// For now, we'll just validate the subscription format
-interface PushSubscription {
+// Push subscription format from the browser
+interface PushSubscriptionBody {
   endpoint: string;
   keys: {
     p256dh: string;
     auth: string;
   };
+}
+
+interface UnsubscribeBody {
+  endpoint: string;
 }
 
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
@@ -43,61 +45,100 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
    * POST /notifications/subscribe
    * Register a push subscription for the authenticated user
    */
-  app.post('/subscribe', {
-    preHandler: authenticateToken,
-  }, async (request: FastifyRequest<{ Body: PushSubscription }>, reply: FastifyReply) => {
-    const subscription = request.body;
+  app.post<{ Body: PushSubscriptionBody }>(
+    '/subscribe',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Register a push notification subscription',
+        tags: ['Notifications'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['endpoint', 'keys'],
+          properties: {
+            endpoint: { type: 'string' },
+            keys: {
+              type: 'object',
+              required: ['p256dh', 'auth'],
+              properties: {
+                p256dh: { type: 'string' },
+                auth: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: PushSubscriptionBody }>, reply: FastifyReply) => {
+      const subscription = request.body;
 
-    // Validate subscription format
-    if (!subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
-      return reply.status(400).send({
-        success: false,
-        error: {
-          code: 'INVALID_SUBSCRIPTION',
-          message: 'Invalid push subscription format',
+      // Validate subscription format
+      if (!subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_SUBSCRIPTION',
+            message: 'Invalid push subscription format',
+          },
+        });
+      }
+
+      // TODO: Store subscription in database associated with user
+      // For now, we'll just acknowledge the subscription
+
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Push subscription registered successfully',
         },
       });
     }
-
-    // TODO: Store subscription in database associated with user
-    // For now, we'll just acknowledge the subscription
-    // const userId = (request as { userId?: string }).userId;
-
-    return reply.send({
-      success: true,
-      data: {
-        message: 'Push subscription registered successfully',
-      },
-    });
-  });
+  );
 
   /**
    * POST /notifications/unsubscribe
    * Remove a push subscription for the authenticated user
    */
-  app.post('/unsubscribe', {
-    preHandler: authenticateToken,
-  }, async (request: FastifyRequest<{ Body: { endpoint: string } }>, reply: FastifyReply) => {
-    const { endpoint } = request.body;
+  app.post<{ Body: UnsubscribeBody }>(
+    '/unsubscribe',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Remove a push notification subscription',
+        tags: ['Notifications'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['endpoint'],
+          properties: {
+            endpoint: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: UnsubscribeBody }>, reply: FastifyReply) => {
+      const { endpoint } = request.body;
 
-    if (!endpoint) {
-      return reply.status(400).send({
-        success: false,
-        error: {
-          code: 'INVALID_REQUEST',
-          message: 'Endpoint is required',
+      if (!endpoint) {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_REQUEST',
+            message: 'Endpoint is required',
+          },
+        });
+      }
+
+      // TODO: Remove subscription from database
+      // For now, we'll just acknowledge the unsubscribe
+
+      return reply.send({
+        success: true,
+        data: {
+          message: 'Push subscription removed successfully',
         },
       });
     }
-
-    // TODO: Remove subscription from database
-    // For now, we'll just acknowledge the unsubscribe
-
-    return reply.send({
-      success: true,
-      data: {
-        message: 'Push subscription removed successfully',
-      },
-    });
-  });
+  );
 }
