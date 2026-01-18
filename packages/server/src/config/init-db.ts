@@ -5,16 +5,8 @@ import { fileURLToPath } from 'url';
 
 // Get the root directory of the monorepo
 function getMonorepoRoot(): string {
-  // In production (compiled), __dirname points to dist/config
-  // In development (tsx), import.meta.url is used
-  let currentDir: string;
-  if (typeof __dirname !== 'undefined') {
-    currentDir = __dirname;
-  } else {
-    // ESM mode - use import.meta.url
-    // @ts-expect-error import.meta is available in ESM
-    currentDir = dirname(fileURLToPath(import.meta.url));
-  }
+  // ESM mode - use import.meta.url
+  const currentDir = dirname(fileURLToPath(import.meta.url));
 
   // Navigate up from packages/server/src/config (or dist/config) to root
   return join(currentDir, '..', '..', '..', '..');
