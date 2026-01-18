@@ -1,4 +1,4 @@
-import { Moon, Sun, Baby, LogOut, Clock } from 'lucide-react';
+import { Moon, Sun, Baby, LogOut, Clock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type SleepState = 'awake' | 'pending' | 'asleep';
@@ -6,15 +6,23 @@ type SleepState = 'awake' | 'pending' | 'asleep';
 interface QuickActionButtonsProps {
   currentState: SleepState;
   onAction: (action: 'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib') => void;
+  disabled?: boolean;
+  hasActiveSession?: boolean;
 }
 
 export default function QuickActionButtons({
   currentState,
   onAction,
+  disabled = false,
+  hasActiveSession = false,
 }: QuickActionButtonsProps) {
   const getAvailableActions = () => {
     switch (currentState) {
       case 'awake':
+        // If there's an active session (baby woke during nap), show options to go back to sleep or finish
+        if (hasActiveSession) {
+          return ['fell_asleep', 'out_of_crib'] as const;
+        }
         return ['put_down'] as const;
       case 'pending':
         return ['fell_asleep', 'out_of_crib'] as const;
@@ -70,15 +78,21 @@ export default function QuickActionButtons({
             <button
               key={action}
               onClick={() => onAction(action)}
+              disabled={disabled}
               className={cn(
                 'rounded-xl p-5 flex items-center justify-between transition-all duration-200 active:scale-[0.98] shadow-md hover:shadow-lg min-h-[88px]',
                 config.bgClass,
-                config.textClass
+                config.textClass,
+                disabled && 'opacity-70 cursor-not-allowed'
               )}
             >
               <div className="flex items-center gap-4">
                 <div className="bg-white/20 rounded-full p-3">
-                  <Icon className="w-6 h-6" />
+                  {disabled ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : (
+                    <Icon className="w-6 h-6" />
+                  )}
                 </div>
                 <div className="text-left">
                   <p className="text-lg font-semibold">{config.label}</p>

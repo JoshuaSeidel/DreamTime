@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, Calendar, Loader2 } from 'lucide-react';
-import BottomNav from '../components/BottomNav';
 import {
   Card,
   CardContent,
@@ -77,22 +76,21 @@ export default function Analytics() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background pb-20">
-        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
-          <h1 className="text-xl font-bold text-primary">Analytics</h1>
+      <div className="min-h-screen bg-background pb-20 md:pb-0">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+          <h1 className="text-xl font-bold">Analytics</h1>
         </header>
         <main className="px-4 py-6 flex items-center justify-center">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </main>
-        <BottomNav />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
-        <h1 className="text-xl font-bold text-primary">Analytics</h1>
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+        <h1 className="text-xl font-bold">Analytics</h1>
         <p className="text-sm text-muted-foreground">Track sleep patterns and progress</p>
       </header>
 
@@ -173,8 +171,6 @@ export default function Analytics() {
           </>
         )}
       </main>
-
-      <BottomNav />
     </div>
   );
 }

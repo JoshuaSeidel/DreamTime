@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
-import BottomNav from '../components/BottomNav';
 import AddChildDialog from '../components/AddChildDialog';
+import { useToast } from '@/components/ui/toaster';
 import {
   Card,
   CardContent,
@@ -23,6 +23,15 @@ import {
   deletePasskey,
   getDeviceName,
 } from '@/lib/webauthn';
+import {
+  isPushSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  subscribeToPush,
+  unsubscribeFromPush,
+  isSubscribedToPush,
+  isRunningAsPWA,
+} from '@/lib/notifications';
 
 interface PasskeyCredential {
   id: string;
@@ -35,22 +44,61 @@ interface PasskeyCredential {
 export default function Settings() {
   const { user, logout, accessToken } = useAuthStore();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const toast = useToast();
 
   // Biometric state
   const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricCheckDone, setBiometricCheckDone] = useState(false);
   const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([]);
   const [isLoadingPasskeys, setIsLoadingPasskeys] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [biometricError, setBiometricError] = useState<string | null>(null);
-  const [biometricSuccess, setBiometricSuccess] = useState<string | null>(null);
 
-  // Check biometric support and load passkeys
+  // Push notification state
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
+  const [isTogglingPush, setIsTogglingPush] = useState(false);
+  const [isPWA, setIsPWA] = useState(false);
+
+  // Check biometric and push support
   useEffect(() => {
     const checkSupport = async () => {
+      // WebAuthn check
+      console.log('[Settings] Checking WebAuthn support...');
       const supported = isWebAuthnSupported();
-      const platformAvailable = await isPlatformAuthenticatorAvailable();
-      setBiometricSupported(supported && platformAvailable);
+      console.log('[Settings] WebAuthn supported:', supported);
+
+      let platformAvailable = false;
+      if (supported) {
+        platformAvailable = await isPlatformAuthenticatorAvailable();
+        console.log('[Settings] Platform authenticator available:', platformAvailable);
+      }
+
+      const isSupported = supported && platformAvailable;
+      console.log('[Settings] Final biometricSupported:', isSupported);
+      setBiometricSupported(isSupported);
+      setBiometricCheckDone(true);
+
+      // Push notification check
+      console.log('[Settings] Checking push notification support...');
+      const pushIsSupported = isPushSupported();
+      console.log('[Settings] Push supported:', pushIsSupported);
+      setPushSupported(pushIsSupported);
+
+      const permission = getNotificationPermission();
+      console.log('[Settings] Push permission:', permission);
+      setPushPermission(permission);
+
+      const isPwaMode = isRunningAsPWA();
+      console.log('[Settings] Running as PWA:', isPwaMode);
+      setIsPWA(isPwaMode);
+
+      if (pushIsSupported) {
+        const subscribed = await isSubscribedToPush();
+        console.log('[Settings] Currently subscribed:', subscribed);
+        setIsPushSubscribed(subscribed);
+      }
     };
     checkSupport();
   }, []);
@@ -66,36 +114,47 @@ export default function Settings() {
 
     setIsLoadingPasskeys(true);
     try {
+      console.log('[Settings] Loading passkeys...');
       const result = await listPasskeys(accessToken);
+      console.log('[Settings] Passkeys result:', result);
       if (result.success && result.data) {
         setPasskeys(result.data);
       }
     } catch (err) {
-      console.error('Failed to load passkeys:', err);
+      console.error('[Settings] Failed to load passkeys:', err);
     } finally {
       setIsLoadingPasskeys(false);
     }
   };
 
   const handleRegisterPasskey = async () => {
-    if (!accessToken) return;
+    console.log('[Settings] handleRegisterPasskey called');
+    console.log('[Settings] accessToken exists:', !!accessToken);
+
+    if (!accessToken) {
+      toast.error('Not authenticated', 'Please log in again');
+      return;
+    }
 
     setIsRegistering(true);
-    setBiometricError(null);
-    setBiometricSuccess(null);
 
     try {
       const deviceName = `${getDeviceName()} Face ID`;
+      console.log('[Settings] Registering passkey with device name:', deviceName);
+
       const result = await registerPasskey(accessToken, deviceName);
+      console.log('[Settings] Registration result:', result);
 
       if (result.success) {
-        setBiometricSuccess('Face ID has been set up successfully!');
+        toast.success('Face ID enabled', 'You can now sign in with Face ID');
         await loadPasskeys();
       } else {
-        setBiometricError(result.error || 'Failed to set up Face ID');
+        console.error('[Settings] Registration failed:', result.error);
+        toast.error('Setup failed', result.error || 'Failed to set up Face ID');
       }
     } catch (err) {
-      setBiometricError('Failed to set up Face ID');
+      console.error('[Settings] Registration exception:', err);
+      toast.error('Setup failed', 'An unexpected error occurred');
     } finally {
       setIsRegistering(false);
     }
@@ -105,19 +164,78 @@ export default function Settings() {
     if (!accessToken) return;
 
     setDeletingId(credentialId);
-    setBiometricError(null);
 
     try {
+      console.log('[Settings] Deleting passkey:', credentialId);
       const result = await deletePasskey(accessToken, credentialId);
       if (result.success) {
         setPasskeys((prev) => prev.filter((p) => p.id !== credentialId));
+        toast.success('Passkey removed', 'The device has been removed');
       } else {
-        setBiometricError(result.error || 'Failed to remove passkey');
+        toast.error('Delete failed', result.error || 'Failed to remove passkey');
       }
     } catch (err) {
-      setBiometricError('Failed to remove passkey');
+      console.error('[Settings] Delete passkey error:', err);
+      toast.error('Delete failed', 'An unexpected error occurred');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    console.log('[Settings] Toggle push called, current state:', isPushSubscribed);
+
+    if (!accessToken) {
+      toast.error('Not authenticated', 'Please log in again');
+      return;
+    }
+
+    setIsTogglingPush(true);
+
+    try {
+      if (isPushSubscribed) {
+        // Unsubscribe
+        console.log('[Settings] Unsubscribing from push...');
+        const result = await unsubscribeFromPush(accessToken);
+        if (result.success) {
+          setIsPushSubscribed(false);
+          toast.success('Notifications disabled', 'You will no longer receive push notifications');
+        } else {
+          toast.error('Failed to disable', result.error || 'Could not disable notifications');
+        }
+      } else {
+        // Request permission first
+        console.log('[Settings] Requesting notification permission...');
+        const permResult = await requestNotificationPermission();
+        console.log('[Settings] Permission result:', permResult);
+        setPushPermission(permResult.permission);
+
+        if (!permResult.success) {
+          if (permResult.permission === 'denied') {
+            toast.error('Permission denied', 'Enable notifications in your device settings');
+          } else if (permResult.permission === 'unsupported') {
+            toast.error('Not supported', 'Push notifications are not available on this device');
+          } else {
+            toast.info('Permission required', 'Please allow notifications when prompted');
+          }
+          return;
+        }
+
+        // Subscribe to push
+        console.log('[Settings] Subscribing to push...');
+        const subResult = await subscribeToPush(accessToken);
+        if (subResult.success) {
+          setIsPushSubscribed(true);
+          toast.success('Notifications enabled', 'You will receive reminders for sleep times');
+        } else {
+          toast.error('Subscription failed', subResult.error || 'Could not enable notifications');
+        }
+      }
+    } catch (err) {
+      console.error('[Settings] Push toggle error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsTogglingPush(false);
     }
   };
 
@@ -140,9 +258,9 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
-        <h1 className="text-xl font-bold text-primary">Settings</h1>
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+        <h1 className="text-xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your account and preferences</p>
       </header>
 
@@ -207,10 +325,26 @@ export default function Settings() {
                 </div>
                 <div>
                   <p className="font-medium">Push Notifications</p>
-                  <p className="text-sm text-muted-foreground">Get reminders for sleep times</p>
+                  <p className="text-sm text-muted-foreground">
+                    {!pushSupported
+                      ? 'Not available on this device'
+                      : !isPWA
+                      ? 'Install as app for notifications'
+                      : pushPermission === 'denied'
+                      ? 'Blocked in device settings'
+                      : 'Get reminders for sleep times'}
+                  </p>
                 </div>
               </div>
-              <Switch />
+              {isTogglingPush ? (
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              ) : (
+                <Switch
+                  checked={isPushSubscribed}
+                  onCheckedChange={handleTogglePush}
+                  disabled={!pushSupported || pushPermission === 'denied'}
+                />
+              )}
             </div>
 
             <Separator />
@@ -264,105 +398,109 @@ export default function Settings() {
         </Card>
 
         {/* Face ID & Security */}
-        {biometricSupported && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Fingerprint className="w-4 h-4" />
-                Face ID & Security
-              </CardTitle>
-              <CardDescription>
-                Use Face ID for quick and secure sign-in
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Error/Success Messages */}
-              {biometricError && (
-                <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                  {biometricError}
-                </div>
-              )}
-              {biometricSuccess && (
-                <div className="p-3 rounded-md bg-green-500/10 text-green-600 dark:text-green-400 text-sm">
-                  {biometricSuccess}
-                </div>
-              )}
-
-              {/* Registered Passkeys */}
-              {isLoadingPasskeys ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : passkeys.length > 0 ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    Registered devices:
-                  </p>
-                  {passkeys.map((passkey) => (
-                    <div
-                      key={passkey.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-full bg-primary/10 p-2">
-                          <Smartphone className="w-4 h-4 text-primary" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">
-                            {passkey.friendlyName || passkey.deviceType}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Added {formatDate(passkey.createdAt)}
-                            {passkey.lastUsedAt && (
-                              <> · Last used {formatDate(passkey.lastUsedAt)}</>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDeletePasskey(passkey.id)}
-                        disabled={deletingId === passkey.id}
-                      >
-                        {deletingId === passkey.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Fingerprint className="w-4 h-4" />
+              Face ID & Security
+            </CardTitle>
+            <CardDescription>
+              Use Face ID for quick and secure sign-in
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!biometricCheckDone ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Checking device support...</span>
+              </div>
+            ) : !biometricSupported ? (
+              <div className="text-center py-4">
                 <p className="text-sm text-muted-foreground">
-                  No Face ID set up yet. Add Face ID to sign in faster.
+                  Face ID is not available on this device.
                 </p>
-              )}
-
-              {/* Add Face ID Button */}
-              <Button
-                onClick={handleRegisterPasskey}
-                variant="outline"
-                className="w-full"
-                disabled={isRegistering}
-              >
-                {isRegistering ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Setting up Face ID...
-                  </>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Requires iOS Safari or Chrome with biometric hardware.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Registered Passkeys */}
+                {isLoadingPasskeys ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : passkeys.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Registered devices:
+                    </p>
+                    {passkeys.map((passkey) => (
+                      <div
+                        key={passkey.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-full bg-primary/10 p-2">
+                            <Smartphone className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">
+                              {passkey.friendlyName || passkey.deviceType}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Added {formatDate(passkey.createdAt)}
+                              {passkey.lastUsedAt && (
+                                <> · Last used {formatDate(passkey.lastUsedAt)}</>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeletePasskey(passkey.id)}
+                          disabled={deletingId === passkey.id}
+                        >
+                          {deletingId === passkey.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    {passkeys.length > 0 ? 'Add Another Device' : 'Set Up Face ID'}
-                  </>
+                  <p className="text-sm text-muted-foreground">
+                    No Face ID set up yet. Add Face ID to sign in faster.
+                  </p>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+
+                {/* Add Face ID Button */}
+                <Button
+                  onClick={handleRegisterPasskey}
+                  variant="outline"
+                  className="w-full"
+                  disabled={isRegistering}
+                >
+                  {isRegistering ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Setting up Face ID...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {passkeys.length > 0 ? 'Add Another Device' : 'Set Up Face ID'}
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Logout */}
         <Button
@@ -380,8 +518,6 @@ export default function Settings() {
           DreamTime v0.1.0
         </p>
       </main>
-
-      <BottomNav />
     </div>
   );
 }

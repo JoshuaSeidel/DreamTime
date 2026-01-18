@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Calendar, Clock, Moon, Check, ChevronRight, Info } from 'lucide-react';
-import BottomNav from '../components/BottomNav';
 import {
   Card,
   CardContent,
@@ -44,9 +43,9 @@ export default function Schedule() {
   const [selectedType, setSelectedType] = useState<ScheduleType>(null);
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
-        <h1 className="text-xl font-bold text-primary">Sleep Schedule</h1>
+    <div className="min-h-screen bg-background pb-20 md:pb-0">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+        <h1 className="text-xl font-bold">Sleep Schedule</h1>
         <p className="text-sm text-muted-foreground">Configure your baby's sleep routine</p>
       </header>
 
@@ -208,8 +207,6 @@ export default function Schedule() {
           </Button>
         )}
       </main>
-
-      <BottomNav />
     </div>
   );
 }

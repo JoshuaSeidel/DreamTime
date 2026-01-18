@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { useAuthStore } from './store/authStore';
 import LoadingSpinner from './components/LoadingSpinner';
+import Layout from './components/Layout';
 
 // Lazy load pages
 const Login = lazy(() => import('./pages/Login'));
@@ -55,47 +56,20 @@ function App() {
             }
           />
 
-          {/* Protected routes */}
+          {/* Protected routes with Layout */}
           <Route
-            path="/"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <Layout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute>
-                <History />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/analytics"
-            element={
-              <ProtectedRoute>
-                <Analytics />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/schedule"
-            element={
-              <ProtectedRoute>
-                <Schedule />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/schedule" element={<Schedule />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
 
           {/* Catch all */}
           <Route path="*" element={<Navigate to="/" replace />} />

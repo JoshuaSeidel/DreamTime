@@ -1,8 +1,9 @@
 import { ChevronDown, Plus, Check, Loader2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { getChildren, type Child } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/components/ui/toaster';
 import AddChildDialog from './AddChildDialog';
 
 interface ChildSelectorProps {
@@ -10,25 +11,71 @@ interface ChildSelectorProps {
   onSelect: (id: string) => void;
 }
 
+const SELECTED_CHILD_KEY = 'selectedChildId';
+
 export default function ChildSelector({ selectedId, onSelect }: ChildSelectorProps) {
-  const { accessToken } = useAuthStore();
+  const { accessToken, isAuthenticated } = useAuthStore();
+  const { info } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [children, setChildren] = useState<Child[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasShownNoChildToast, setHasShownNoChildToast] = useState(false);
 
-  const loadChildren = async () => {
-    if (!accessToken) return;
+  // Load saved child ID from localStorage on mount
+  useEffect(() => {
+    const savedId = localStorage.getItem(SELECTED_CHILD_KEY);
+    if (savedId && !selectedId) {
+      onSelect(savedId);
+    }
+  }, []);
+
+  // Save selected child ID to localStorage
+  useEffect(() => {
+    if (selectedId) {
+      localStorage.setItem(SELECTED_CHILD_KEY, selectedId);
+    }
+  }, [selectedId]);
+
+  // Clear selected child on logout
+  useEffect(() => {
+    if (!isAuthenticated) {
+      localStorage.removeItem(SELECTED_CHILD_KEY);
+      setChildren([]);
+      setIsLoading(false);
+      setHasShownNoChildToast(false);
+    }
+  }, [isAuthenticated]);
+
+  const loadChildren = useCallback(async () => {
+    if (!accessToken) {
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
       const result = await getChildren(accessToken);
       if (result.success && result.data) {
         setChildren(result.data);
-        // Auto-select first child if none selected
-        if (!selectedId && result.data.length > 0) {
-          const firstChild = result.data[0];
-          if (firstChild) {
-            onSelect(firstChild.id);
+
+        if (result.data.length === 0) {
+          // Show toast prompting to add a child (only once per session)
+          if (!hasShownNoChildToast) {
+            info('No children yet', 'Tap "Add Child" to get started tracking sleep');
+            setHasShownNoChildToast(true);
+          }
+        } else {
+          // Auto-select from localStorage or first child
+          const savedId = localStorage.getItem(SELECTED_CHILD_KEY);
+          const savedChild = savedId ? result.data.find(c => c.id === savedId) : null;
+
+          if (savedChild) {
+            onSelect(savedChild.id);
+          } else if (!selectedId && result.data.length > 0) {
+            const firstChild = result.data[0];
+            if (firstChild) {
+              onSelect(firstChild.id);
+            }
           }
         }
       }
@@ -37,10 +84,12 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [accessToken, selectedId, onSelect, hasShownNoChildToast, info]);
 
   useEffect(() => {
-    loadChildren();
+    if (accessToken) {
+      loadChildren();
+    }
   }, [accessToken]);
 
   const selectedChild = children.find((c) => c.id === selectedId);

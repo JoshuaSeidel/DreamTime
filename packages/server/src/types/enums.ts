@@ -64,10 +64,14 @@ export function isValidSessionState(value: string): value is SessionState {
 }
 
 // State machine validation for sleep sessions
+// Supports multiple wake/sleep cycles:
+// - PENDING can go to ASLEEP (normal) or COMPLETED (baby never fell asleep)
+// - ASLEEP can go to AWAKE (baby woke up)
+// - AWAKE can go to ASLEEP (baby fell back asleep) or COMPLETED (taken out)
 const validStateTransitions: Record<SessionState, SessionState[]> = {
-  [SessionState.PENDING]: [SessionState.ASLEEP],
+  [SessionState.PENDING]: [SessionState.ASLEEP, SessionState.COMPLETED],
   [SessionState.ASLEEP]: [SessionState.AWAKE],
-  [SessionState.AWAKE]: [SessionState.COMPLETED],
+  [SessionState.AWAKE]: [SessionState.ASLEEP, SessionState.COMPLETED],
   [SessionState.COMPLETED]: [],
 };
 
