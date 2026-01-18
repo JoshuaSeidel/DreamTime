@@ -1,10 +1,30 @@
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the root directory of the monorepo
+function getMonorepoRoot(): string {
+  // In production (compiled), __dirname points to dist/config
+  // In development (tsx), import.meta.url is used
+  const currentDir = typeof __dirname !== 'undefined'
+    ? __dirname
+    : dirname(fileURLToPath(import.meta.url));
+
+  // Navigate up from packages/server/src/config (or dist/config) to root
+  return join(currentDir, '..', '..', '..', '..');
+}
+
+function getPrismaSchemaPath(): string {
+  return join(getMonorepoRoot(), 'prisma', 'schema.prisma');
+}
 
 export async function initializeDatabase(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL ?? '';
+  const schemaPath = getPrismaSchemaPath();
 
   console.log('Initializing database...');
+  console.log(`Using Prisma schema: ${schemaPath}`);
 
   // Detect database type
   const isSqlite = databaseUrl.startsWith('file:');
@@ -102,51 +122,50 @@ async function createPostgresDatabase(adminUrl: string, dbName: string): Promise
 }
 
 async function runMigrations(): Promise<void> {
-  console.log('Running database migrations...');
+  const schemaPath = getPrismaSchemaPath();
+  const schemaArg = `--schema="${schemaPath}"`;
+  const isDev = process.env.NODE_ENV === 'development';
 
-  try {
-    // Run prisma migrate deploy for production, or migrate dev for development
-    const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) {
+    // In development, skip automatic migrations to avoid watch loop issues
+    // Developers should run `npx prisma migrate dev` manually when schema changes
+    console.log('Development mode: Skipping automatic migrations');
+    console.log('Run "npx prisma migrate dev" manually to apply schema changes');
 
-    if (isDev) {
-      // In development, use migrate dev which also generates the client
-      execSync('npx prisma migrate dev --skip-generate', {
-        stdio: 'inherit',
-        env: { ...process.env },
-      });
-    } else {
-      // In production, use migrate deploy
-      execSync('npx prisma migrate deploy', {
-        stdio: 'inherit',
-        env: { ...process.env },
-      });
-    }
-
-    console.log('Database migrations completed successfully');
-  } catch (error) {
-    console.error('Migration failed:', error);
-
-    // For SQLite in development, try to push schema directly
-    if (process.env.DATABASE_URL?.startsWith('file:') && process.env.NODE_ENV === 'development') {
-      console.log('Attempting to push schema directly for SQLite...');
-      try {
-        execSync('npx prisma db push --skip-generate', {
-          stdio: 'inherit',
-          env: { ...process.env },
-        });
-        console.log('Schema pushed successfully');
-      } catch (pushError) {
-        throw pushError;
-      }
-    } else {
+    // Just verify the connection works
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const client = new PrismaClient();
+      await client.$connect();
+      await client.$disconnect();
+      console.log('Database connection verified successfully');
+    } catch (error) {
+      console.error('Database connection failed. Run migrations first:');
+      console.error('  npx prisma migrate dev');
       throw error;
     }
-  }
+  } else {
+    // In production, run migrate deploy
+    console.log('Running database migrations...');
 
-  // Ensure Prisma client is generated
-  console.log('Ensuring Prisma client is up to date...');
-  execSync('npx prisma generate', {
-    stdio: 'inherit',
-    env: { ...process.env },
-  });
+    try {
+      execSync(`npx prisma migrate deploy ${schemaArg}`, {
+        stdio: 'inherit',
+        env: { ...process.env },
+        cwd: getMonorepoRoot(),
+      });
+      console.log('Database migrations completed successfully');
+    } catch (error) {
+      console.error('Migration failed:', error);
+      throw error;
+    }
+
+    // Generate Prisma client in production
+    console.log('Ensuring Prisma client is up to date...');
+    execSync(`npx prisma generate ${schemaArg}`, {
+      stdio: 'inherit',
+      env: { ...process.env },
+      cwd: getMonorepoRoot(),
+    });
+  }
 }

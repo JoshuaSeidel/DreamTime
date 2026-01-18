@@ -56,57 +56,55 @@ model Child {
 }
 
 model ChildCaregiver {
-  id        String       @id @default(uuid())
+  id        String   @id @default(uuid())
   childId   String
   userId    String
-  role      Role         @default(CAREGIVER)
-  status    InviteStatus @default(PENDING)
-  invitedAt DateTime     @default(now())
+  // Role: ADMIN, CAREGIVER, VIEWER
+  role      String   @default("CAREGIVER")
+  // InviteStatus: PENDING, ACCEPTED, DECLINED
+  status    String   @default("PENDING")
+  invitedAt DateTime @default(now())
   acceptedAt DateTime?
-  child     Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  child     Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([childId, userId])
   @@index([userId])
   @@index([childId])
 }
 
-enum Role {
-  ADMIN      // Full control - can edit, delete, share
-  CAREGIVER  // Can track sleep, view history
-  VIEWER     // Read-only access
-}
+// Role values: ADMIN, CAREGIVER, VIEWER
+// - ADMIN: Full control - can edit, delete, share
+// - CAREGIVER: Can track sleep, view history
+// - VIEWER: Read-only access
 
-enum InviteStatus {
-  PENDING
-  ACCEPTED
-  DECLINED
-}
+// InviteStatus values: PENDING, ACCEPTED, DECLINED
 
 // ============================================
 // Sleep Schedule Configuration
 // ============================================
 
 model SleepSchedule {
-  id              String       @id @default(uuid())
+  id              String   @id @default(uuid())
   childId         String
-  type            ScheduleType
-  isActive        Boolean      @default(true)
+  // ScheduleType: THREE_NAP, TWO_NAP, ONE_NAP, TRANSITION
+  type            String
+  isActive        Boolean  @default(true)
 
   // Wake windows (in minutes)
-  wakeWindow1Min  Int          // Wake to Nap 1
+  wakeWindow1Min  Int      // Wake to Nap 1
   wakeWindow1Max  Int
-  wakeWindow2Min  Int?         // Nap 1 end to Nap 2 (null for 1-nap)
+  wakeWindow2Min  Int?     // Nap 1 end to Nap 2 (null for 1-nap)
   wakeWindow2Max  Int?
-  wakeWindow3Min  Int?         // Nap 2 end to Bedtime (null for 1-nap)
+  wakeWindow3Min  Int?     // Nap 2 end to Bedtime (null for 1-nap)
   wakeWindow3Max  Int?
 
   // Nap 1 constraints (HH:mm format)
   nap1Earliest    String?
   nap1LatestStart String?
-  nap1MaxDuration Int?         // minutes
+  nap1MaxDuration Int?     // minutes
   nap1EndBy       String?
 
   // Nap 2 constraints
@@ -117,51 +115,51 @@ model SleepSchedule {
   nap2ExceptionDuration Int?   // If nap 1 was skipped
 
   // Bedtime constraints
-  bedtimeEarliest String
-  bedtimeLatest   String
-  bedtimeGoalStart String?     // Ideal bedtime window start
-  bedtimeGoalEnd   String?     // Ideal bedtime window end
+  bedtimeEarliest  String
+  bedtimeLatest    String
+  bedtimeGoalStart String?  // Ideal bedtime window start
+  bedtimeGoalEnd   String?  // Ideal bedtime window end
 
   // Wake time constraints
   wakeTimeEarliest String
   wakeTimeLatest   String
 
   // Sleep caps
-  daySleepCap     Int          // Total day sleep in minutes
+  daySleepCap     Int      // Total day sleep in minutes
 
-  child           Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([childId])
   @@index([childId, isActive])
 }
 
-enum ScheduleType {
-  THREE_NAP   // 3 naps per day (younger babies)
-  TWO_NAP     // 2 naps per day (12-14 months)
-  ONE_NAP     // 1 nap per day (14+ months)
-  TRANSITION  // In transition between schedules
-}
+// ScheduleType values: THREE_NAP, TWO_NAP, ONE_NAP, TRANSITION
+// - THREE_NAP: 3 naps per day (younger babies)
+// - TWO_NAP: 2 naps per day (12-14 months)
+// - ONE_NAP: 1 nap per day (14+ months)
+// - TRANSITION: In transition between schedules
 
 // ============================================
 // Schedule Transitions (2-to-1 nap transition)
 // ============================================
 
 model ScheduleTransition {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   childId        String
-  fromType       ScheduleType
-  toType         ScheduleType
-  startedAt      DateTime     @default(now())
-  currentWeek    Int          @default(1)
-  currentNapTime String       // HH:mm - current target single nap time
+  // ScheduleType values
+  fromType       String
+  toType         String
+  startedAt      DateTime @default(now())
+  currentWeek    Int      @default(1)
+  currentNapTime String   // HH:mm - current target single nap time
   completedAt    DateTime?
   notes          String?
 
-  child          Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  child          Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([childId])
 }
@@ -171,43 +169,41 @@ model ScheduleTransition {
 // ============================================
 
 model SleepSession {
-  id            String       @id @default(uuid())
+  id            String   @id @default(uuid())
   childId       String
-  sessionType   SessionType
-  state         SessionState
-  napNumber     Int?         // 1, 2, or null for night sleep
+  // SessionType: NAP, NIGHT_SLEEP
+  sessionType   String
+  // SessionState: PENDING, ASLEEP, AWAKE, COMPLETED
+  state         String
+  napNumber     Int?     // 1, 2, or null for night sleep
 
   // Timestamps (UTC)
-  putDownAt     DateTime?    // When baby was put in crib
-  asleepAt      DateTime?    // When baby fell asleep
-  wokeUpAt      DateTime?    // When baby woke up
-  outOfCribAt   DateTime?    // When baby was taken out
+  putDownAt     DateTime? // When baby was put in crib
+  asleepAt      DateTime? // When baby fell asleep
+  wokeUpAt      DateTime? // When baby woke up
+  outOfCribAt   DateTime? // When baby was taken out
 
   // Optional tracking
-  cryingMinutes Int?         // For CIO/Ferber tracking
+  cryingMinutes Int?     // For CIO/Ferber tracking
   notes         String?
 
   // Calculated fields (stored for convenience)
-  totalMinutes  Int?         // Total time in crib
-  sleepMinutes  Int?         // Actual sleep time
+  totalMinutes  Int?     // Total time in crib
+  sleepMinutes  Int?     // Actual sleep time
 
-  child         Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  child         Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([childId])
   @@index([childId, createdAt])
   @@index([childId, sessionType])
 }
 
-enum SessionType {
-  NAP
-  NIGHT_SLEEP
-}
+// SessionType values: NAP, NIGHT_SLEEP
 
-enum SessionState {
-  PENDING    // Put down, not yet asleep
-  ASLEEP     // Baby is sleeping
-  AWAKE      // Baby woke up, still in crib
-  COMPLETED  // Session ended, out of crib
-}
+// SessionState values: PENDING, ASLEEP, AWAKE, COMPLETED
+// - PENDING: Put down, not yet asleep
+// - ASLEEP: Baby is sleeping
+// - AWAKE: Baby woke up, still in crib
+// - COMPLETED: Session ended, out of crib
