@@ -22,8 +22,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/vapid-public-key', async (_request: FastifyRequest, reply: FastifyReply) => {
     const vapidPublicKey = getVapidPublicKey();
+    console.log('[Notifications] VAPID public key request, key exists:', !!vapidPublicKey, 'key length:', vapidPublicKey?.length || 0);
 
     if (!vapidPublicKey) {
+      console.error('[Notifications] VAPID public key not configured - check secrets generation');
       return reply.status(500).send({
         success: false,
         error: {

@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { cn, formatTimeString, formatTimeRange } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
 import {
@@ -439,7 +439,7 @@ export default function Schedule() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Target Nap Time</span>
-                <span className="font-bold text-2xl">{currentTransition.currentNapTime}</span>
+                <span className="font-bold text-2xl">{formatTimeString(currentTransition.currentNapTime)}</span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div
@@ -448,7 +448,7 @@ export default function Schedule() {
                 />
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Goal: Nap at 12:30-13:00 by week 6
+                Goal: Nap at 12:30 - 1:00 PM by week 6
               </p>
             </CardContent>
           </Card>
@@ -460,7 +460,7 @@ export default function Schedule() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm">
-                Aim for a single nap starting at <strong>{currentTransition.currentNapTime}</strong>.
+                Aim for a single nap starting at <strong>{formatTimeString(currentTransition.currentNapTime)}</strong>.
               </p>
               <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
                 <li>Keep baby awake until the target nap time</li>
@@ -746,7 +746,7 @@ export default function Schedule() {
                       </div>
                       <div className="p-3 rounded-lg bg-muted/50 text-center">
                         <p className="text-2xl font-bold text-primary">
-                          {scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest}
+                          {formatTimeString(scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest)}
                         </p>
                         <p className="text-sm text-muted-foreground">Target Bedtime</p>
                       </div>
@@ -754,13 +754,13 @@ export default function Schedule() {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 rounded-lg bg-muted/50 text-center">
                         <p className="text-lg font-semibold">
-                          {scheduleConfig.wakeTimeEarliest}-{scheduleConfig.wakeTimeLatest}
+                          {formatTimeRange(scheduleConfig.wakeTimeEarliest, scheduleConfig.wakeTimeLatest)}
                         </p>
                         <p className="text-sm text-muted-foreground">Wake Window</p>
                       </div>
                       <div className="p-3 rounded-lg bg-muted/50 text-center">
                         <p className="text-lg font-semibold">
-                          {scheduleConfig.bedtimeEarliest}-{scheduleConfig.bedtimeLatest}
+                          {formatTimeRange(scheduleConfig.bedtimeEarliest, scheduleConfig.bedtimeLatest)}
                         </p>
                         <p className="text-sm text-muted-foreground">Bedtime Range</p>
                       </div>

@@ -110,7 +110,11 @@ export function getJwtRefreshSecret(): string {
 }
 
 export function getVapidPublicKey(): string {
-  return process.env.VAPID_PUBLIC_KEY ?? secrets.vapidPublicKey;
+  const key = process.env.VAPID_PUBLIC_KEY ?? secrets.vapidPublicKey;
+  if (!key) {
+    console.error('[Secrets] VAPID public key is missing! Secrets file exists:', !!secrets, 'vapidPublicKey in secrets:', !!secrets?.vapidPublicKey);
+  }
+  return key;
 }
 
 export function getVapidPrivateKey(): string {

@@ -68,6 +68,7 @@ export async function registerPasskey(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
+      body: JSON.stringify({}), // Empty body required for Content-Type: application/json
     });
 
     if (!optionsResponse.ok) {
