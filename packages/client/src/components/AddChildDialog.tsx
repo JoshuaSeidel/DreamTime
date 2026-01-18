@@ -29,7 +29,10 @@ export default function AddChildDialog({ onChildAdded, trigger }: AddChildDialog
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accessToken || !name || !birthDate) return;
+
+    if (!accessToken || !name || !birthDate) {
+      return;
+    }
 
     setIsLoading(true);
     setError(null);

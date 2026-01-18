@@ -60,9 +60,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const data = await response.json();
-          const { user, accessToken, refreshToken } = data.data;
+          const { user, tokens } = data.data;
 
-          get().setAuth(user, accessToken, refreshToken);
+          get().setAuth(user, tokens.accessToken, tokens.refreshToken);
         } finally {
           set({ isLoading: false });
         }
@@ -85,9 +85,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const data = await response.json();
-          const { user, accessToken, refreshToken } = data.data;
+          const { user, tokens } = data.data;
 
-          get().setAuth(user, accessToken, refreshToken);
+          get().setAuth(user, tokens.accessToken, tokens.refreshToken);
         } finally {
           set({ isLoading: false });
         }
@@ -118,11 +118,31 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'dreamtime-auth',
+      version: 1,
       partialize: (state) => ({
         user: state.user,
+        accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      migrate: (persistedState: unknown, version: number) => {
+        // Migration from version 0 (without accessToken) to version 1
+        if (version === 0) {
+          // Clear old auth state since we don't have the accessToken
+          return {
+            user: null,
+            accessToken: null,
+            refreshToken: null,
+            isAuthenticated: false,
+          };
+        }
+        return persistedState as {
+          user: User | null;
+          accessToken: string | null;
+          refreshToken: string | null;
+          isAuthenticated: boolean;
+        };
+      },
     }
   )
 );
