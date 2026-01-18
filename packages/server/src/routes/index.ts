@@ -8,6 +8,7 @@ import { sessionRoutes } from './session.routes.js';
 import { calculatorRoutes } from './calculator.routes.js';
 import { analyticsRoutes } from './analytics.routes.js';
 import { webAuthnRoutes } from './webauthn.routes.js';
+import { notificationRoutes } from './notification.routes.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Health check (no prefix)
@@ -38,5 +39,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Analytics routes (nested under children)
     await api.register(analyticsRoutes, { prefix: '/children' });
+
+    // Notification routes (push notifications)
+    await api.register(notificationRoutes, { prefix: '/notifications' });
   }, { prefix: '/api' });
 }

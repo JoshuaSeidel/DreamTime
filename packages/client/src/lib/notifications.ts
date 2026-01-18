@@ -1,9 +1,38 @@
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+// Cache for VAPID public key fetched from server
+let cachedVapidPublicKey: string | null = null;
 
 export interface NotificationState {
   supported: boolean;
   permission: NotificationPermission | 'unsupported';
   isSubscribed: boolean;
+}
+
+/**
+ * Fetch VAPID public key from server
+ */
+async function getVapidPublicKey(): Promise<string | null> {
+  if (cachedVapidPublicKey) {
+    return cachedVapidPublicKey;
+  }
+
+  try {
+    const response = await fetch('/api/notifications/vapid-public-key');
+    if (!response.ok) {
+      console.error('[Notifications] Failed to fetch VAPID key:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.success && data.data?.vapidPublicKey) {
+      cachedVapidPublicKey = data.data.vapidPublicKey;
+      return cachedVapidPublicKey;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[Notifications] Error fetching VAPID key:', err);
+    return null;
+  }
 }
 
 /**
@@ -124,13 +153,15 @@ export async function subscribeToPush(accessToken: string): Promise<{
     if (!subscription) {
       console.log('[Notifications] Creating new subscription...');
 
-      if (!VAPID_PUBLIC_KEY) {
-        console.error('[Notifications] VAPID public key not configured');
+      // Fetch VAPID key from server
+      const vapidPublicKey = await getVapidPublicKey();
+      if (!vapidPublicKey) {
+        console.error('[Notifications] VAPID public key not available');
         return { success: false, error: 'Push notifications not configured on server' };
       }
 
       // Convert VAPID key to Uint8Array
-      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
 
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
