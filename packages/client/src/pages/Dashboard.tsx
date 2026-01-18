@@ -3,6 +3,7 @@ import { Moon, Clock, Loader2 } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
+import CribTimeCountdown from '../components/CribTimeCountdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -12,7 +13,11 @@ import {
   getSessions,
   createSession,
   updateSession,
+  getNextAction,
+  getSchedule,
   type SleepSession,
+  type NextActionRecommendation,
+  type SleepSchedule,
 } from '@/lib/api';
 
 type SleepState = 'awake' | 'pending' | 'asleep';
@@ -31,6 +36,9 @@ export default function Dashboard() {
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [todaySummary, setTodaySummary] = useState({ totalMinutes: 0, napCount: 0 });
   const [showSleepTypeDialog, setShowSleepTypeDialog] = useState(false);
+  const [nextAction, setNextAction] = useState<NextActionRecommendation | null>(null);
+  const [hasSchedule, setHasSchedule] = useState(false);
+  const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
 
   // Save selected child to localStorage
   useEffect(() => {
@@ -78,6 +86,23 @@ export default function Dashboard() {
         const napCount = todaySessions.filter((s) => s.sessionType === 'NAP').length;
 
         setTodaySummary({ totalMinutes, napCount });
+      }
+
+      // Get schedule for crib time settings
+      const scheduleResult = await getSchedule(accessToken, selectedChildId);
+      if (scheduleResult.success && scheduleResult.data) {
+        setSchedule(scheduleResult.data);
+        setHasSchedule(true);
+
+        // Get next action recommendation (only if we have a schedule)
+        const nextActionResult = await getNextAction(accessToken, selectedChildId);
+        if (nextActionResult.success && nextActionResult.data) {
+          setNextAction(nextActionResult.data);
+        }
+      } else {
+        setSchedule(null);
+        setNextAction(null);
+        setHasSchedule(false);
       }
     } catch (err) {
       console.error('[Dashboard] Failed to load session data:', err);
@@ -289,6 +314,14 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Crib Time Countdown - Shows when baby is in crib */}
+            {activeSession && (
+              <CribTimeCountdown
+                session={activeSession}
+                minimumCribMinutes={schedule?.minimumCribMinutes ?? 90}
+              />
+            )}
+
             {/* Quick Actions */}
             <QuickActionButtons
               currentState={currentState}
@@ -322,17 +355,71 @@ export default function Dashboard() {
             </Card>
 
             {/* Next Recommendation */}
-            <Card className="border-primary/30 bg-primary/5">
+            <Card className={cn(
+              "border-primary/30",
+              nextAction?.action === 'NAP' && "bg-blue-500/5 border-blue-500/30",
+              nextAction?.action === 'BEDTIME' && "bg-violet-500/5 border-violet-500/30",
+              nextAction?.action === 'WAIT' && "bg-primary/5",
+              !hasSchedule && "bg-muted/30 border-muted"
+            )}>
               <CardContent className="pt-6">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-primary/20 p-2">
-                    <Moon className="w-5 h-5 text-primary" />
+                  <div className={cn(
+                    "rounded-full p-2",
+                    nextAction?.action === 'NAP' && "bg-blue-500/20",
+                    nextAction?.action === 'BEDTIME' && "bg-violet-500/20",
+                    nextAction?.action === 'WAIT' && "bg-primary/20",
+                    !hasSchedule && "bg-muted"
+                  )}>
+                    <Moon className={cn(
+                      "w-5 h-5",
+                      nextAction?.action === 'NAP' && "text-blue-500",
+                      nextAction?.action === 'BEDTIME' && "text-violet-500",
+                      nextAction?.action === 'WAIT' && "text-primary",
+                      !hasSchedule && "text-muted-foreground"
+                    )} />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-primary">Next Recommendation</h3>
+                  <div className="flex-1">
+                    <h3 className={cn(
+                      "font-semibold",
+                      nextAction?.action === 'NAP' && "text-blue-600 dark:text-blue-400",
+                      nextAction?.action === 'BEDTIME' && "text-violet-600 dark:text-violet-400",
+                      nextAction?.action === 'WAIT' && "text-primary",
+                      !hasSchedule && "text-muted-foreground"
+                    )}>
+                      {hasSchedule && nextAction ? (
+                        nextAction.action === 'NAP' ? `Nap ${nextAction.napNumber}` :
+                        nextAction.action === 'BEDTIME' ? 'Bedtime' :
+                        'Wait'
+                      ) : (
+                        'Next Recommendation'
+                      )}
+                    </h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Set up a schedule to see personalized recommendations
+                      {hasSchedule && nextAction ? (
+                        <>
+                          {nextAction.description}
+                          {nextAction.timeWindow && (
+                            <span className="block mt-1 font-medium text-foreground">
+                              {nextAction.minutesUntilEarliest && nextAction.minutesUntilEarliest > 0 ? (
+                                `Target: ${formatTime(nextAction.timeWindow.recommended)} (in ${nextAction.minutesUntilEarliest}m)`
+                              ) : (
+                                `Now - ${formatTime(nextAction.timeWindow.latest)}`
+                              )}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        'Set up a schedule to see personalized recommendations'
+                      )}
                     </p>
+                    {hasSchedule && nextAction?.notes && nextAction.notes.length > 0 && (
+                      <ul className="text-xs text-muted-foreground mt-2 space-y-1">
+                        {nextAction.notes.map((note, i) => (
+                          <li key={i}>• {note}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               </CardContent>

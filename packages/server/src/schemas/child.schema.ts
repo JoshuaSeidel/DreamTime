@@ -32,9 +32,13 @@ export const updateChildSchema = z.object({
 export type UpdateChildInput = z.input<typeof updateChildSchema>;
 
 export const shareChildSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  userId: z.string().optional(),
+  email: z.string().email('Invalid email address').optional(),
   role: z.enum([Role.CAREGIVER, Role.VIEWER] as const).default(Role.CAREGIVER),
-});
+}).refine(
+  (data) => data.userId || data.email,
+  { message: 'Either userId or email is required' }
+);
 
 export type ShareChildInput = z.infer<typeof shareChildSchema>;
 
@@ -59,6 +63,20 @@ export interface CaregiverInfo {
   name: string;
   role: string;
   status: string;
+  title: string | null;
+  isActive: boolean;
   invitedAt: Date;
   acceptedAt: Date | null;
 }
+
+export const toggleCaregiverAccessSchema = z.object({
+  isActive: z.boolean(),
+});
+
+export type ToggleCaregiverAccessInput = z.infer<typeof toggleCaregiverAccessSchema>;
+
+export const updateCaregiverTitleSchema = z.object({
+  title: z.string().min(1).max(50),
+});
+
+export type UpdateCaregiverTitleInput = z.infer<typeof updateCaregiverTitleSchema>;

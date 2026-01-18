@@ -1,5 +1,13 @@
-import { useState } from 'react';
-import { Calendar, Clock, Moon, Check, ChevronRight, Info } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Calendar,
+  Clock,
+  Moon,
+  Check,
+  AlertTriangle,
+  Loader2,
+  ArrowRight,
+} from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -9,12 +17,101 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/components/ui/toaster';
+import {
+  getSchedule,
+  saveSchedule,
+  getTransition,
+  startTransition,
+  updateTransition,
+  cancelTransition,
+  type SleepSchedule,
+  type ScheduleTransition,
+  type ScheduleType,
+  type CreateScheduleInput,
+} from '@/lib/api';
 
-type ScheduleType = 'TWO_NAP' | 'ONE_NAP' | 'TRANSITION' | null;
+const SELECTED_CHILD_KEY = 'selectedChildId';
+
+// Default schedule configurations based on type
+const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<CreateScheduleInput>> = {
+  TWO_NAP: {
+    type: 'TWO_NAP',
+    wakeWindow1Min: 120, // 2h
+    wakeWindow1Max: 150, // 2.5h
+    wakeWindow2Min: 150, // 2.5h
+    wakeWindow2Max: 210, // 3.5h
+    wakeWindow3Min: 210, // 3.5h
+    wakeWindow3Max: 270, // 4.5h
+    nap1Earliest: '08:30',
+    nap1LatestStart: '09:00',
+    nap1MaxDuration: 120,
+    nap1EndBy: '11:00',
+    nap2Earliest: '12:00',
+    nap2LatestStart: '13:00',
+    nap2MaxDuration: 120,
+    nap2EndBy: '15:00',
+    nap2ExceptionDuration: 150,
+    bedtimeEarliest: '17:30',
+    bedtimeLatest: '19:30',
+    bedtimeGoalStart: '19:00',
+    bedtimeGoalEnd: '19:30',
+    wakeTimeEarliest: '06:30',
+    wakeTimeLatest: '07:30',
+    daySleepCap: 210, // 3.5h
+    minimumCribMinutes: 90,
+  },
+  ONE_NAP: {
+    type: 'ONE_NAP',
+    wakeWindow1Min: 300, // 5h
+    wakeWindow1Max: 330, // 5.5h
+    wakeWindow2Min: 240, // 4h
+    wakeWindow2Max: 300, // 5h
+    nap1Earliest: '12:00',
+    nap1LatestStart: '13:00',
+    nap1MaxDuration: 180,
+    nap1EndBy: '15:30',
+    bedtimeEarliest: '18:00',
+    bedtimeLatest: '19:30',
+    bedtimeGoalStart: '18:45',
+    bedtimeGoalEnd: '19:30',
+    wakeTimeEarliest: '06:30',
+    wakeTimeLatest: '08:00',
+    daySleepCap: 150, // 2.5h
+    minimumCribMinutes: 90,
+  },
+  THREE_NAP: {
+    type: 'THREE_NAP',
+    wakeWindow1Min: 90, // 1.5h
+    wakeWindow1Max: 120, // 2h
+    wakeWindow2Min: 120, // 2h
+    wakeWindow2Max: 150, // 2.5h
+    wakeWindow3Min: 150, // 2.5h
+    wakeWindow3Max: 180, // 3h
+    nap1Earliest: '08:00',
+    nap1LatestStart: '08:30',
+    nap1MaxDuration: 90,
+    nap1EndBy: '10:00',
+    nap2Earliest: '11:30',
+    nap2LatestStart: '12:30',
+    nap2MaxDuration: 90,
+    nap2EndBy: '14:30',
+    bedtimeEarliest: '18:00',
+    bedtimeLatest: '19:30',
+    bedtimeGoalStart: '18:30',
+    bedtimeGoalEnd: '19:00',
+    wakeTimeEarliest: '06:00',
+    wakeTimeLatest: '07:00',
+    daySleepCap: 270, // 4.5h
+    minimumCribMinutes: 90,
+  },
+};
 
 interface ScheduleOption {
-  type: ScheduleType;
+  type: Exclude<ScheduleType, 'TRANSITION'>;
   label: string;
   description: string;
   recommended?: boolean;
@@ -33,14 +130,388 @@ const scheduleOptions: ScheduleOption[] = [
     description: 'For babies/toddlers 15+ months. Single midday nap with wake windows of 5-5.5 hours.',
   },
   {
-    type: 'TRANSITION',
-    label: '2-to-1 Transition',
-    description: 'Guided 4-6 week transition from 2 naps to 1 nap with gradual timing adjustments.',
+    type: 'THREE_NAP',
+    label: '3-Nap Schedule',
+    description: 'For younger babies 4-6 months. Three shorter naps with wake windows of 1.5-2.5 hours.',
   },
 ];
 
 export default function Schedule() {
-  const [selectedType, setSelectedType] = useState<ScheduleType>(null);
+  const { accessToken } = useAuthStore();
+  const toast = useToast();
+
+  const [selectedChildId] = useState<string | null>(() => {
+    return localStorage.getItem(SELECTED_CHILD_KEY);
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [currentSchedule, setCurrentSchedule] = useState<SleepSchedule | null>(null);
+  const [currentTransition, setCurrentTransition] = useState<ScheduleTransition | null>(null);
+  const [selectedType, setSelectedType] = useState<Exclude<ScheduleType, 'TRANSITION'> | null>(null);
+  const [scheduleConfig, setScheduleConfig] = useState<Partial<CreateScheduleInput>>({});
+
+  const [showTransitionWarning, setShowTransitionWarning] = useState(false);
+  const [showTransitionSetup, setShowTransitionSetup] = useState(false);
+  const [transitionNapTime, setTransitionNapTime] = useState('11:30');
+
+  // Load current schedule and transition
+  const loadData = useCallback(async () => {
+    if (!accessToken || !selectedChildId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Load schedule
+      const scheduleResult = await getSchedule(accessToken, selectedChildId);
+      if (scheduleResult.success && scheduleResult.data) {
+        setCurrentSchedule(scheduleResult.data);
+        const type = scheduleResult.data.type as ScheduleType;
+        if (type !== 'TRANSITION') {
+          setSelectedType(type);
+          // Convert null to undefined for compatibility
+          const config: Partial<CreateScheduleInput> = {
+            type: scheduleResult.data.type as ScheduleType,
+            wakeWindow1Min: scheduleResult.data.wakeWindow1Min,
+            wakeWindow1Max: scheduleResult.data.wakeWindow1Max,
+            wakeWindow2Min: scheduleResult.data.wakeWindow2Min ?? undefined,
+            wakeWindow2Max: scheduleResult.data.wakeWindow2Max ?? undefined,
+            wakeWindow3Min: scheduleResult.data.wakeWindow3Min ?? undefined,
+            wakeWindow3Max: scheduleResult.data.wakeWindow3Max ?? undefined,
+            nap1Earliest: scheduleResult.data.nap1Earliest ?? undefined,
+            nap1LatestStart: scheduleResult.data.nap1LatestStart ?? undefined,
+            nap1MaxDuration: scheduleResult.data.nap1MaxDuration ?? undefined,
+            nap1EndBy: scheduleResult.data.nap1EndBy ?? undefined,
+            nap2Earliest: scheduleResult.data.nap2Earliest ?? undefined,
+            nap2LatestStart: scheduleResult.data.nap2LatestStart ?? undefined,
+            nap2MaxDuration: scheduleResult.data.nap2MaxDuration ?? undefined,
+            nap2EndBy: scheduleResult.data.nap2EndBy ?? undefined,
+            nap2ExceptionDuration: scheduleResult.data.nap2ExceptionDuration ?? undefined,
+            bedtimeEarliest: scheduleResult.data.bedtimeEarliest,
+            bedtimeLatest: scheduleResult.data.bedtimeLatest,
+            bedtimeGoalStart: scheduleResult.data.bedtimeGoalStart ?? undefined,
+            bedtimeGoalEnd: scheduleResult.data.bedtimeGoalEnd ?? undefined,
+            wakeTimeEarliest: scheduleResult.data.wakeTimeEarliest,
+            wakeTimeLatest: scheduleResult.data.wakeTimeLatest,
+            daySleepCap: scheduleResult.data.daySleepCap,
+          };
+          setScheduleConfig(config);
+        }
+      } else {
+        // No schedule yet, use defaults
+        setSelectedType(null);
+        setCurrentSchedule(null);
+      }
+
+      // Load transition
+      const transitionResult = await getTransition(accessToken, selectedChildId);
+      if (transitionResult.success && transitionResult.data) {
+        setCurrentTransition(transitionResult.data);
+      } else {
+        setCurrentTransition(null);
+      }
+    } catch (err) {
+      console.error('[Schedule] Failed to load data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken, selectedChildId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSelectType = (type: Exclude<ScheduleType, 'TRANSITION'>) => {
+    // If switching from 2-nap to 1-nap, show transition warning
+    if (currentSchedule?.type === 'TWO_NAP' && type === 'ONE_NAP') {
+      setShowTransitionWarning(true);
+      return;
+    }
+
+    setSelectedType(type);
+    setScheduleConfig(DEFAULT_SCHEDULES[type]);
+  };
+
+  const handleSkipTransition = () => {
+    setShowTransitionWarning(false);
+    setSelectedType('ONE_NAP');
+    setScheduleConfig(DEFAULT_SCHEDULES.ONE_NAP);
+  };
+
+  const handleStartTransition = () => {
+    setShowTransitionWarning(false);
+    setShowTransitionSetup(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!accessToken || !selectedChildId || !selectedType) return;
+
+    setIsSaving(true);
+    try {
+      const fullConfig: CreateScheduleInput = {
+        ...DEFAULT_SCHEDULES[selectedType],
+        ...scheduleConfig,
+        type: selectedType,
+      } as CreateScheduleInput;
+
+      const result = await saveSchedule(accessToken, selectedChildId, fullConfig);
+      if (result.success) {
+        toast.success('Schedule saved', 'Your sleep schedule has been updated');
+        setCurrentSchedule(result.data!);
+      } else {
+        toast.error('Failed to save', result.error?.message || 'Could not save schedule');
+      }
+    } catch (err) {
+      console.error('[Schedule] Save error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStartTransitionConfirm = async () => {
+    if (!accessToken || !selectedChildId) return;
+
+    setIsSaving(true);
+    try {
+      const result = await startTransition(accessToken, selectedChildId, {
+        fromType: 'TWO_NAP',
+        toType: 'ONE_NAP',
+        startNapTime: transitionNapTime,
+      });
+      if (result.success) {
+        toast.success('Transition started', 'Your 2-to-1 nap transition has begun');
+        setCurrentTransition(result.data!);
+        setShowTransitionSetup(false);
+        loadData();
+      } else {
+        toast.error('Failed to start', result.error?.message || 'Could not start transition');
+      }
+    } catch (err) {
+      console.error('[Schedule] Start transition error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleProgressTransition = async () => {
+    if (!accessToken || !selectedChildId || !currentTransition) return;
+
+    setIsSaving(true);
+    try {
+      // Push nap time 15 minutes later
+      const parts = currentTransition.currentNapTime.split(':').map(Number);
+      const hours = parts[0] ?? 12;
+      const minutes = parts[1] ?? 0;
+      const newMinutes = minutes + 15;
+      const newHours = hours + Math.floor(newMinutes / 60);
+      const newTime = `${String(newHours).padStart(2, '0')}:${String(newMinutes % 60).padStart(2, '0')}`;
+
+      const result = await updateTransition(accessToken, selectedChildId, {
+        newNapTime: newTime,
+        currentWeek: currentTransition.currentWeek + 1,
+      });
+      if (result.success) {
+        toast.success('Progress saved', `Nap time moved to ${newTime}`);
+        setCurrentTransition(result.data!);
+      } else {
+        toast.error('Failed to update', result.error?.message || 'Could not update transition');
+      }
+    } catch (err) {
+      console.error('[Schedule] Progress error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCompleteTransition = async () => {
+    if (!accessToken || !selectedChildId) return;
+
+    setIsSaving(true);
+    try {
+      const result = await updateTransition(accessToken, selectedChildId, { complete: true });
+      if (result.success) {
+        toast.success('Transition complete!', 'Your baby is now on a 1-nap schedule');
+        setCurrentTransition(null);
+        loadData();
+      } else {
+        toast.error('Failed to complete', result.error?.message || 'Could not complete transition');
+      }
+    } catch (err) {
+      console.error('[Schedule] Complete error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelTransition = async () => {
+    if (!accessToken || !selectedChildId) return;
+
+    if (!confirm('Cancel the transition? This will revert to the 2-nap schedule.')) return;
+
+    setIsSaving(true);
+    try {
+      const result = await cancelTransition(accessToken, selectedChildId);
+      if (result.success) {
+        toast.info('Transition cancelled', 'Reverted to 2-nap schedule');
+        setCurrentTransition(null);
+        loadData();
+      } else {
+        toast.error('Failed to cancel', result.error?.message || 'Could not cancel transition');
+      }
+    } catch (err) {
+      console.error('[Schedule] Cancel error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formatMinutesToHours = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-0">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+          <h1 className="text-xl font-bold">Sleep Schedule</h1>
+        </header>
+        <main className="px-4 py-6 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </main>
+      </div>
+    );
+  }
+
+  if (!selectedChildId) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-0">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+          <h1 className="text-xl font-bold">Sleep Schedule</h1>
+        </header>
+        <main className="px-4 py-6">
+          <Card>
+            <CardContent className="text-center py-12">
+              <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No child selected</p>
+              <p className="text-sm text-muted-foreground/70 mt-2">
+                Select a child from the home screen to configure their schedule
+              </p>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  // Show active transition UI
+  if (currentTransition && !currentTransition.completedAt) {
+    return (
+      <div className="min-h-screen bg-background pb-20 md:pb-0">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
+          <h1 className="text-xl font-bold">2-to-1 Nap Transition</h1>
+          <p className="text-sm text-muted-foreground">Week {currentTransition.currentWeek} of transition</p>
+        </header>
+
+        <main className="px-4 py-6 space-y-6">
+          {/* Progress Card */}
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ArrowRight className="w-4 h-4" />
+                Transition Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Current Week</span>
+                <span className="font-bold text-2xl text-primary">{currentTransition.currentWeek}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Target Nap Time</span>
+                <span className="font-bold text-2xl">{currentTransition.currentNapTime}</span>
+              </div>
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${Math.min(100, (currentTransition.currentWeek / 6) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Goal: Nap at 12:30-13:00 by week 6
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Instructions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">This Week's Plan</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm">
+                Aim for a single nap starting at <strong>{currentTransition.currentNapTime}</strong>.
+              </p>
+              <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-4">
+                <li>Keep baby awake until the target nap time</li>
+                <li>90-minute minimum crib time rule applies</li>
+                <li>Expect earlier bedtime (6:00-7:00 PM) during transition</li>
+                <li>It's okay if some days need a rescue nap</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            <Button
+              onClick={handleProgressTransition}
+              className="w-full"
+              size="lg"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Clock className="w-4 h-4 mr-2" />
+              )}
+              Push Nap 15 Minutes Later
+            </Button>
+
+            {currentTransition.currentWeek >= 4 && (
+              <Button
+                onClick={handleCompleteTransition}
+                variant="outline"
+                className="w-full border-green-500 text-green-600 hover:bg-green-50"
+                size="lg"
+                disabled={isSaving}
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Complete Transition
+              </Button>
+            )}
+
+            <Button
+              onClick={handleCancelTransition}
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              disabled={isSaving}
+            >
+              Cancel Transition
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
@@ -50,161 +521,278 @@ export default function Schedule() {
       </header>
 
       <main className="px-4 py-6 space-y-6">
-        {/* Schedule Type Selection */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Schedule Type
-            </CardTitle>
-            <CardDescription>
-              Select the sleep schedule that matches your baby's age and needs
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {scheduleOptions.map((option) => (
-              <button
-                key={option.type}
-                onClick={() => setSelectedType(option.type)}
-                className={cn(
-                  'w-full p-4 text-left rounded-lg border-2 transition-all',
-                  selectedType === option.type
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border hover:border-primary/50 hover:bg-accent/50'
-                )}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{option.label}</span>
-                      {option.recommended && (
-                        <Badge variant="default" className="text-xs">Recommended</Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {option.description}
-                    </p>
-                  </div>
-                  {selectedType === option.type && (
-                    <div className="rounded-full bg-primary p-1">
-                      <Check className="w-4 h-4 text-primary-foreground" />
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Wake Windows */}
-        <Card className={cn(!selectedType && 'opacity-60')}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              Wake Windows
-            </CardTitle>
-            <CardDescription>
-              {selectedType
-                ? 'Configure the time between sleep periods'
-                : 'Select a schedule type first'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {selectedType ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="font-medium">Wake to Nap 1</p>
-                    <p className="text-sm text-muted-foreground">First wake window</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">2-2.5h</span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </div>
-                {selectedType !== 'ONE_NAP' && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="font-medium">Nap 1 to Nap 2</p>
-                      <p className="text-sm text-muted-foreground">Second wake window</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">2.5-3.5h</span>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div>
-                    <p className="font-medium">
-                      {selectedType === 'ONE_NAP' ? 'Nap to Bedtime' : 'Last Nap to Bedtime'}
-                    </p>
-                    <p className="text-sm text-muted-foreground">Final wake window</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">
-                      {selectedType === 'ONE_NAP' ? '4-5h' : '3.5-4.5h'}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <Info className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">
-                  Configure after selecting a schedule type
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Sleep Caps */}
-        <Card className={cn(!selectedType && 'opacity-60')}>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Moon className="w-4 h-4" />
-              Sleep Caps & Times
-            </CardTitle>
-            <CardDescription>
-              {selectedType
-                ? 'Maximum sleep durations and target times'
-                : 'Select a schedule type first'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {selectedType ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 rounded-lg bg-muted/50 text-center">
-                    <p className="text-2xl font-bold text-primary">3.5h</p>
-                    <p className="text-sm text-muted-foreground">Day Sleep Cap</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/50 text-center">
-                    <p className="text-2xl font-bold text-primary">7:00 PM</p>
-                    <p className="text-sm text-muted-foreground">Target Bedtime</p>
-                  </div>
-                </div>
-                <Button className="w-full" variant="outline">
-                  Customize Times
+        {/* Transition Warning Modal */}
+        {showTransitionWarning && (
+          <Card className="border-amber-500 bg-amber-50 dark:bg-amber-950">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="w-5 h-5" />
+                2-to-1 Nap Transition Recommended
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Switching directly from a 2-nap to 1-nap schedule is not recommended.
+                The transition should happen gradually over 4-6 weeks to avoid overtiredness.
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={handleStartTransition} className="flex-1">
+                  Start Transition
+                </Button>
+                <Button
+                  onClick={handleSkipTransition}
+                  variant="outline"
+                  className="flex-1 border-amber-500 text-amber-700"
+                >
+                  Skip Anyway
                 </Button>
               </div>
-            ) : (
-              <div className="text-center py-6">
-                <Info className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">
-                  Configure after selecting a schedule type
+              <Button
+                onClick={() => setShowTransitionWarning(false)}
+                variant="ghost"
+                className="w-full"
+              >
+                Cancel
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Transition Setup Modal */}
+        {showTransitionSetup && (
+          <Card className="border-primary">
+            <CardHeader>
+              <CardTitle className="text-base">Start 2-to-1 Transition</CardTitle>
+              <CardDescription>
+                This will guide you through a 4-6 week gradual transition
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Initial Single Nap Time
+                </label>
+                <Input
+                  type="time"
+                  value={transitionNapTime}
+                  onChange={(e) => setTransitionNapTime(e.target.value)}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Recommended: 11:30 AM for week 1-2
                 </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleStartTransitionConfirm}
+                  className="flex-1"
+                  disabled={isSaving}
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Start Transition'}
+                </Button>
+                <Button
+                  onClick={() => setShowTransitionSetup(false)}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-        {selectedType && (
-          <Button className="w-full" size="lg">
-            Save Schedule
-          </Button>
+        {/* Schedule Type Selection */}
+        {!showTransitionWarning && !showTransitionSetup && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Schedule Type
+                </CardTitle>
+                <CardDescription>
+                  Select the sleep schedule that matches your baby's age and needs
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {scheduleOptions.map((option) => (
+                  <button
+                    key={option.type}
+                    onClick={() => handleSelectType(option.type)}
+                    className={cn(
+                      'w-full p-4 text-left rounded-lg border-2 transition-all',
+                      selectedType === option.type
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                    )}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{option.label}</span>
+                          {option.recommended && (
+                            <Badge variant="default" className="text-xs">Recommended</Badge>
+                          )}
+                          {currentSchedule?.type === option.type && (
+                            <Badge variant="secondary" className="text-xs">Current</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {option.description}
+                        </p>
+                      </div>
+                      {selectedType === option.type && (
+                        <div className="rounded-full bg-primary p-1">
+                          <Check className="w-4 h-4 text-primary-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Wake Windows */}
+            <Card className={cn(!selectedType && 'opacity-60')}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Wake Windows
+                </CardTitle>
+                <CardDescription>
+                  {selectedType
+                    ? 'Time between sleep periods'
+                    : 'Select a schedule type first'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedType ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="font-medium">
+                          {selectedType === 'ONE_NAP' ? 'Wake to Nap' : 'Wake to Nap 1'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">First wake window</p>
+                      </div>
+                      <span className="font-semibold">
+                        {formatMinutesToHours(scheduleConfig.wakeWindow1Min || 0)}-
+                        {formatMinutesToHours(scheduleConfig.wakeWindow1Max || 0)}
+                      </span>
+                    </div>
+                    {selectedType !== 'ONE_NAP' && scheduleConfig.wakeWindow2Min && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <div>
+                          <p className="font-medium">
+                            {selectedType === 'THREE_NAP' ? 'Nap 1 to Nap 2' : 'Nap 1 to Nap 2'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">Second wake window</p>
+                        </div>
+                        <span className="font-semibold">
+                          {formatMinutesToHours(scheduleConfig.wakeWindow2Min)}-
+                          {formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="font-medium">
+                          {selectedType === 'ONE_NAP' ? 'Nap to Bedtime' : 'Last Nap to Bedtime'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Final wake window</p>
+                      </div>
+                      <span className="font-semibold">
+                        {selectedType === 'ONE_NAP'
+                          ? `${formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}`
+                          : `${formatMinutesToHours(scheduleConfig.wakeWindow3Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow3Max || 0)}`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground">
+                      Configure after selecting a schedule type
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Sleep Caps & Times */}
+            <Card className={cn(!selectedType && 'opacity-60')}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Moon className="w-4 h-4" />
+                  Sleep Caps & Times
+                </CardTitle>
+                <CardDescription>
+                  {selectedType
+                    ? 'Maximum sleep durations and target times'
+                    : 'Select a schedule type first'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedType ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 rounded-lg bg-muted/50 text-center">
+                        <p className="text-2xl font-bold text-primary">
+                          {formatMinutesToHours(scheduleConfig.daySleepCap || 0)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Day Sleep Cap</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 text-center">
+                        <p className="text-2xl font-bold text-primary">
+                          {scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Target Bedtime</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-3 rounded-lg bg-muted/50 text-center">
+                        <p className="text-lg font-semibold">
+                          {scheduleConfig.wakeTimeEarliest}-{scheduleConfig.wakeTimeLatest}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Wake Window</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted/50 text-center">
+                        <p className="text-lg font-semibold">
+                          {scheduleConfig.bedtimeEarliest}-{scheduleConfig.bedtimeLatest}
+                        </p>
+                        <p className="text-sm text-muted-foreground">Bedtime Range</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground">
+                      Configure after selecting a schedule type
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {selectedType && (
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleSaveSchedule}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Schedule'
+                )}
+              </Button>
+            )}
+          </>
         )}
       </main>
     </div>

@@ -35,7 +35,7 @@ async function verifyChildAccess(
     },
   });
 
-  if (!relation || relation.status !== InviteStatus.ACCEPTED) {
+  if (!relation || relation.status !== InviteStatus.ACCEPTED || !relation.isActive) {
     throw new ScheduleServiceError('Child not found', 'CHILD_NOT_FOUND', 404);
   }
 
@@ -87,11 +87,15 @@ function formatSchedule(
     wakeTimeEarliest: string;
     wakeTimeLatest: string;
     daySleepCap: number;
+    minimumCribMinutes?: number;
     createdAt: Date;
     updatedAt: Date;
   }
 ): SleepScheduleResponse {
-  return schedule;
+  return {
+    ...schedule,
+    minimumCribMinutes: schedule.minimumCribMinutes ?? 90,
+  };
 }
 
 function formatTransition(
@@ -184,6 +188,7 @@ export async function createOrUpdateSchedule(
       wakeTimeLatest: input.wakeTimeLatest!,
 
       daySleepCap: input.daySleepCap!,
+      minimumCribMinutes: input.minimumCribMinutes ?? 90,
     },
   });
 

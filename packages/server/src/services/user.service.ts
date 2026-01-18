@@ -110,6 +110,52 @@ export async function deleteUser(userId: string): Promise<void> {
   });
 }
 
+// Search users by name or email (for adding caregivers)
+export interface UserSearchResult {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export async function searchUsers(
+  currentUserId: string,
+  query: string,
+  limit: number = 10
+): Promise<UserSearchResult[]> {
+  if (!query || query.length < 2) {
+    return [];
+  }
+
+  // SQLite doesn't support mode: 'insensitive', so we use LOWER() in raw query
+  // or do a case-insensitive search using contains with lowercase comparison
+  const lowerQuery = query.toLowerCase();
+
+  const users = await prisma.user.findMany({
+    where: {
+      AND: [
+        // Exclude current user
+        { id: { not: currentUserId } },
+        // Search by name or email (SQLite LIKE is case-insensitive by default)
+        {
+          OR: [
+            { name: { contains: lowerQuery } },
+            { email: { contains: lowerQuery } },
+          ],
+        },
+      ],
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+    },
+    take: limit,
+    orderBy: { name: 'asc' },
+  });
+
+  return users;
+}
+
 export async function changePassword(
   userId: string,
   currentPassword: string,

@@ -39,7 +39,7 @@ async function verifyChildAccess(
     },
   });
 
-  if (!relation || relation.status !== InviteStatus.ACCEPTED) {
+  if (!relation || relation.status !== InviteStatus.ACCEPTED || !relation.isActive) {
     throw new SessionServiceError('Child not found', 'CHILD_NOT_FOUND', 404);
   }
 
@@ -298,7 +298,13 @@ export async function updateSession(
           );
         }
         updateData.state = newState;
-        updateData.asleepAt = input.asleepAt ? new Date(input.asleepAt) : now;
+        // Brief wake handling: If coming from AWAKE state (baby fell back asleep),
+        // don't overwrite the original asleepAt - preserve it for accurate sleep duration
+        if (currentState !== SessionState.AWAKE) {
+          updateData.asleepAt = input.asleepAt ? new Date(input.asleepAt) : now;
+        }
+        // Clear wokeUpAt since baby is asleep again (brief wake is excluded)
+        updateData.wokeUpAt = null as unknown as Date;
         break;
 
       case 'woke_up':

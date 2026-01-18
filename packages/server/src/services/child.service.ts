@@ -47,6 +47,7 @@ export async function listChildren(userId: string): Promise<ChildWithRole[]> {
     where: {
       userId,
       status: InviteStatus.ACCEPTED,
+      isActive: true, // Only show children where access is active
     },
     include: {
       child: true,
@@ -134,8 +135,8 @@ export async function getChild(
     return null;
   }
 
-  // Only show full details to accepted caregivers
-  if (caregiverRelation.status !== InviteStatus.ACCEPTED) {
+  // Only show full details to accepted and active caregivers
+  if (caregiverRelation.status !== InviteStatus.ACCEPTED || !caregiverRelation.isActive) {
     return null;
   }
 
@@ -147,6 +148,8 @@ export async function getChild(
     name: cg.user.name,
     role: cg.role,
     status: cg.status,
+    title: cg.title,
+    isActive: cg.isActive,
     invitedAt: cg.invitedAt,
     acceptedAt: cg.acceptedAt,
   }));
@@ -290,16 +293,32 @@ export async function shareChild(
     );
   }
 
-  // Find the user to invite
-  const invitedUser = await prisma.user.findUnique({
-    where: { email: input.email.toLowerCase() },
-  });
+  // Find the user to add - support both userId and email
+  let targetUser;
+  if (input.userId) {
+    targetUser = await prisma.user.findUnique({
+      where: { id: input.userId },
+    });
+  } else if (input.email) {
+    targetUser = await prisma.user.findUnique({
+      where: { email: input.email.toLowerCase() },
+    });
+  }
 
-  if (!invitedUser) {
+  if (!targetUser) {
     throw new ChildServiceError(
-      'User with this email not found',
+      'User not found',
       'USER_NOT_FOUND',
       404
+    );
+  }
+
+  // Cannot add yourself
+  if (targetUser.id === userId) {
+    throw new ChildServiceError(
+      'Cannot add yourself as a caregiver',
+      'CANNOT_ADD_SELF',
+      400
     );
   }
 
@@ -308,7 +327,7 @@ export async function shareChild(
     where: {
       childId_userId: {
         childId,
-        userId: invitedUser.id,
+        userId: targetUser.id,
       },
     },
   });
@@ -321,13 +340,15 @@ export async function shareChild(
     );
   }
 
-  // Create caregiver invitation
+  // Create caregiver with immediate access (ACCEPTED status)
   const caregiver = await prisma.childCaregiver.create({
     data: {
       childId,
-      userId: invitedUser.id,
+      userId: targetUser.id,
       role: input.role,
-      status: InviteStatus.PENDING,
+      status: InviteStatus.ACCEPTED,
+      acceptedAt: new Date(),
+      isActive: true,
     },
     include: {
       user: {
@@ -347,6 +368,8 @@ export async function shareChild(
     name: caregiver.user.name,
     role: caregiver.role,
     status: caregiver.status,
+    title: caregiver.title,
+    isActive: caregiver.isActive,
     invitedAt: caregiver.invitedAt,
     acceptedAt: caregiver.acceptedAt,
   };
@@ -554,9 +577,190 @@ export async function getUserRole(
     },
   });
 
-  if (!relation || relation.status !== InviteStatus.ACCEPTED) {
+  if (!relation || relation.status !== InviteStatus.ACCEPTED || !relation.isActive) {
     return null;
   }
 
   return relation.role;
+}
+
+// Toggle caregiver access (enable/disable)
+export async function toggleCaregiverAccess(
+  adminUserId: string,
+  childId: string,
+  caregiverUserId: string,
+  isActive: boolean
+): Promise<CaregiverInfo> {
+  // Check if user has ADMIN role for this child
+  const adminRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: adminUserId,
+      },
+    },
+  });
+
+  if (!adminRelation) {
+    throw new ChildServiceError(
+      'Child not found',
+      'CHILD_NOT_FOUND',
+      404
+    );
+  }
+
+  if (adminRelation.role !== Role.ADMIN) {
+    throw new ChildServiceError(
+      'Only admins can toggle caregiver access',
+      'FORBIDDEN',
+      403
+    );
+  }
+
+  // Cannot disable yourself
+  if (caregiverUserId === adminUserId) {
+    throw new ChildServiceError(
+      'Cannot disable your own access',
+      'CANNOT_MODIFY_SELF',
+      400
+    );
+  }
+
+  // Find the caregiver
+  const caregiverRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: caregiverUserId,
+      },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!caregiverRelation) {
+    throw new ChildServiceError(
+      'Caregiver not found',
+      'CAREGIVER_NOT_FOUND',
+      404
+    );
+  }
+
+  // Update the access
+  const updated = await prisma.childCaregiver.update({
+    where: { id: caregiverRelation.id },
+    data: {
+      isActive,
+      accessChangedAt: new Date(),
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  return {
+    id: updated.id,
+    userId: updated.userId,
+    email: updated.user.email,
+    name: updated.user.name,
+    role: updated.role,
+    status: updated.status,
+    title: updated.title,
+    isActive: updated.isActive,
+    invitedAt: updated.invitedAt,
+    acceptedAt: updated.acceptedAt,
+  };
+}
+
+// Update caregiver title
+export async function updateCaregiverTitle(
+  adminUserId: string,
+  childId: string,
+  caregiverUserId: string,
+  title: string
+): Promise<CaregiverInfo> {
+  // Check if user has ADMIN role for this child
+  const adminRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: adminUserId,
+      },
+    },
+  });
+
+  if (!adminRelation) {
+    throw new ChildServiceError(
+      'Child not found',
+      'CHILD_NOT_FOUND',
+      404
+    );
+  }
+
+  if (adminRelation.role !== Role.ADMIN) {
+    throw new ChildServiceError(
+      'Only admins can update caregiver titles',
+      'FORBIDDEN',
+      403
+    );
+  }
+
+  // Find the caregiver
+  const caregiverRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: caregiverUserId,
+      },
+    },
+  });
+
+  if (!caregiverRelation) {
+    throw new ChildServiceError(
+      'Caregiver not found',
+      'CAREGIVER_NOT_FOUND',
+      404
+    );
+  }
+
+  // Update the title
+  const updated = await prisma.childCaregiver.update({
+    where: { id: caregiverRelation.id },
+    data: { title },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  return {
+    id: updated.id,
+    userId: updated.userId,
+    email: updated.user.email,
+    name: updated.user.name,
+    role: updated.role,
+    status: updated.status,
+    title: updated.title,
+    isActive: updated.isActive,
+    invitedAt: updated.invitedAt,
+    acceptedAt: updated.acceptedAt,
+  };
 }

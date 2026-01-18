@@ -46,6 +46,9 @@ export const createScheduleSchema = z.object({
 
   // Sleep caps
   daySleepCap: z.number().int().min(0).max(720),
+
+  // Crib time settings
+  minimumCribMinutes: z.number().int().min(30).max(180).default(90),
 });
 
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
@@ -108,6 +111,8 @@ export interface SleepScheduleResponse {
   wakeTimeLatest: string;
 
   daySleepCap: number;
+
+  minimumCribMinutes: number;
 
   createdAt: Date;
   updatedAt: Date;

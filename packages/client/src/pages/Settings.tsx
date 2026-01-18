@@ -3,6 +3,7 @@ import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
+import CaregiverManager from '../components/CaregiverManager';
 import { useToast } from '@/components/ui/toaster';
 import {
   Card,
@@ -310,6 +311,9 @@ export default function Settings() {
             <AddChildDialog />
           </CardContent>
         </Card>
+
+        {/* Caregiver Management */}
+        <CaregiverManager />
 
         {/* App Settings */}
         <Card>

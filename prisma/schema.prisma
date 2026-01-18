@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -85,23 +85,34 @@ model Child {
 }
 
 model ChildCaregiver {
-  id        String   @id @default(uuid())
-  childId   String
-  userId    String
+  id             String   @id @default(uuid())
+  childId        String
+  userId         String
   // Role: ADMIN, CAREGIVER, VIEWER
-  role      String   @default("CAREGIVER")
+  role           String   @default("CAREGIVER")
   // InviteStatus: PENDING, ACCEPTED, DECLINED
-  status    String   @default("PENDING")
-  invitedAt DateTime @default(now())
-  acceptedAt DateTime?
-  child     Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status         String   @default("PENDING")
+  // Title: Dad, Mom, Babysitter, Sleep Coach, Grandparent, etc.
+  title          String?
+  // Is this caregiver's access currently active? (for temp disable)
+  isActive       Boolean  @default(true)
+  // Who invited this caregiver
+  invitedByUserId String?
+  // Email the invite was sent to (for tracking)
+  inviteEmail    String?
+  invitedAt      DateTime @default(now())
+  acceptedAt     DateTime?
+  // When access was last enabled/disabled
+  accessChangedAt DateTime?
+  child          Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([childId, userId])
   @@index([userId])
   @@index([childId])
+  @@index([childId, isActive])
 }
 
 // Role values: ADMIN, CAREGIVER, VIEWER
@@ -110,6 +121,8 @@ model ChildCaregiver {
 // - VIEWER: Read-only access
 
 // InviteStatus values: PENDING, ACCEPTED, DECLINED
+
+// Title values (suggested): Dad, Mom, Babysitter, Sleep Coach, Grandparent, Nanny, Au Pair
 
 // ============================================
 // Sleep Schedule Configuration
@@ -155,6 +168,9 @@ model SleepSchedule {
 
   // Sleep caps
   daySleepCap     Int      // Total day sleep in minutes
+
+  // Crib time settings
+  minimumCribMinutes Int   @default(90)  // Minimum time in crib for sleep training
 
   child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())

@@ -9,6 +9,7 @@ import {
   updateUserProfile,
   deleteUser,
   changePassword,
+  searchUsers,
   UserServiceError,
 } from '../services/user.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -185,6 +186,54 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
         }
         throw error;
       }
+    }
+  );
+
+  // Search users (for adding caregivers)
+  app.get<{ Querystring: { q: string; limit?: string } }>(
+    '/search',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Search users by name or email',
+        tags: ['Users'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            q: { type: 'string', minLength: 2 },
+            limit: { type: 'string' },
+          },
+          required: ['q'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    email: { type: 'string' },
+                    name: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { q: string; limit?: string } }>, reply: FastifyReply) => {
+      const { userId } = request.user;
+      const { q, limit } = request.query;
+
+      const users = await searchUsers(userId, q, limit ? parseInt(limit, 10) : 10);
+
+      return reply.send(successResponse(users));
     }
   );
 

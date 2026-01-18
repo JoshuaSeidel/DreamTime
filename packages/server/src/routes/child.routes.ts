@@ -3,9 +3,13 @@ import {
   createChildSchema,
   updateChildSchema,
   shareChildSchema,
+  toggleCaregiverAccessSchema,
+  updateCaregiverTitleSchema,
   type CreateChildInput,
   type UpdateChildInput,
   type ShareChildInput,
+  type ToggleCaregiverAccessInput,
+  type UpdateCaregiverTitleInput,
 } from '../schemas/child.schema.js';
 import {
   listChildren,
@@ -18,6 +22,8 @@ import {
   acceptInvitation,
   declineInvitation,
   getPendingInvitations,
+  toggleCaregiverAccess,
+  updateCaregiverTitle,
   ChildServiceError,
 } from '../services/child.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -374,7 +380,7 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
     {
       onRequest: [app.authenticate],
       schema: {
-        description: 'Invite a caregiver (ADMIN only)',
+        description: 'Add a caregiver by userId or email (ADMIN only)',
         tags: ['Children'],
         security: [{ bearerAuth: [] }],
         params: {
@@ -386,8 +392,8 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
         },
         body: {
           type: 'object',
-          required: ['email'],
           properties: {
+            userId: { type: 'string' },
             email: { type: 'string', format: 'email' },
             role: { type: 'string', enum: ['CAREGIVER', 'VIEWER'] },
           },
@@ -590,6 +596,150 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
         await declineInvitation(userId, id);
 
         return reply.send(successResponse({ message: 'Invitation declined' }));
+      } catch (error) {
+        if (error instanceof ChildServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Toggle caregiver access (enable/disable)
+  app.patch<{ Params: { id: string; caregiverId: string }; Body: ToggleCaregiverAccessInput }>(
+    '/:id/caregivers/:caregiverId/access',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Enable or disable caregiver access (ADMIN only)',
+        tags: ['Children'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            caregiverId: { type: 'string' },
+          },
+          required: ['id', 'caregiverId'],
+        },
+        body: {
+          type: 'object',
+          required: ['isActive'],
+          properties: {
+            isActive: { type: 'boolean' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  userId: { type: 'string' },
+                  email: { type: 'string' },
+                  name: { type: 'string' },
+                  role: { type: 'string' },
+                  status: { type: 'string' },
+                  title: { type: 'string', nullable: true },
+                  isActive: { type: 'boolean' },
+                  invitedAt: { type: 'string' },
+                  acceptedAt: { type: 'string', nullable: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string; caregiverId: string }; Body: ToggleCaregiverAccessInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { id, caregiverId } = request.params;
+        const input = toggleCaregiverAccessSchema.parse(request.body);
+
+        const caregiver = await toggleCaregiverAccess(userId, id, caregiverId, input.isActive);
+
+        return reply.send(successResponse(caregiver));
+      } catch (error) {
+        if (error instanceof ChildServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Update caregiver title
+  app.patch<{ Params: { id: string; caregiverId: string }; Body: UpdateCaregiverTitleInput }>(
+    '/:id/caregivers/:caregiverId/title',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Update caregiver title (ADMIN only)',
+        tags: ['Children'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            caregiverId: { type: 'string' },
+          },
+          required: ['id', 'caregiverId'],
+        },
+        body: {
+          type: 'object',
+          required: ['title'],
+          properties: {
+            title: { type: 'string', minLength: 1, maxLength: 50 },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  userId: { type: 'string' },
+                  email: { type: 'string' },
+                  name: { type: 'string' },
+                  role: { type: 'string' },
+                  status: { type: 'string' },
+                  title: { type: 'string', nullable: true },
+                  isActive: { type: 'boolean' },
+                  invitedAt: { type: 'string' },
+                  acceptedAt: { type: 'string', nullable: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string; caregiverId: string }; Body: UpdateCaregiverTitleInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { id, caregiverId } = request.params;
+        const input = updateCaregiverTitleSchema.parse(request.body);
+
+        const caregiver = await updateCaregiverTitle(userId, id, caregiverId, input.title);
+
+        return reply.send(successResponse(caregiver));
       } catch (error) {
         if (error instanceof ChildServiceError) {
           return reply.status(error.statusCode).send(
