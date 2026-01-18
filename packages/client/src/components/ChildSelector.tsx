@@ -1,26 +1,69 @@
-import { ChevronDown, Plus, Check } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, Plus, Check, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-
-interface Child {
-  id: string;
-  name: string;
-}
+import { getChildren, type Child } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
+import AddChildDialog from './AddChildDialog';
 
 interface ChildSelectorProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
 
-// TODO: Replace with actual data from API
-const mockChildren: Child[] = [
-  { id: '1', name: 'Oliver' },
-];
-
 export default function ChildSelector({ selectedId, onSelect }: ChildSelectorProps) {
+  const { accessToken } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [children, setChildren] = useState<Child[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const selectedChild = mockChildren.find((c) => c.id === selectedId) ?? mockChildren[0];
+  const loadChildren = async () => {
+    if (!accessToken) return;
+
+    setIsLoading(true);
+    try {
+      const result = await getChildren(accessToken);
+      if (result.success && result.data) {
+        setChildren(result.data);
+        // Auto-select first child if none selected
+        if (!selectedId && result.data.length > 0) {
+          onSelect(result.data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load children:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadChildren();
+  }, [accessToken]);
+
+  const selectedChild = children.find((c) => c.id === selectedId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+
+  if (children.length === 0) {
+    return (
+      <AddChildDialog
+        onChildAdded={loadChildren}
+        trigger={
+          <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+            <Plus className="w-4 h-4" />
+            <span className="font-medium">Add Child</span>
+          </button>
+        }
+      />
+    );
+  }
 
   return (
     <div className="relative">
@@ -48,7 +91,7 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
           />
           <div className="absolute right-0 mt-2 w-56 bg-popover rounded-lg shadow-lg border border-border z-20 overflow-hidden">
             <div className="py-1">
-              {mockChildren.map((child) => (
+              {children.map((child) => (
                 <button
                   key={child.id}
                   onClick={() => {
@@ -74,18 +117,19 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
                 </button>
               ))}
               <div className="h-px bg-border my-1" />
-              <button
-                onClick={() => {
-                  // TODO: Navigate to add child page
-                  setIsOpen(false);
-                }}
-                className="w-full px-4 py-2 text-left flex items-center gap-3 text-primary hover:bg-accent transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <span className="font-medium">Add Child</span>
-              </button>
+              <AddChildDialog
+                onChildAdded={loadChildren}
+                trigger={
+                  <button
+                    className="w-full px-4 py-2 text-left flex items-center gap-3 text-primary hover:bg-accent transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Plus className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium">Add Child</span>
+                  </button>
+                }
+              />
             </div>
           </div>
         </>

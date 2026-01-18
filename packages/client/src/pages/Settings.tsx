@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import BottomNav from '../components/BottomNav';
+import AddChildDialog from '../components/AddChildDialog';
 import {
   Card,
   CardContent,
@@ -188,13 +189,7 @@ export default function Settings() {
             <CardDescription>Manage your children's profiles</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              variant="outline"
-              className="w-full border-dashed"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Child
-            </Button>
+            <AddChildDialog />
           </CardContent>
         </Card>
 

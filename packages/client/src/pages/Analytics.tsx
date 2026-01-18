@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { TrendingUp, TrendingDown, Moon, Sun, Calendar, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BarChart3, Calendar, Loader2 } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import {
   Card,
@@ -8,65 +8,73 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-
-interface TrendData {
-  label: string;
-  value: number;
-  change: number;
-  unit: string;
-}
-
-interface WeeklySummary {
-  avgTotalSleep: number;
-  avgNapCount: number;
-  avgNapDuration: number;
-  avgBedtime: string;
-  avgWakeTime: string;
-  sleepGoalProgress: number;
-}
+import { getSessions, type SleepSession } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 
 export default function Analytics() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [isLoading] = useState(false);
+  const { accessToken } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const [sessions, setSessions] = useState<SleepSession[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
 
-  // Mock data - will be replaced with API calls
-  const trends: TrendData[] = [
-    { label: 'Avg Daily Sleep', value: 13.5, change: 0.5, unit: 'hours' },
-    { label: 'Avg Nap Duration', value: 90, change: -10, unit: 'min' },
-    { label: 'Settling Time', value: 8, change: -3, unit: 'min' },
-    { label: 'Night Wakes', value: 0.5, change: -0.3, unit: 'avg' },
-  ];
-
-  const weeklySummary: WeeklySummary = {
-    avgTotalSleep: 13.5,
-    avgNapCount: 2,
-    avgNapDuration: 90,
-    avgBedtime: '7:15 PM',
-    avgWakeTime: '6:45 AM',
-    sleepGoalProgress: 85,
-  };
-
-  const renderTrendIcon = (change: number) => {
-    if (change > 0) {
-      return <TrendingUp className="w-4 h-4 text-green-500" />;
-    } else if (change < 0) {
-      return <TrendingDown className="w-4 h-4 text-red-500" />;
+  // Get child ID from localStorage
+  useEffect(() => {
+    const storedChildId = localStorage.getItem('selectedChildId');
+    if (storedChildId) {
+      setSelectedChildId(storedChildId);
     }
-    return null;
+  }, []);
+
+  useEffect(() => {
+    const loadSessions = async () => {
+      if (!accessToken || !selectedChildId) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const result = await getSessions(accessToken, selectedChildId);
+        if (result.success && result.data) {
+          setSessions(result.data);
+        }
+      } catch (err) {
+        console.error('Failed to load sessions:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSessions();
+  }, [accessToken, selectedChildId]);
+
+  // Calculate analytics from real data
+  const calculateAnalytics = () => {
+    if (sessions.length === 0) return null;
+
+    const completedSessions = sessions.filter(s => s.state === 'COMPLETED');
+    if (completedSessions.length === 0) return null;
+
+    const totalSleepMinutes = completedSessions.reduce(
+      (sum, s) => sum + (s.sleepMinutes || 0),
+      0
+    );
+    const avgSleepMinutes = totalSleepMinutes / completedSessions.length;
+    const napSessions = completedSessions.filter(s => s.sessionType === 'NAP');
+    const nightSessions = completedSessions.filter(s => s.sessionType === 'NIGHT_SLEEP');
+
+    return {
+      totalSessions: completedSessions.length,
+      totalSleepHours: (totalSleepMinutes / 60).toFixed(1),
+      avgNapMinutes: napSessions.length > 0
+        ? Math.round(napSessions.reduce((sum, s) => sum + (s.sleepMinutes || 0), 0) / napSessions.length)
+        : 0,
+      napCount: napSessions.length,
+      nightCount: nightSessions.length,
+    };
   };
 
-  const renderTrendBadge = (change: number) => {
-    const isPositive = change > 0;
-    return (
-      <Badge variant={isPositive ? 'success' : 'destructive'} className="text-xs">
-        {isPositive ? '+' : ''}{change}
-      </Badge>
-    );
-  };
+  const analytics = calculateAnalytics();
 
   if (isLoading) {
     return (
@@ -74,10 +82,8 @@ export default function Analytics() {
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
           <h1 className="text-xl font-bold text-primary">Analytics</h1>
         </header>
-        <main className="px-4 py-6 space-y-4">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-48 w-full" />
+        <main className="px-4 py-6 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </main>
         <BottomNav />
       </div>
@@ -92,156 +98,81 @@ export default function Analytics() {
       </header>
 
       <main className="px-4 py-6 space-y-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="trends">Trends</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4 mt-4">
-            {/* Sleep Goal Progress */}
+        {!selectedChildId ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <div className="rounded-full bg-muted p-4 mx-auto w-fit mb-4">
+                <BarChart3 className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="text-muted-foreground">No child selected</p>
+              <p className="text-sm text-muted-foreground/70 mt-2">
+                Select a child from the home screen to view analytics
+              </p>
+            </CardContent>
+          </Card>
+        ) : !analytics ? (
+          <Card>
+            <CardContent className="text-center py-12">
+              <div className="rounded-full bg-muted p-4 mx-auto w-fit mb-4">
+                <BarChart3 className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="text-muted-foreground">No data available yet</p>
+              <p className="text-sm text-muted-foreground/70 mt-2">
+                Start tracking sleep sessions to see analytics
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Weekly Sleep Goal</CardTitle>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Sleep Summary
+                </CardTitle>
                 <CardDescription>
-                  {weeklySummary.sleepGoalProgress}% of recommended sleep achieved
+                  Based on {analytics.totalSessions} recorded session{analytics.totalSessions !== 1 ? 's' : ''}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Progress value={weeklySummary.sleepGoalProgress} className="h-3" />
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>Current: {weeklySummary.avgTotalSleep}h avg</span>
-                  <span>Goal: 14-15h</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2">
-                    <Moon className="w-5 h-5 text-primary" />
-                    <span className="text-sm text-muted-foreground">Avg Bedtime</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-4 rounded-lg bg-muted/50">
+                    <p className="text-3xl font-bold text-primary">{analytics.totalSleepHours}h</p>
+                    <p className="text-sm text-muted-foreground">Total Sleep</p>
                   </div>
-                  <p className="text-2xl font-bold mt-2">{weeklySummary.avgBedtime}</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2">
-                    <Sun className="w-5 h-5 text-yellow-500" />
-                    <span className="text-sm text-muted-foreground">Avg Wake</span>
+                  <div className="text-center p-4 rounded-lg bg-muted/50">
+                    <p className="text-3xl font-bold text-primary">{analytics.napCount}</p>
+                    <p className="text-sm text-muted-foreground">Naps</p>
                   </div>
-                  <p className="text-2xl font-bold mt-2">{weeklySummary.avgWakeTime}</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-green-500" />
-                    <span className="text-sm text-muted-foreground">Avg Naps</span>
+                  <div className="text-center p-4 rounded-lg bg-muted/50">
+                    <p className="text-3xl font-bold text-primary">{analytics.avgNapMinutes}m</p>
+                    <p className="text-sm text-muted-foreground">Avg Nap</p>
                   </div>
-                  <p className="text-2xl font-bold mt-2">{weeklySummary.avgNapCount}/day</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-violet-500" />
-                    <span className="text-sm text-muted-foreground">Nap Length</span>
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{weeklySummary.avgNapDuration}m</p>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="trends" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">7-Day Trends</CardTitle>
-                <CardDescription>How sleep patterns are changing</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {trends.map((trend) => (
-                  <div
-                    key={trend.label}
-                    className="flex items-center justify-between py-2 border-b border-border last:border-0"
-                  >
-                    <div>
-                      <p className="font-medium">{trend.label}</p>
-                      <p className="text-2xl font-bold">
-                        {trend.value} {trend.unit}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {renderTrendIcon(trend.change)}
-                      {renderTrendBadge(trend.change)}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="insights" className="space-y-4 mt-4">
-            <Card className="border-green-500/50 bg-green-500/10">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-green-500/20 p-2">
-                    <TrendingUp className="w-5 h-5 text-green-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-green-500">Great Progress!</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Settling time has improved by 3 minutes this week. Keep up the
-                      consistent routine!
-                    </p>
+                  <div className="text-center p-4 rounded-lg bg-muted/50">
+                    <p className="text-3xl font-bold text-primary">{analytics.nightCount}</p>
+                    <p className="text-sm text-muted-foreground">Night Sessions</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border-primary/50 bg-primary/10">
-              <CardContent className="pt-4">
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="pt-6">
                 <div className="flex items-start gap-3">
                   <div className="rounded-full bg-primary/20 p-2">
-                    <Moon className="w-5 h-5 text-primary" />
+                    <BarChart3 className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-primary">Tip</h3>
+                    <h3 className="font-semibold text-primary">Keep Tracking</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Bedtime has been consistent this week at around 7:15 PM. This
-                      consistency helps establish a strong sleep foundation.
+                      More data will provide better insights into sleep patterns and trends.
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="border-yellow-500/50 bg-yellow-500/10">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-yellow-500/20 p-2">
-                    <Clock className="w-5 h-5 text-yellow-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-yellow-500">Watch For</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Nap duration decreased slightly. Consider adjusting wake windows
-                      if this continues.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          </>
+        )}
       </main>
 
       <BottomNav />
