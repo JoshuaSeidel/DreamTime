@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, cloneElement, isValidElement } from 'react';
 import { Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,27 +51,20 @@ export default function AddChildDialog({ onChildAdded, trigger }: AddChildDialog
     }
   };
 
-  const handleTriggerClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const openDialog = () => {
     setIsOpen(true);
   };
 
   // Clone the trigger element to add onClick handler, or use default button
   const renderTrigger = () => {
-    if (trigger) {
-      // If trigger is a React element, clone it with onClick
-      if (typeof trigger === 'object' && trigger !== null && 'type' in trigger) {
-        return (
-          <div onClick={handleTriggerClick} style={{ cursor: 'pointer' }}>
-            {trigger}
-          </div>
-        );
-      }
-      return <div onClick={handleTriggerClick}>{trigger}</div>;
+    if (trigger && isValidElement(trigger)) {
+      // Clone the element and add onClick handler
+      return cloneElement(trigger as React.ReactElement<{ onClick?: () => void }>, {
+        onClick: openDialog,
+      });
     }
     return (
-      <Button variant="outline" className="w-full border-dashed" onClick={handleTriggerClick}>
+      <Button variant="outline" className="w-full border-dashed" onClick={openDialog}>
         <Plus className="w-4 h-4 mr-2" />
         Add Child
       </Button>
