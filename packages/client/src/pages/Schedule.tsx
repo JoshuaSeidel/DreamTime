@@ -62,7 +62,7 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeEarliest: '06:30',
     wakeTimeLatest: '07:30',
     daySleepCap: 210, // 3.5h
-    minimumCribMinutes: 90,
+    minimumCribMinutes: 60,
   },
   ONE_NAP: {
     type: 'ONE_NAP',
@@ -81,7 +81,7 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeEarliest: '06:30',
     wakeTimeLatest: '08:00',
     daySleepCap: 150, // 2.5h
-    minimumCribMinutes: 90,
+    minimumCribMinutes: 60,
   },
   THREE_NAP: {
     type: 'THREE_NAP',
@@ -106,7 +106,7 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeEarliest: '06:00',
     wakeTimeLatest: '07:00',
     daySleepCap: 270, // 4.5h
-    minimumCribMinutes: 90,
+    minimumCribMinutes: 60,
   },
 };
 
@@ -196,6 +196,7 @@ export default function Schedule() {
             wakeTimeEarliest: scheduleResult.data.wakeTimeEarliest,
             wakeTimeLatest: scheduleResult.data.wakeTimeLatest,
             daySleepCap: scheduleResult.data.daySleepCap,
+            minimumCribMinutes: scheduleResult.data.minimumCribMinutes ?? 60,
           };
           setScheduleConfig(config);
         }
@@ -763,6 +764,52 @@ export default function Schedule() {
                         </p>
                         <p className="text-sm text-muted-foreground">Bedtime Range</p>
                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground">
+                      Configure after selecting a schedule type
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Nap Settings */}
+            <Card className={cn(!selectedType && 'opacity-60')}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Nap Settings
+                </CardTitle>
+                <CardDescription>
+                  {selectedType
+                    ? 'Configure nap-specific settings'
+                    : 'Select a schedule type first'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedType ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Minimum Crib Time (minutes)
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Minimum time baby should stay in crib during naps for sleep training
+                      </p>
+                      <Input
+                        type="number"
+                        min={30}
+                        max={180}
+                        value={scheduleConfig.minimumCribMinutes || 60}
+                        onChange={(e) => setScheduleConfig(prev => ({
+                          ...prev,
+                          minimumCribMinutes: parseInt(e.target.value) || 60
+                        }))}
+                        className="w-full"
+                      />
                     </div>
                   </div>
                 ) : (

@@ -169,8 +169,8 @@ model SleepSchedule {
   // Sleep caps
   daySleepCap     Int      // Total day sleep in minutes
 
-  // Crib time settings
-  minimumCribMinutes Int   @default(90)  // Minimum time in crib for sleep training
+  // Crib time settings (for naps only - not applicable to bedtime)
+  minimumCribMinutes Int   @default(60)  // Minimum time in crib for sleep training
 
   child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())

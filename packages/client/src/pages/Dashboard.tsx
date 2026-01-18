@@ -344,11 +344,11 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Crib Time Countdown - Shows when baby is in crib */}
-            {activeSession && (
+            {/* Crib Time Countdown - Shows when baby is in crib for NAPs only (not bedtime) */}
+            {activeSession && activeSession.sessionType === 'NAP' && (
               <CribTimeCountdown
                 session={activeSession}
-                minimumCribMinutes={schedule?.minimumCribMinutes ?? 90}
+                minimumCribMinutes={schedule?.minimumCribMinutes ?? 60}
               />
             )}
 

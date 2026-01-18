@@ -10,7 +10,7 @@ interface CribTimeCountdownProps {
 
 export default function CribTimeCountdown({
   session,
-  minimumCribMinutes = 90, // Default 90 minute crib rule
+  minimumCribMinutes = 60, // Default 60 minute crib rule
 }: CribTimeCountdownProps) {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
