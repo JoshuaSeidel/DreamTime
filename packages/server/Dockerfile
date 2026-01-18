@@ -3,24 +3,25 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy root package files for workspace resolution
+# Copy all package files for full workspace resolution
 COPY package*.json ./
 COPY packages/server/package*.json ./packages/server/
+COPY packages/client/package*.json ./packages/client/
 
 # Copy prisma schema
 COPY prisma ./prisma
 
-# Install dependencies
-RUN npm ci --workspace=@dreamtime/server
+# Install ALL dependencies (needed for proper hoisting)
+RUN npm ci
 
-# Copy server source
+# Copy server source and config
 COPY packages/server ./packages/server
 COPY tsconfig.base.json ./
 
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build
+# Build server
 RUN npm run build -w @dreamtime/server
 
 # Production stage
@@ -28,17 +29,19 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package.json for ESM support and module resolution
+# Copy package.json for ESM support ("type": "module")
 COPY --from=builder /app/packages/server/package.json ./package.json
 
 # Copy built files
 COPY --from=builder /app/packages/server/dist ./dist
 
-# Copy all node_modules (dependencies are hoisted to root in npm workspaces)
+# Copy node_modules (hoisted dependencies from workspace)
 COPY --from=builder /app/node_modules ./node_modules
 
-# Copy prisma files
+# Copy prisma schema and generated client
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Set environment
 ENV NODE_ENV=production
