@@ -1,0 +1,41 @@
+{
+  "name": "dreamtime",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Baby sleep tracker PWA",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm run dev -w @dreamtime/server",
+    "dev:client": "npm run dev -w @dreamtime/client",
+    "build": "npm run build -w @dreamtime/server && npm run build -w @dreamtime/client",
+    "build:server": "npm run build -w @dreamtime/server",
+    "build:client": "npm run build -w @dreamtime/client",
+    "test": "npm run test --workspaces --if-present",
+    "test:unit": "npm run test:unit --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @dreamtime/server",
+    "test:e2e": "playwright test",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "lint": "eslint packages --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^20.11.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.56.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
