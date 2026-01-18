@@ -3,11 +3,9 @@ import {
   startAuthentication,
   browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable,
+  type PublicKeyCredentialCreationOptionsJSON,
+  type PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser';
-import type {
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/types';
 
 const API_URL = '/api/webauthn';
 
