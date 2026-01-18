@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { env } from './config/env.js';
+import { initializeDatabase } from './config/init-db.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { registerCors } from './plugins/cors.js';
 import { registerJwt } from './plugins/jwt.js';
@@ -30,6 +31,17 @@ async function buildApp() {
 }
 
 async function start() {
+  console.log('Starting DreamTime server...');
+  console.log(`Environment: ${env.NODE_ENV}`);
+
+  // Initialize database (create if needed, run migrations)
+  try {
+    await initializeDatabase();
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    process.exit(1);
+  }
+
   const app = await buildApp();
 
   // Connect to database

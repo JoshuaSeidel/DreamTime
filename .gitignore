@@ -15,6 +15,9 @@ build/
 .env.local
 .env.*.local
 
+# Secrets (auto-generated JWT secrets)
+.secrets/
+
 # IDE
 .idea/
 .vscode/
