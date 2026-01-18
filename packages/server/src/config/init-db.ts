@@ -3,17 +3,26 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-// Get the root directory of the monorepo
-function getMonorepoRoot(): string {
+// Get the application root directory
+function getAppRoot(): string {
   // ESM mode - use import.meta.url
   const currentDir = dirname(fileURLToPath(import.meta.url));
 
-  // Navigate up from packages/server/src/config (or dist/config) to root
-  return join(currentDir, '..', '..', '..', '..');
+  // In production (dist/config), go up 2 levels to /app
+  // In development (src/config), go up 4 levels to monorepo root
+  const isProduction = currentDir.includes('/dist/');
+
+  if (isProduction) {
+    // /app/dist/config -> /app
+    return join(currentDir, '..', '..');
+  } else {
+    // packages/server/src/config -> monorepo root
+    return join(currentDir, '..', '..', '..', '..');
+  }
 }
 
 function getPrismaSchemaPath(): string {
-  return join(getMonorepoRoot(), 'prisma', 'schema.prisma');
+  return join(getAppRoot(), 'prisma', 'schema.prisma');
 }
 
 export async function initializeDatabase(): Promise<void> {
@@ -149,7 +158,7 @@ async function runMigrations(): Promise<void> {
       execSync(`npx prisma migrate deploy ${schemaArg}`, {
         stdio: 'inherit',
         env: { ...process.env },
-        cwd: getMonorepoRoot(),
+        cwd: getAppRoot(),
       });
       console.log('Database migrations completed successfully');
     } catch (error) {
@@ -162,7 +171,7 @@ async function runMigrations(): Promise<void> {
     execSync(`npx prisma generate ${schemaArg}`, {
       stdio: 'inherit',
       env: { ...process.env },
-      cwd: getMonorepoRoot(),
+      cwd: getAppRoot(),
     });
   }
 }

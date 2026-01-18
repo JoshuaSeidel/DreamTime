@@ -27,6 +27,9 @@ RUN npm run build -w @dreamtime/server
 # Production stage
 FROM node:20-alpine
 
+# Install OpenSSL for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy package.json for ESM support ("type": "module")
@@ -35,13 +38,12 @@ COPY --from=builder /app/packages/server/package.json ./package.json
 # Copy built files
 COPY --from=builder /app/packages/server/dist ./dist
 
-# Copy node_modules (hoisted dependencies from workspace)
+# Copy node_modules from both root (hoisted) and server workspace
 COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/server/node_modules ./node_modules
 
 # Copy prisma schema and generated client
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Set environment
 ENV NODE_ENV=production
