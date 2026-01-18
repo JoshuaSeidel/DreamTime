@@ -5,6 +5,8 @@ import { userRoutes } from './user.routes.js';
 import { childRoutes } from './child.routes.js';
 import { scheduleRoutes } from './schedule.routes.js';
 import { sessionRoutes } from './session.routes.js';
+import { calculatorRoutes } from './calculator.routes.js';
+import { analyticsRoutes } from './analytics.routes.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Health check (no prefix)
@@ -26,5 +28,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
     // Session routes (nested under children)
     await api.register(sessionRoutes, { prefix: '/children' });
+
+    // Calculator routes (nested under children)
+    await api.register(calculatorRoutes, { prefix: '/children' });
+
+    // Analytics routes (nested under children)
+    await api.register(analyticsRoutes, { prefix: '/children' });
   }, { prefix: '/api' });
 }

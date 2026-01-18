@@ -1,0 +1,444 @@
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import {
+  calculateDaySchedule,
+  calculateNextAction,
+  calculateAdjustedBedtime,
+} from '../services/schedule.calculator.service.js';
+import { getActiveSchedule, getActiveTransition, ScheduleServiceError } from '../services/schedule.service.js';
+import {
+  getTransitionProgress,
+  analyzeNapPushReadiness,
+  checkCrib90Compliance,
+} from '../services/transition.tracker.service.js';
+import { prisma } from '../config/database.js';
+import { successResponse, errorResponse } from '../types/api.js';
+import { SessionState, SessionType, InviteStatus } from '../types/enums.js';
+
+const calculateDaySchema = z.object({
+  wakeTime: z.string().datetime(),
+  actualNapDurations: z.array(z.number()).optional(),
+});
+
+type CalculateDayInput = z.infer<typeof calculateDaySchema>;
+
+const calculateBedtimeSchema = z.object({
+  wakeTime: z.string().datetime(),
+  actualNaps: z.array(z.object({
+    asleepAt: z.string().datetime(),
+    wokeUpAt: z.string().datetime(),
+  })),
+});
+
+type CalculateBedtimeInput = z.infer<typeof calculateBedtimeSchema>;
+
+// Helper to get user timezone
+async function getUserTimezone(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  });
+  return user?.timezone ?? 'America/New_York';
+}
+
+// Helper to verify child access
+async function verifyChildAccess(userId: string, childId: string): Promise<void> {
+  const relation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: { childId, userId },
+    },
+  });
+
+  if (!relation || relation.status !== InviteStatus.ACCEPTED) {
+    throw new ScheduleServiceError('Child not found', 'CHILD_NOT_FOUND', 404);
+  }
+}
+
+export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
+  // Calculate day schedule recommendations
+  app.post<{ Params: { childId: string }; Body: CalculateDayInput }>(
+    '/:childId/calculator/day',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Calculate recommended nap and bedtime schedule for the day',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+        body: {
+          type: 'object',
+          required: ['wakeTime'],
+          properties: {
+            wakeTime: { type: 'string', format: 'date-time' },
+            actualNapDurations: {
+              type: 'array',
+              items: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { childId: string }; Body: CalculateDayInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+        const input = calculateDaySchema.parse(request.body);
+
+        // Get schedule and transition
+        const [schedule, transition, timezone] = await Promise.all([
+          getActiveSchedule(userId, childId),
+          getActiveTransition(userId, childId),
+          getUserTimezone(userId),
+        ]);
+
+        if (!schedule) {
+          return reply.status(404).send(
+            errorResponse('SCHEDULE_NOT_FOUND', 'No active schedule found')
+          );
+        }
+
+        const wakeTime = new Date(input.wakeTime);
+        const recommendation = calculateDaySchedule(
+          wakeTime,
+          schedule,
+          timezone,
+          transition,
+          input.actualNapDurations
+        );
+
+        return reply.send(successResponse(recommendation));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Get next action recommendation
+  app.get<{ Params: { childId: string } }>(
+    '/:childId/calculator/next-action',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Get recommendation for what to do next (nap, bedtime, or wait)',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { childId: string } }>, reply: FastifyReply) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+
+        // Get schedule and today's sessions
+        const [schedule, transition, timezone] = await Promise.all([
+          getActiveSchedule(userId, childId),
+          getActiveTransition(userId, childId),
+          getUserTimezone(userId),
+        ]);
+
+        if (!schedule) {
+          return reply.status(404).send(
+            errorResponse('SCHEDULE_NOT_FOUND', 'No active schedule found')
+          );
+        }
+
+        // Get today's sessions
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todaySessions = await prisma.sleepSession.findMany({
+          where: {
+            childId,
+            createdAt: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        // Find wake time from night sleep or use schedule default
+        let wakeTime = new Date();
+        wakeTime.setHours(7, 0, 0, 0); // Default
+
+        const nightSession = todaySessions.find(
+          s => s.sessionType === SessionType.NIGHT_SLEEP && s.wokeUpAt
+        );
+        if (nightSession?.wokeUpAt) {
+          wakeTime = nightSession.wokeUpAt;
+        }
+
+        // Count completed naps
+        const completedNaps = todaySessions.filter(
+          s => s.sessionType === SessionType.NAP && s.state === SessionState.COMPLETED
+        ).length;
+
+        // Check if currently asleep
+        const currentlyAsleep = todaySessions.some(
+          s => s.state === SessionState.ASLEEP
+        );
+
+        // Calculate day schedule
+        const napDurations = todaySessions
+          .filter(s => s.sessionType === SessionType.NAP && s.sleepMinutes)
+          .map(s => s.sleepMinutes!);
+
+        const daySchedule = calculateDaySchedule(
+          wakeTime,
+          schedule,
+          timezone,
+          transition,
+          napDurations
+        );
+
+        const nextAction = calculateNextAction(
+          new Date(),
+          daySchedule,
+          completedNaps,
+          currentlyAsleep,
+          timezone
+        );
+
+        return reply.send(successResponse(nextAction));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Calculate adjusted bedtime based on actual naps
+  app.post<{ Params: { childId: string }; Body: CalculateBedtimeInput }>(
+    '/:childId/calculator/bedtime',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Calculate recommended bedtime based on actual nap data',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+        body: {
+          type: 'object',
+          required: ['wakeTime', 'actualNaps'],
+          properties: {
+            wakeTime: { type: 'string', format: 'date-time' },
+            actualNaps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['asleepAt', 'wokeUpAt'],
+                properties: {
+                  asleepAt: { type: 'string', format: 'date-time' },
+                  wokeUpAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { childId: string }; Body: CalculateBedtimeInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+        const input = calculateBedtimeSchema.parse(request.body);
+
+        const [schedule, timezone] = await Promise.all([
+          getActiveSchedule(userId, childId),
+          getUserTimezone(userId),
+        ]);
+
+        if (!schedule) {
+          return reply.status(404).send(
+            errorResponse('SCHEDULE_NOT_FOUND', 'No active schedule found')
+          );
+        }
+
+        const wakeTime = new Date(input.wakeTime);
+        const actualNaps = input.actualNaps.map(nap => ({
+          asleepAt: new Date(nap.asleepAt),
+          wokeUpAt: new Date(nap.wokeUpAt),
+        }));
+
+        const bedtime = calculateAdjustedBedtime(wakeTime, schedule, timezone, actualNaps);
+
+        return reply.send(successResponse(bedtime));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Get transition progress and analysis
+  app.get<{ Params: { childId: string } }>(
+    '/:childId/calculator/transition-progress',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Get detailed transition progress with recommendations',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { childId: string } }>, reply: FastifyReply) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+
+        const progress = await getTransitionProgress(userId, childId);
+
+        if (!progress) {
+          return reply.status(404).send(
+            errorResponse('NO_ACTIVE_TRANSITION', 'No active transition found')
+          );
+        }
+
+        return reply.send(successResponse(progress));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Analyze if ready to push nap time later
+  app.get<{ Params: { childId: string } }>(
+    '/:childId/calculator/nap-push-readiness',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Analyze if baby is ready to push nap time later during transition',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { childId: string } }>, reply: FastifyReply) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+
+        const analysis = await analyzeNapPushReadiness(userId, childId);
+
+        if (!analysis) {
+          return reply.status(404).send(
+            errorResponse('NO_ACTIVE_TRANSITION', 'No active transition found')
+          );
+        }
+
+        return reply.send(successResponse(analysis));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Check crib 90 compliance for a session
+  app.get<{ Params: { childId: string; sessionId: string } }>(
+    '/:childId/calculator/crib90/:sessionId',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Check if a session meets the crib 90 rule',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+            sessionId: { type: 'string' },
+          },
+          required: ['childId', 'sessionId'],
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { childId: string; sessionId: string } }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId, sessionId } = request.params;
+
+        const compliance = await checkCrib90Compliance(userId, childId, sessionId);
+
+        return reply.send(successResponse(compliance));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        if (error instanceof Error && error.message === 'Session not found') {
+          return reply.status(404).send(
+            errorResponse('SESSION_NOT_FOUND', 'Session not found')
+          );
+        }
+        throw error;
+      }
+    }
+  );
+}
