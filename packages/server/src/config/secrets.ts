@@ -10,7 +10,19 @@ interface Secrets {
   generatedAt: string;
 }
 
-const SECRETS_DIR = process.env.SECRETS_DIR ?? join(process.cwd(), '.secrets');
+// Determine secrets directory from environment
+function getSecretsDir(): string {
+  // SECRETS_DIR takes precedence, then DATA_DIR/secrets, then default
+  if (process.env.SECRETS_DIR) {
+    return process.env.SECRETS_DIR;
+  }
+  if (process.env.DATA_DIR) {
+    return join(process.env.DATA_DIR, 'secrets');
+  }
+  return join(process.cwd(), 'data', 'secrets');
+}
+
+const SECRETS_DIR = getSecretsDir();
 const SECRETS_FILE = join(SECRETS_DIR, 'secrets.json');
 
 function generateSecret(length = 64): string {
@@ -49,7 +61,7 @@ function loadOrCreateSecrets(): Secrets {
     try {
       const content = readFileSync(SECRETS_FILE, 'utf-8');
       const secrets = JSON.parse(content) as Secrets;
-      console.log('Loaded existing secrets from', SECRETS_FILE);
+      console.log(`Loaded existing secrets from ${SECRETS_FILE}`);
       return secrets;
     } catch (error) {
       console.warn('Failed to load secrets file, generating new secrets:', error);
@@ -71,11 +83,17 @@ function loadOrCreateSecrets(): Secrets {
   // Ensure secrets directory exists
   if (!existsSync(SECRETS_DIR)) {
     mkdirSync(SECRETS_DIR, { recursive: true });
+    console.log(`Created secrets directory: ${SECRETS_DIR}`);
   }
 
-  // Save secrets to file
-  writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), { mode: 0o600 });
-  console.log('New secrets generated and saved to', SECRETS_FILE);
+  // Save secrets to file with restricted permissions
+  try {
+    writeFileSync(SECRETS_FILE, JSON.stringify(secrets, null, 2), { mode: 0o600 });
+    console.log(`New secrets generated and saved to ${SECRETS_FILE}`);
+  } catch (error) {
+    console.error('Failed to save secrets file:', error);
+    console.warn('Secrets will not persist across restarts!');
+  }
 
   return secrets;
 }
@@ -101,4 +119,8 @@ export function getVapidPrivateKey(): string {
 
 export function getVapidSubject(): string {
   return process.env.VAPID_SUBJECT ?? 'mailto:admin@dreamtime.app';
+}
+
+export function getSecretsPath(): string {
+  return SECRETS_FILE;
 }

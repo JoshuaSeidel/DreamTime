@@ -2,6 +2,35 @@
 
 This file contains instructions for Claude Code to build the DreamTime baby sleep tracker application.
 
+## CRITICAL DEVELOPMENT RULES
+
+### NO PLACEHOLDERS POLICY
+**Every piece of code written must be fully functional from the moment it's created.**
+
+- NO `// TODO: implement` comments
+- NO placeholder functions that return mock data
+- NO partial implementations
+- NO "will be implemented later" code
+- Every feature must work end-to-end when committed
+- If a feature depends on another, implement the dependency first
+
+### TEST-DRIVEN DEVELOPMENT
+**Every feature must have complete test coverage before being committed.**
+
+- Write unit tests for all business logic
+- Write integration tests for all API endpoints
+- Write E2E tests for all user flows
+- Tests must pass before any commit
+- Aim for >90% code coverage on critical paths
+
+### QUALITY GATES
+Before committing any code:
+1. All existing tests must pass
+2. New tests must be written for new code
+3. Code must be fully functional (no placeholders)
+4. TypeScript must compile without errors
+5. ESLint must pass without warnings
+
 ## Project Context
 
 This is a Progressive Web App (PWA) for tracking baby sleep. Parents use it to:
@@ -13,11 +42,11 @@ This is a Progressive Web App (PWA) for tracking baby sleep. Parents use it to:
 
 ## Build Order
 
-### Phase 1: Foundation
-1. Initialize monorepo with npm workspaces or turborepo
+### Phase 1: Foundation ✅
+1. Initialize monorepo with npm workspaces
 2. Setup TypeScript configuration
-3. Setup Prisma with PostgreSQL schema
-4. Create Express/Fastify server skeleton
+3. Setup Prisma with SQLite/PostgreSQL schema
+4. Create Fastify server skeleton
 5. Setup Vite + React client skeleton
 6. Configure Docker and docker-compose
 
@@ -59,6 +88,36 @@ This is a Progressive Web App (PWA) for tracking baby sleep. Parents use it to:
 4. Mobile-first responsive design
 5. Accessibility audit
 
+## Database Configuration
+
+### DB_TYPE Environment Variable
+The application supports two database types controlled by `DB_TYPE`:
+
+- `sqlite` (default): Uses SQLite, no external database required
+- `postgresql`: Uses PostgreSQL, requires `DATABASE_URL`
+
+### Configuration Logic
+```typescript
+if (DB_TYPE === 'postgresql') {
+  // Requires DATABASE_URL to be set
+  // Example: postgresql://user:pass@host:5432/dreamtime
+} else {
+  // Default to SQLite
+  // Stored in ./data/database/dreamtime.db
+}
+```
+
+### Docker Compose Usage
+```bash
+# SQLite (default - no external database)
+docker-compose up -d
+
+# PostgreSQL (external database)
+DB_TYPE=postgresql \
+DATABASE_URL=postgresql://user:pass@your-postgres:5432/dreamtime \
+docker-compose up -d
+```
+
 ## Key Implementation Details
 
 ### Timezone Handling
@@ -86,11 +145,11 @@ function calculateNapTimes(wakeTime: Date, schedule: Schedule): NapRecommendatio
   // Nap 1: 2-2.5 hours after wake
   // Nap 2: 2.5-3.5 hours after nap 1 ends
   // Bedtime: 3.5-4.5 hours after nap 2 ends
-  
+
   // For 2-to-1 transition:
   // Single nap: 5-5.5 hours after wake (min 11:30am week 1-2, then 12pm)
   // Bedtime: 4-5 hours after nap ends
-  
+
   // Account for:
   // - Sleep debt (poor naps = earlier bedtime)
   // - Maximum awake windows
@@ -121,36 +180,60 @@ function calculateNapTimes(wakeTime: Date, schedule: Schedule): NapRecommendatio
 - Routes: camelCase with `.routes.ts` suffix
 - Utils: camelCase (e.g., `calculateBedtime.ts`)
 - Types: PascalCase in `types/` directory
+- Tests: Same name as source file with `.test.ts` suffix
 
 ## Testing Requirements
 
-- Unit tests for calculator logic
-- Integration tests for API endpoints
-- E2E tests for critical flows (auth, tracking)
-- Test timezone handling with multiple zones
-- Test offline/online sync
+### Unit Tests (Required for all business logic)
+- Schedule calculator functions
+- Bedtime calculator functions
+- State machine transitions
+- Validation logic
+- Utility functions
+
+### Integration Tests (Required for all API endpoints)
+- Authentication flows
+- CRUD operations
+- Error handling
+- Authorization checks
+
+### E2E Tests (Required for all user flows)
+- User registration and login
+- Sleep tracking workflow
+- Schedule configuration
+- Child management
+
+### Test File Locations
+```
+packages/server/src/**/*.test.ts     # Unit tests (co-located)
+packages/server/tests/integration/   # Integration tests
+packages/client/src/**/*.test.tsx    # Component tests
+e2e/                                 # Playwright E2E tests
+```
 
 ## Environment Variables
 
 ```env
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/dreamtime
-DATABASE_URL_SQLITE=file:./dev.db
+# Database Type
+DB_TYPE=sqlite                    # sqlite or postgresql
 
-# Auth
-JWT_SECRET=your-secret-key
-JWT_REFRESH_SECRET=your-refresh-secret
+# Database URL (required for postgresql)
+DATABASE_URL=postgresql://user:pass@localhost:5432/dreamtime
+
+# Auth (auto-generated if not provided)
+JWT_SECRET=auto-generated
+JWT_REFRESH_SECRET=auto-generated
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
+
+# Push Notifications (auto-generated if not provided)
+VAPID_PUBLIC_KEY=auto-generated
+VAPID_PRIVATE_KEY=auto-generated
+VAPID_SUBJECT=mailto:admin@dreamtime.app
 
 # Server
 PORT=3000
 NODE_ENV=development
-
-# Push Notifications (optional)
-VAPID_PUBLIC_KEY=
-VAPID_PRIVATE_KEY=
-VAPID_SUBJECT=mailto:admin@example.com
 ```
 
 ## API Response Format
@@ -220,7 +303,7 @@ nap_1:
   latest_start: "09:00"
   max_duration: 120  # minutes
   end_by: "11:00"
-  
+
 nap_2:
   earliest: "12:00"
   latest_start: "13:00"
@@ -256,7 +339,7 @@ progression:
 week_2_plus:
   single_nap:
     earliest: "12:00"
-    
+
 goal:
   single_nap:
     target_start: "12:30-13:00"
@@ -265,10 +348,10 @@ goal:
   bedtime:
     wake_window: 4-5h  # after nap ends
     goal: "18:45-19:30"
-    
+
 temporary_allowances:
   wake_time_allowed_until: "08:00"  # first few months
-  
+
 after_transition:
   nap_cap: 150  # 2.5 hours after 4-6 weeks
 ```

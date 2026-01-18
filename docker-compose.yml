@@ -1,24 +1,26 @@
 version: '3.8'
 
+# =============================================================================
 # DreamTime - Baby Sleep Tracker
+# =============================================================================
 # Compatible with Unraid and standard Docker installations
 #
-# Usage:
-#   1. Create the data directories:
-#      mkdir -p ./data/secrets ./data/database
+# QUICK START (SQLite - no external database required):
+#   mkdir -p ./data/secrets ./data/database
+#   docker-compose up -d
 #
-#   2. Start the application:
-#      docker-compose up -d
+# POSTGRESQL SETUP:
+#   1. Set up your PostgreSQL database (external server or container)
+#   2. Create the database: CREATE DATABASE dreamtime;
+#   3. Configure environment variables below or use .env file
+#   4. Run: docker-compose up -d
 #
-#   3. Access at http://localhost (or your server IP)
-#
-# Database options:
-#   - SQLite (default): Data stored in ./data/database/dreamtime.db
-#   - PostgreSQL: Set DATABASE_URL environment variable to your PostgreSQL connection string
-#     Example: DATABASE_URL=postgresql://user:pass@your-postgres-host:5432/dreamtime
+# =============================================================================
 
 services:
+  # ---------------------------------------------------------------------------
   # API Server (internal only - proxied via nginx)
+  # ---------------------------------------------------------------------------
   server:
     build:
       context: .
@@ -26,22 +28,58 @@ services:
     container_name: dreamtime-server
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      # SQLite by default - change to PostgreSQL connection string if needed
-      DATABASE_URL: ${DATABASE_URL:-file:/app/data/database/dreamtime.db}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+
+      # -----------------------------------------------------------------------
+      # DATABASE CONFIGURATION
+      # -----------------------------------------------------------------------
+      # DB_TYPE: "sqlite" (default) or "postgresql"
+      #
+      # For SQLite (default - no setup required):
+      #   DB_TYPE=sqlite
+      #   Data stored in: ./data/database/dreamtime.db
+      #
+      # For PostgreSQL (requires external database):
+      #   DB_TYPE=postgresql
+      #   DATABASE_URL=postgresql://username:password@hostname:5432/dreamtime
+      #
+      # Examples:
+      #   - Local PostgreSQL: postgresql://dreamtime:secret@host.docker.internal:5432/dreamtime
+      #   - Remote PostgreSQL: postgresql://user:pass@db.example.com:5432/dreamtime
+      #   - Unraid PostgreSQL: postgresql://user:pass@192.168.1.100:5432/dreamtime
+      # -----------------------------------------------------------------------
+      DB_TYPE: ${DB_TYPE:-sqlite}
+      DATABASE_URL: ${DATABASE_URL:-}
+
+      # -----------------------------------------------------------------------
+      # AUTHENTICATION (auto-generated if not provided)
+      # -----------------------------------------------------------------------
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      CLIENT_URL: ${CLIENT_URL:-http://localhost}
-      PORT: 3000
-      SECRETS_DIR: /app/data/secrets
+
+      # -----------------------------------------------------------------------
+      # PUSH NOTIFICATIONS
+      # -----------------------------------------------------------------------
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@dreamtime.app}
+
+      # -----------------------------------------------------------------------
+      # DATA STORAGE
+      # -----------------------------------------------------------------------
+      DATA_DIR: /app/data
+      SECRETS_DIR: /app/data/secrets
+
+      # Internal
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+
     # Folder mappings for Unraid compatibility (no named volumes)
     volumes:
-      - ./data/secrets:/app/data/secrets
-      - ./data/database:/app/data/database
+      - ./data:/app/data
+
     # No public ports - only accessible within Docker network via nginx proxy
     expose:
       - "3000"
+
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
@@ -49,7 +87,9 @@ services:
       retries: 3
       start_period: 30s
 
+  # ---------------------------------------------------------------------------
   # Frontend Client (public facing - serves static files and proxies API)
+  # ---------------------------------------------------------------------------
   client:
     build:
       context: .
