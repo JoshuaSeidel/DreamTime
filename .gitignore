@@ -15,8 +15,9 @@ build/
 .env.local
 .env.*.local
 
-# Secrets (auto-generated JWT secrets)
+# Secrets and data (auto-generated)
 .secrets/
+data/
 
 # IDE
 .idea/

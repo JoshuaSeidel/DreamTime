@@ -1,26 +1,23 @@
 version: '3.8'
 
-services:
-  # PostgreSQL Database (internal only)
-  db:
-    image: postgres:16-alpine
-    container_name: dreamtime-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: dreamtime
-      POSTGRES_PASSWORD: dreamtime_dev
-      POSTGRES_DB: dreamtime
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    # No public ports - only accessible within Docker network
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dreamtime"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# DreamTime - Baby Sleep Tracker
+# Compatible with Unraid and standard Docker installations
+#
+# Usage:
+#   1. Create the data directories:
+#      mkdir -p ./data/secrets ./data/database
+#
+#   2. Start the application:
+#      docker-compose up -d
+#
+#   3. Access at http://localhost (or your server IP)
+#
+# Database options:
+#   - SQLite (default): Data stored in ./data/database/dreamtime.db
+#   - PostgreSQL: Set DATABASE_URL environment variable to your PostgreSQL connection string
+#     Example: DATABASE_URL=postgresql://user:pass@your-postgres-host:5432/dreamtime
 
+services:
   # API Server (internal only - proxied via nginx)
   server:
     build:
@@ -30,26 +27,27 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://dreamtime:dreamtime_dev@db:5432/dreamtime
-      # JWT secrets auto-generated on first startup if not provided
-      JWT_EXPIRES_IN: 15m
-      JWT_REFRESH_EXPIRES_IN: 7d
-      CLIENT_URL: http://localhost
+      # SQLite by default - change to PostgreSQL connection string if needed
+      DATABASE_URL: ${DATABASE_URL:-file:/app/data/database/dreamtime.db}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
       PORT: 3000
-      SECRETS_DIR: /app/.secrets
+      SECRETS_DIR: /app/data/secrets
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@dreamtime.app}
+    # Folder mappings for Unraid compatibility (no named volumes)
     volumes:
-      - server_secrets:/app/.secrets
+      - ./data/secrets:/app/data/secrets
+      - ./data/database:/app/data/database
     # No public ports - only accessible within Docker network via nginx proxy
     expose:
       - "3000"
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 30s
 
   # Frontend Client (public facing - serves static files and proxies API)
   client:
@@ -59,8 +57,7 @@ services:
     container_name: dreamtime-client
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${PORT:-80}:80"
     depends_on:
       server:
         condition: service_healthy
@@ -69,10 +66,6 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-
-volumes:
-  postgres_data:
-  server_secrets:
 
 networks:
   default:

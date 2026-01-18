@@ -4,10 +4,6 @@ version: '3.8'
 # docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 services:
-  db:
-    ports:
-      - "5432:5432"
-
   server:
     build:
       context: .
@@ -16,10 +12,12 @@ services:
     command: npm run dev -w packages/server
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://dreamtime:dreamtime_dev@db:5432/dreamtime
+      DATABASE_URL: file:/app/data/database/dreamtime.db
     volumes:
       - ./packages/server/src:/app/packages/server/src
       - ./prisma:/app/prisma
+      - ./data/secrets:/app/data/secrets
+      - ./data/database:/app/data/database
     ports:
       - "3000:3000"
 

@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { getJwtSecret, getJwtRefreshSecret } from './secrets.js';
+import {
+  getJwtSecret,
+  getJwtRefreshSecret,
+  getVapidPublicKey,
+  getVapidPrivateKey,
+  getVapidSubject,
+} from './secrets.js';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -22,6 +28,9 @@ export const env = {
   ...parsed.data,
   JWT_SECRET: getJwtSecret(),
   JWT_REFRESH_SECRET: getJwtRefreshSecret(),
+  VAPID_PUBLIC_KEY: getVapidPublicKey(),
+  VAPID_PRIVATE_KEY: getVapidPrivateKey(),
+  VAPID_SUBJECT: getVapidSubject(),
 };
 
 export type Env = typeof env;
