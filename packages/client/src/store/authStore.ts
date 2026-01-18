@@ -13,18 +13,24 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setAccessToken: (token: string) => void;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
+const API_URL = '/api';
+
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      isLoading: false,
 
       setAuth: (user, accessToken, refreshToken) =>
         set({
@@ -37,13 +43,78 @@ export const useAuthStore = create<AuthState>()(
       setAccessToken: (accessToken) =>
         set({ accessToken }),
 
-      logout: () =>
+      login: async (email: string, password: string) => {
+        set({ isLoading: true });
+        try {
+          const response = await fetch(`${API_URL}/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'Login failed');
+          }
+
+          const data = await response.json();
+          const { user, accessToken, refreshToken } = data.data;
+
+          get().setAuth(user, accessToken, refreshToken);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      register: async (name: string, email: string, password: string) => {
+        set({ isLoading: true });
+        try {
+          const response = await fetch(`${API_URL}/auth/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email, password }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error?.message || 'Registration failed');
+          }
+
+          const data = await response.json();
+          const { user, accessToken, refreshToken } = data.data;
+
+          get().setAuth(user, accessToken, refreshToken);
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      logout: () => {
+        // Optionally call logout endpoint to invalidate refresh token
+        const { refreshToken } = get();
+        if (refreshToken) {
+          fetch(`${API_URL}/auth/logout`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ refreshToken }),
+          }).catch(() => {
+            // Ignore errors on logout
+          });
+        }
+
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
-        }),
+        });
+      },
     }),
     {
       name: 'dreamtime-auth',

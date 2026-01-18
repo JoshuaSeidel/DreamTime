@@ -1,4 +1,5 @@
-import { Moon, Sun, Baby, LogOut } from 'lucide-react';
+import { Moon, Sun, Baby, LogOut, Clock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 type SleepState = 'awake' | 'pending' | 'asleep';
 
@@ -28,29 +29,29 @@ export default function QuickActionButtons({
     put_down: {
       label: 'Put Down',
       icon: Baby,
-      bgColor: 'bg-put-down',
-      hoverColor: 'hover:bg-blue-600',
+      bgClass: 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700',
+      textClass: 'text-white',
       description: 'Baby placed in crib',
     },
     fell_asleep: {
       label: 'Fell Asleep',
       icon: Moon,
-      bgColor: 'bg-asleep',
-      hoverColor: 'hover:bg-violet-600',
+      bgClass: 'bg-violet-500 hover:bg-violet-600 dark:bg-violet-600 dark:hover:bg-violet-700',
+      textClass: 'text-white',
       description: 'Baby fell asleep',
     },
     woke_up: {
       label: 'Woke Up',
       icon: Sun,
-      bgColor: 'bg-awake',
-      hoverColor: 'hover:bg-yellow-600',
+      bgClass: 'bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-500 dark:hover:bg-yellow-600',
+      textClass: 'text-gray-900',
       description: 'Baby woke up',
     },
     out_of_crib: {
       label: 'Out of Crib',
       icon: LogOut,
-      bgColor: 'bg-out-of-crib',
-      hoverColor: 'hover:bg-green-600',
+      bgClass: 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700',
+      textClass: 'text-white',
       description: 'Baby taken out of crib',
     },
   } as const;
@@ -69,15 +70,11 @@ export default function QuickActionButtons({
             <button
               key={action}
               onClick={() => onAction(action)}
-              className={`
-                ${config.bgColor} ${config.hoverColor}
-                text-white rounded-xl p-6
-                flex items-center justify-between
-                transition-all duration-200
-                active:scale-[0.98]
-                shadow-sm hover:shadow-md
-                min-h-[80px]
-              `}
+              className={cn(
+                'rounded-xl p-5 flex items-center justify-between transition-all duration-200 active:scale-[0.98] shadow-md hover:shadow-lg min-h-[88px]',
+                config.bgClass,
+                config.textClass
+              )}
             >
               <div className="flex items-center gap-4">
                 <div className="bg-white/20 rounded-full p-3">
@@ -85,10 +82,13 @@ export default function QuickActionButtons({
                 </div>
                 <div className="text-left">
                   <p className="text-lg font-semibold">{config.label}</p>
-                  <p className="text-sm text-white/80">{config.description}</p>
+                  <p className={cn('text-sm', config.textClass === 'text-white' ? 'text-white/80' : 'text-gray-900/70')}>
+                    {config.description}
+                  </p>
                 </div>
               </div>
-              <div className="text-sm opacity-75">
+              <div className={cn('flex items-center gap-1 text-sm', config.textClass === 'text-white' ? 'text-white/70' : 'text-gray-900/60')}>
+                <Clock className="w-4 h-4" />
                 {new Date().toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',

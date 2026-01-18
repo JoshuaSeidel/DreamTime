@@ -7,6 +7,7 @@ import { scheduleRoutes } from './schedule.routes.js';
 import { sessionRoutes } from './session.routes.js';
 import { calculatorRoutes } from './calculator.routes.js';
 import { analyticsRoutes } from './analytics.routes.js';
+import { webAuthnRoutes } from './webauthn.routes.js';
 
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   // Health check (no prefix)
@@ -16,6 +17,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await app.register(async (api) => {
     // Auth routes
     await api.register(authRoutes, { prefix: '/auth' });
+
+    // WebAuthn routes (Face ID, Touch ID, biometric)
+    await api.register(webAuthnRoutes, { prefix: '/webauthn' });
 
     // User routes
     await api.register(userRoutes, { prefix: '/users' });

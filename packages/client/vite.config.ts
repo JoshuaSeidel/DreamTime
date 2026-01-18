@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'DreamTime - Baby Sleep Tracker',
         short_name: 'DreamTime',
         description: 'Track your baby\'s sleep schedule',
-        theme_color: '#6366f1',
-        background_color: '#ffffff',
+        theme_color: '#3b82f6',
+        background_color: '#000000',
         display: 'standalone',
         icons: [
           {

@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { Moon, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuthStore } from '@/store/authStore';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -7,106 +13,129 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const register = useAuthStore((state) => state.register);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
     if (password !== confirmPassword) {
-      // TODO: Show error
+      setError('Passwords do not match');
       return;
     }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
     setIsLoading(true);
-    // TODO: Implement register
-    setIsLoading(false);
+
+    try {
+      await register(name, email, password);
+      navigate('/');
+    } catch (err) {
+      setError('Failed to create account. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-indigo-600">DreamTime</h1>
-          <p className="mt-2 text-gray-600">Create your account</p>
-        </div>
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full bg-primary/10 p-3">
+              <Moon className="w-8 h-8 text-primary" />
+            </div>
+          </div>
+          <CardTitle className="text-2xl font-bold text-primary">DreamTime</CardTitle>
+          <CardDescription>Create your account to get started</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                {error}
+              </div>
+            )}
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Name
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
                 id="name"
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="input mt-1"
                 placeholder="Your name"
+                autoComplete="name"
               />
             </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
                 id="email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input mt-1"
                 placeholder="you@example.com"
+                autoComplete="email"
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
                 id="password"
                 type="password"
                 required
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="input mt-1"
                 placeholder="At least 8 characters"
+                autoComplete="new-password"
               />
             </div>
 
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
                 id="confirmPassword"
                 type="password"
                 required
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="input mt-1"
                 placeholder="Confirm your password"
+                autoComplete="new-password"
               />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="btn-primary w-full py-3"
-          >
-            {isLoading ? 'Creating account...' : 'Create account'}
-          </button>
+            <Button type="submit" disabled={isLoading} className="w-full" size="lg">
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
+                </>
+              ) : (
+                'Create account'
+              )}
+            </Button>
 
-          <p className="text-center text-sm text-gray-600">
-            Already have an account?{' '}
-            <Link to="/login" className="text-indigo-600 hover:text-indigo-500 font-medium">
-              Sign in
-            </Link>
-          </p>
-        </form>
-      </div>
+            <p className="text-center text-sm text-muted-foreground">
+              Already have an account?{' '}
+              <Link to="/login" className="text-primary hover:underline font-medium">
+                Sign in
+              </Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

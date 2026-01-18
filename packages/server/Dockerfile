@@ -11,7 +11,7 @@ COPY packages/server/package*.json ./packages/server/
 COPY prisma ./prisma
 
 # Install dependencies
-RUN npm ci --workspace=packages/server
+RUN npm ci --workspace=@dreamtime/server
 
 # Copy server source
 COPY packages/server ./packages/server
@@ -21,7 +21,7 @@ COPY tsconfig.base.json ./
 RUN npx prisma generate
 
 # Build
-RUN npm run build -w packages/server
+RUN npm run build -w @dreamtime/server
 
 # Production stage
 FROM node:20-alpine

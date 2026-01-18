@@ -1,6 +1,4 @@
 import {
-  format,
-  parse,
   startOfDay,
   endOfDay,
   setHours,
@@ -88,9 +86,11 @@ export function parseTimeString(
   baseDate: Date,
   timezone: string
 ): Date {
-  const [hours, minutes] = timeStr.split(':').map(Number);
+  const parts = timeStr.split(':').map(Number);
+  const hours = parts[0];
+  const minutes = parts[1];
 
-  if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+  if (hours === undefined || minutes === undefined || isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
     throw new Error(`Invalid time string: ${timeStr}`);
   }
 
@@ -149,7 +149,6 @@ export function isDST(timezone: string, date: Date = new Date()): boolean {
 // Get next DST transition date (or null if timezone doesn't observe DST)
 export function getNextDSTTransition(timezone: string): Date | null {
   const now = new Date();
-  const currentYear = now.getFullYear();
 
   // Check each day for the next year for offset changes
   let lastOffset = getTimezoneOffset(timezone, now);

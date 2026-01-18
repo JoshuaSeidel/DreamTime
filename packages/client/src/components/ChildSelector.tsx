@@ -1,5 +1,6 @@
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Plus, Check } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface Child {
   id: string;
@@ -25,15 +26,18 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
       >
-        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-          <span className="text-sm font-medium text-indigo-600">
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="text-sm font-medium text-primary">
             {selectedChild?.name.charAt(0) ?? '?'}
           </span>
         </div>
         <span className="font-medium">{selectedChild?.name ?? 'Select child'}</span>
-        <ChevronDown className="w-4 h-4 text-gray-500" />
+        <ChevronDown className={cn(
+          'w-4 h-4 text-muted-foreground transition-transform',
+          isOpen && 'rotate-180'
+        )} />
       </button>
 
       {isOpen && (
@@ -42,7 +46,7 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
             className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-100 z-20">
+          <div className="absolute right-0 mt-2 w-56 bg-popover rounded-lg shadow-lg border border-border z-20 overflow-hidden">
             <div className="py-1">
               {mockChildren.map((child) => (
                 <button
@@ -51,29 +55,33 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
                     onSelect(child.id);
                     setIsOpen(false);
                   }}
-                  className={`
-                    w-full px-4 py-2 text-left flex items-center gap-3
-                    hover:bg-gray-50 transition-colors
-                    ${selectedId === child.id ? 'bg-indigo-50' : ''}
-                  `}
+                  className={cn(
+                    'w-full px-4 py-2 text-left flex items-center justify-between hover:bg-accent transition-colors',
+                    selectedId === child.id && 'bg-accent'
+                  )}
                 >
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                    <span className="text-sm font-medium text-indigo-600">
-                      {child.name.charAt(0)}
-                    </span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="text-sm font-medium text-primary">
+                        {child.name.charAt(0)}
+                      </span>
+                    </div>
+                    <span className="font-medium">{child.name}</span>
                   </div>
-                  <span className="font-medium">{child.name}</span>
+                  {selectedId === child.id && (
+                    <Check className="w-4 h-4 text-primary" />
+                  )}
                 </button>
               ))}
-              <hr className="my-1" />
+              <div className="h-px bg-border my-1" />
               <button
                 onClick={() => {
                   // TODO: Navigate to add child page
                   setIsOpen(false);
                 }}
-                className="w-full px-4 py-2 text-left flex items-center gap-3 text-indigo-600 hover:bg-gray-50"
+                className="w-full px-4 py-2 text-left flex items-center gap-3 text-primary hover:bg-accent transition-colors"
               >
-                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                   <Plus className="w-4 h-4" />
                 </div>
                 <span className="font-medium">Add Child</span>

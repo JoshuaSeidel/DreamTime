@@ -7,9 +7,14 @@ import { fileURLToPath } from 'url';
 function getMonorepoRoot(): string {
   // In production (compiled), __dirname points to dist/config
   // In development (tsx), import.meta.url is used
-  const currentDir = typeof __dirname !== 'undefined'
-    ? __dirname
-    : dirname(fileURLToPath(import.meta.url));
+  let currentDir: string;
+  if (typeof __dirname !== 'undefined') {
+    currentDir = __dirname;
+  } else {
+    // ESM mode - use import.meta.url
+    // @ts-expect-error import.meta is available in ESM
+    currentDir = dirname(fileURLToPath(import.meta.url));
+  }
 
   // Navigate up from packages/server/src/config (or dist/config) to root
   return join(currentDir, '..', '..', '..', '..');

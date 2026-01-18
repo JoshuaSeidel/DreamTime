@@ -43,7 +43,9 @@ export interface NextActionRecommendation {
 
 // Helper functions
 function parseTimeString(time: string, baseDate: Date, timezone: string): Date {
-  const [hours, minutes] = time.split(':').map(Number);
+  const parts = time.split(':').map(Number);
+  const hours = parts[0] ?? 0;
+  const minutes = parts[1] ?? 0;
   const zonedDate = toZonedTime(baseDate, timezone);
   const result = setMinutes(setHours(startOfDay(zonedDate), hours), minutes);
   return fromZonedTime(result, timezone);

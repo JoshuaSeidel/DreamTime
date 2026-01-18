@@ -250,6 +250,17 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
   return userToAuthUser(user);
 }
 
+/**
+ * Generate tokens for a user (used by WebAuthn and other services)
+ * This is a wrapper around createTokens that provides the signJwt function
+ */
+export async function generateTokens(
+  userId: string,
+  signJwt: (payload: { userId: string }) => string
+): Promise<AuthTokens> {
+  return createTokens(userId, signJwt);
+}
+
 // Cleanup expired refresh tokens (call periodically)
 export async function cleanupExpiredTokens(): Promise<number> {
   const result = await prisma.refreshToken.deleteMany({

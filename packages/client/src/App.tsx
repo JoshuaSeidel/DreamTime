@@ -8,6 +8,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const History = lazy(() => import('./pages/History'));
+const Analytics = lazy(() => import('./pages/Analytics'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 const Settings = lazy(() => import('./pages/Settings'));
 
@@ -33,7 +34,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background text-foreground">
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           {/* Public routes */}
@@ -68,6 +69,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <History />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Analytics />
               </ProtectedRoute>
             }
           />

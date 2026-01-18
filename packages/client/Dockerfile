@@ -8,13 +8,14 @@ COPY package*.json ./
 COPY packages/client/package*.json ./packages/client/
 
 # Install dependencies
-RUN npm ci --workspace=packages/client
+RUN npm ci --workspace=@dreamtime/client
 
 # Copy client source
 COPY packages/client ./packages/client
+COPY tsconfig.base.json ./
 
 # Build
-RUN npm run build -w packages/client
+RUN npm run build -w @dreamtime/client
 
 # Production stage - Nginx
 FROM nginx:alpine

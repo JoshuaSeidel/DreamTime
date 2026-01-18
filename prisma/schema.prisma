@@ -15,15 +15,19 @@ datasource db {
 // ============================================
 
 model User {
-  id            String           @id @default(uuid())
-  email         String           @unique
+  id            String               @id @default(uuid())
+  email         String               @unique
   password      String
   name          String
-  timezone      String           @default("America/New_York")
+  timezone      String               @default("America/New_York")
   children      ChildCaregiver[]
   refreshTokens RefreshToken[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  webAuthnCredentials WebAuthnCredential[]
+  // Store current WebAuthn challenge for verification (temporary, cleared after use)
+  webAuthnChallenge String?
+  webAuthnChallengeExpiry DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 }
 
 model RefreshToken {
@@ -36,6 +40,29 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
+}
+
+// ============================================
+// WebAuthn Credentials (Face ID, Touch ID, etc.)
+// ============================================
+
+model WebAuthnCredential {
+  id                  String   @id @default(uuid())
+  userId              String
+  credentialId        String   @unique // Base64URL encoded credential ID
+  credentialPublicKey String   // Base64URL encoded public key
+  counter             Int      @default(0) // Signature counter for replay protection
+  deviceType          String   // "platform" (Face ID, Touch ID) or "cross-platform" (security key)
+  backedUp            Boolean  @default(false) // Whether credential is backed up (e.g., iCloud Keychain)
+  transports          String?  // JSON array of transports: ["internal", "hybrid", etc.]
+  friendlyName        String?  // User-provided name like "iPhone Face ID"
+  lastUsedAt          DateTime?
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@index([credentialId])
 }
 
 // ============================================

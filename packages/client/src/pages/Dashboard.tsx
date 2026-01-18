@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { Moon, Clock } from 'lucide-react';
 import BottomNav from '../components/BottomNav';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 type SleepState = 'awake' | 'pending' | 'asleep';
 
@@ -27,12 +30,34 @@ export default function Dashboard() {
     }
   };
 
+  const getStateColor = () => {
+    switch (currentState) {
+      case 'asleep':
+        return 'bg-violet-500';
+      case 'pending':
+        return 'bg-blue-500';
+      default:
+        return 'bg-green-500';
+    }
+  };
+
+  const getStateText = () => {
+    switch (currentState) {
+      case 'asleep':
+        return 'Asleep';
+      case 'pending':
+        return 'In Crib';
+      default:
+        return 'Awake';
+    }
+  };
+
   return (
-    <div className="min-h-screen pb-20">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-4">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-indigo-600">DreamTime</h1>
+          <h1 className="text-xl font-bold text-primary">DreamTime</h1>
           <ChildSelector
             selectedId={selectedChildId}
             onSelect={setSelectedChildId}
@@ -43,23 +68,27 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="px-4 py-6 space-y-6">
         {/* Current State Card */}
-        <div className="card text-center">
-          <p className="text-sm text-gray-500 mb-1">Current Status</p>
-          <div className="flex items-center justify-center gap-2">
-            <span
-              className={`w-3 h-3 rounded-full ${
-                currentState === 'asleep'
-                  ? 'bg-asleep animate-pulse-slow'
-                  : currentState === 'pending'
-                  ? 'bg-put-down animate-pulse'
-                  : 'bg-out-of-crib'
-              }`}
-            />
-            <span className="text-2xl font-semibold capitalize">
-              {currentState === 'pending' ? 'In Crib' : currentState}
-            </span>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="pt-6 text-center">
+            <p className="text-sm text-muted-foreground mb-2">Current Status</p>
+            <div className="flex items-center justify-center gap-3">
+              <span
+                className={cn(
+                  'w-4 h-4 rounded-full',
+                  getStateColor(),
+                  currentState === 'asleep' && 'animate-pulse-slow',
+                  currentState === 'pending' && 'animate-pulse'
+                )}
+              />
+              <span className="text-3xl font-bold">{getStateText()}</span>
+            </div>
+            {currentState !== 'awake' && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Started at 2:30 PM
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Quick Actions */}
         <QuickActionButtons
@@ -68,29 +97,43 @@ export default function Dashboard() {
         />
 
         {/* Today's Summary */}
-        <div className="card">
-          <h2 className="text-lg font-semibold mb-4">Today's Summary</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center">
-              <p className="text-3xl font-bold text-indigo-600">0h 0m</p>
-              <p className="text-sm text-gray-500">Total Sleep</p>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Today's Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <p className="text-3xl font-bold text-primary">0h 0m</p>
+                <p className="text-sm text-muted-foreground">Total Sleep</p>
+              </div>
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <p className="text-3xl font-bold text-primary">0</p>
+                <p className="text-sm text-muted-foreground">Naps</p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-3xl font-bold text-indigo-600">0</p>
-              <p className="text-sm text-gray-500">Naps</p>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Next Recommendation */}
-        <div className="card bg-indigo-50 border-indigo-100">
-          <h2 className="text-lg font-semibold text-indigo-900 mb-2">
-            Next Recommendation
-          </h2>
-          <p className="text-indigo-700">
-            Set up a schedule to see recommendations
-          </p>
-        </div>
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-primary/20 p-2">
+                <Moon className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-primary">Next Recommendation</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Set up a schedule to see recommendations
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </main>
 
       <BottomNav />

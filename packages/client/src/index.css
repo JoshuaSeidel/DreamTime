@@ -4,14 +4,106 @@
 
 @layer base {
   :root {
-    --color-put-down: 59 130 246;
-    --color-asleep: 139 92 246;
-    --color-awake: 234 179 8;
-    --color-out-of-crib: 34 197 94;
+    /* Light mode - clean white with blue accents */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Blue primary color */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217.2 91.2% 59.8%;
+
+    --radius: 0.75rem;
+
+    /* Sleep tracking action colors */
+    --color-put-down: 217 91% 60%;
+    --color-asleep: 263 70% 50%;
+    --color-awake: 48 96% 53%;
+    --color-out-of-crib: 142 71% 45%;
+
+    /* Chart colors */
+    --chart-1: 217.2 91.2% 59.8%;
+    --chart-2: 263 70% 50%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 48 96% 53%;
+    --chart-5: 0 84% 60%;
+  }
+
+  .dark {
+    /* OLED Dark mode - true black background */
+    --background: 0 0% 0%;
+    --foreground: 210 40% 98%;
+
+    --card: 0 0% 5%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 5%;
+    --popover-foreground: 210 40% 98%;
+
+    /* Blue primary - slightly brighter for dark mode */
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 12%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 12%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 15%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 217.2 91.2% 59.8%;
+
+    /* Sleep tracking action colors - adjusted for dark mode */
+    --color-put-down: 217 91% 65%;
+    --color-asleep: 263 70% 60%;
+    --color-awake: 48 96% 60%;
+    --color-out-of-crib: 142 71% 55%;
+
+    /* Chart colors - dark mode */
+    --chart-1: 217.2 91.2% 65%;
+    --chart-2: 263 70% 60%;
+    --chart-3: 142 71% 55%;
+    --chart-4: 48 96% 60%;
+    --chart-5: 0 84% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 
   /* Safe area for iOS devices */
@@ -21,26 +113,72 @@
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+
+  /* Smooth transitions for theme switching */
+  body, .card, nav, header {
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
 }
 
 @layer components {
-  .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  /* Material-inspired elevation */
+  .elevation-1 {
+    @apply shadow-sm;
   }
 
-  .btn-primary {
-    @apply btn bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500;
+  .elevation-2 {
+    @apply shadow-md;
   }
 
-  .btn-secondary {
-    @apply btn bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500;
+  .elevation-3 {
+    @apply shadow-lg;
   }
 
-  .input {
-    @apply block w-full rounded-lg border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500;
+  /* Material-inspired ripple effect placeholder */
+  .ripple {
+    @apply relative overflow-hidden;
   }
 
-  .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4;
+  /* Quick action button styles */
+  .action-btn {
+    @apply flex flex-col items-center justify-center gap-2 p-6 rounded-2xl font-medium transition-all duration-200 active:scale-95 min-h-[120px];
+  }
+
+  .action-btn-put-down {
+    @apply bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700;
+  }
+
+  .action-btn-asleep {
+    @apply bg-violet-500 text-white hover:bg-violet-600 dark:bg-violet-600 dark:hover:bg-violet-700;
+  }
+
+  .action-btn-awake {
+    @apply bg-yellow-500 text-gray-900 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 dark:text-gray-900;
+  }
+
+  .action-btn-out-of-crib {
+    @apply bg-green-500 text-white hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700;
+  }
+}
+
+@layer utilities {
+  /* Safe area padding for bottom nav */
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* Animation utilities */
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

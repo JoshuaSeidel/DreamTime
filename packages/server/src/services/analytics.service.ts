@@ -251,14 +251,18 @@ export async function getWeeklySummary(
 
       // Parse times back to dates for averaging
       if (dailySummary.bedtime) {
-        const [h, m] = dailySummary.bedtime.split(':').map(Number);
+        const parts = dailySummary.bedtime.split(':').map(Number);
+        const h = parts[0] ?? 0;
+        const m = parts[1] ?? 0;
         const bedtimeDate = new Date(day);
         bedtimeDate.setHours(h, m, 0, 0);
         bedtimes.push(bedtimeDate);
       }
 
       if (dailySummary.wakeTime) {
-        const [h, m] = dailySummary.wakeTime.split(':').map(Number);
+        const parts = dailySummary.wakeTime.split(':').map(Number);
+        const h = parts[0] ?? 0;
+        const m = parts[1] ?? 0;
         const wakeDate = new Date(day);
         wakeDate.setHours(h, m, 0, 0);
         wakeTimes.push(wakeDate);
