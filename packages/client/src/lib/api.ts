@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/store/authStore';
+
 const API_URL = '/api';
 
 interface ApiResponse<T> {
@@ -12,7 +14,8 @@ interface ApiResponse<T> {
 async function fetchWithAuth<T>(
   endpoint: string,
   options: RequestInit = {},
-  accessToken?: string | null
+  accessToken?: string | null,
+  retryOnUnauthorized = true
 ): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -27,6 +30,17 @@ async function fetchWithAuth<T>(
     ...options,
     headers,
   });
+
+  // If unauthorized and we should retry, try refreshing the token
+  if (response.status === 401 && retryOnUnauthorized && accessToken) {
+    const refreshed = await useAuthStore.getState().refreshAccessToken();
+    if (refreshed) {
+      // Retry with new token
+      const newAccessToken = useAuthStore.getState().accessToken;
+      return fetchWithAuth<T>(endpoint, options, newAccessToken, false);
+    }
+    // Refresh failed, return the error
+  }
 
   const data = await response.json();
   return data;

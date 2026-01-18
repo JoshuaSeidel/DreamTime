@@ -16,12 +16,17 @@ interface AuthState {
   isLoading: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setAccessToken: (token: string) => void;
+  refreshAccessToken: () => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
 const API_URL = '/api';
+
+// Track if we're currently refreshing to prevent multiple simultaneous refresh calls
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -42,6 +47,55 @@ export const useAuthStore = create<AuthState>()(
 
       setAccessToken: (accessToken) =>
         set({ accessToken }),
+
+      refreshAccessToken: async () => {
+        // If already refreshing, wait for that to complete
+        if (isRefreshing && refreshPromise) {
+          return refreshPromise;
+        }
+
+        const { refreshToken } = get();
+        if (!refreshToken) {
+          return false;
+        }
+
+        isRefreshing = true;
+        refreshPromise = (async () => {
+          try {
+            const response = await fetch(`${API_URL}/auth/refresh`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ refreshToken }),
+            });
+
+            if (!response.ok) {
+              // Refresh token is invalid, log out
+              get().logout();
+              return false;
+            }
+
+            const data = await response.json();
+            const { accessToken: newAccessToken, refreshToken: newRefreshToken } = data.data;
+
+            set({
+              accessToken: newAccessToken,
+              refreshToken: newRefreshToken,
+            });
+
+            return true;
+          } catch {
+            // Network error or other issue
+            return false;
+          } finally {
+            isRefreshing = false;
+            refreshPromise = null;
+          }
+        })();
+
+        return refreshPromise;
+      },
 
       login: async (email: string, password: string) => {
         set({ isLoading: true });
