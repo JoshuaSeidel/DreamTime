@@ -683,7 +683,7 @@ export function calculateNextAction(
         timeWindow: nextNap.putDownWindow,
         napNumber: nextNap.napNumber,
         minutesUntilEarliest,
-        notes: [`Target put down: ${formatTimeForDisplay(nextNap.putDownWindow.recommended, timezone)}`],
+        notes: nextNap.notes, // Use nap calculation notes, not redundant target time
       };
     }
 
@@ -708,7 +708,7 @@ export function calculateNextAction(
       description: `Bedtime in ${minutesUntilBedtime} minutes`,
       timeWindow: bedtime.putDownWindow,
       minutesUntilEarliest: minutesUntilBedtime,
-      notes: [`Target bedtime: ${formatTimeForDisplay(bedtime.putDownWindow.recommended, timezone)}`],
+      notes: bedtime.notes, // Use bedtime calculation notes, not redundant target time
     };
   }
 
