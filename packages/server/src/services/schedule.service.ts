@@ -90,6 +90,9 @@ function formatSchedule(
     daySleepCap: number;
     napCapMinutes?: number;
     minimumCribMinutes?: number;
+    napReminderMinutes?: number;
+    bedtimeReminderMinutes?: number;
+    wakeDeadlineReminderMinutes?: number;
     createdAt: Date;
     updatedAt: Date;
   }
@@ -99,6 +102,9 @@ function formatSchedule(
     mustWakeBy: schedule.mustWakeBy ?? '07:30',
     napCapMinutes: schedule.napCapMinutes ?? 120,
     minimumCribMinutes: schedule.minimumCribMinutes ?? 90,
+    napReminderMinutes: schedule.napReminderMinutes ?? 30,
+    bedtimeReminderMinutes: schedule.bedtimeReminderMinutes ?? 30,
+    wakeDeadlineReminderMinutes: schedule.wakeDeadlineReminderMinutes ?? 15,
   };
 }
 
@@ -193,6 +199,9 @@ export async function createOrUpdateSchedule(
 
       daySleepCap: input.daySleepCap!,
       minimumCribMinutes: input.minimumCribMinutes ?? 90,
+      napReminderMinutes: input.napReminderMinutes ?? 30,
+      bedtimeReminderMinutes: input.bedtimeReminderMinutes ?? 30,
+      wakeDeadlineReminderMinutes: input.wakeDeadlineReminderMinutes ?? 15,
     },
   });
 

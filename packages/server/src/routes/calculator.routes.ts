@@ -345,6 +345,13 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           napDurations.length > 0 ? napDurations : undefined
         );
 
+        // Determine if bedtime is finalized
+        // For 2-nap schedule, bedtime is only finalized after nap 2 is complete
+        // For 1-nap schedule, bedtime is finalized after nap 1 is complete
+        const requiredNapsForBedtime = isOnOneNapSchedule ? 1 : 2;
+        const isBedtimeFinalized = completedNaps.length >= requiredNapsForBedtime;
+        const bedtimeStatus = isBedtimeFinalized ? 'finalized' : 'estimated';
+
         // Build naps summary
         const expectedNapCount = isOnOneNapSchedule ? 1 : 2;
         const naps = [];
@@ -391,6 +398,7 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           recommendedBedtime: daySchedule.bedtime.putDownWindow.recommended,
           bedtimeWindow: daySchedule.bedtime.putDownWindow,
           bedtimeNotes: daySchedule.bedtime.notes,
+          bedtimeStatus, // 'finalized' when all required naps complete, 'estimated' otherwise
           sleepDebtMinutes,
           sleepDebtNote,
           scheduleType,

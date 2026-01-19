@@ -86,13 +86,20 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
       <CardContent className="space-y-4">
         {/* Recommended Bedtime - Main focus */}
         <div className="text-center py-2">
-          <p className="text-sm text-muted-foreground mb-1">Recommended Bedtime</p>
+          <p className="text-sm text-muted-foreground mb-1">
+            {summary.bedtimeStatus === 'estimated' ? 'Estimated Bedtime' : 'Recommended Bedtime'}
+          </p>
           <p className={cn(
             "text-4xl font-bold",
             hasSleepDebt ? "text-amber-600 dark:text-amber-400" : "text-violet-600 dark:text-violet-400"
           )}>
             {formatTime(summary.recommendedBedtime)}
           </p>
+          {summary.bedtimeStatus === 'estimated' && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              Pending - will update after nap {summary.isOnOneNapSchedule ? '1' : '2'} completes
+            </p>
+          )}
           {summary.bedtimeNotes.length > 0 && (
             <p className="text-xs text-muted-foreground mt-1">
               {summary.bedtimeNotes[0]}

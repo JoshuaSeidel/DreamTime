@@ -407,36 +407,58 @@ function calculateBedtime(
   } else if (type === ScheduleType.TWO_NAP) {
     // 2-nap schedule bedtime calculation
     const nap1Duration = napDurations?.[0] ?? 0;
-    const nap2Duration = napDurations?.[1] ?? 0;
+    // Check if nap 2 data exists (not just undefined but actually provided)
+    const hasNap2Data = napDurations !== undefined && napDurations.length >= 2;
+    const nap2Duration = hasNap2Data ? (napDurations[1] ?? 0) : 0;
     const nap1Goal = 60; // 1 hour goal per nap
     const nap2Goal = 60;
     const baselineBedtime = parseTimeString('18:45', baseDate, timezone); // 6:45pm baseline (conservative)
 
     // Check if nap 2 ended after 2:30pm
-    const nap2EndedAfter230 = isAfter(lastNapEndTime, parseTimeString('14:30', baseDate, timezone));
+    const nap2EndedAfter230 = hasNap2Data && isAfter(lastNapEndTime, parseTimeString('14:30', baseDate, timezone));
 
     // Calculate shortfall from 1-hour goal for each nap
     const nap1Shortfall = Math.max(0, nap1Goal - nap1Duration);
-    const nap2Shortfall = Math.max(0, nap2Goal - nap2Duration);
-    const totalShortfall = nap1Shortfall + nap2Shortfall;
+    // Only count nap 2 shortfall if nap 2 actually happened
+    const nap2Shortfall = hasNap2Data ? Math.max(0, nap2Goal - nap2Duration) : 0;
 
-    if (nap1Duration === 0 && nap2Duration === 0) {
+    // If nap 1 completed but nap 2 hasn't happened yet, we need to show estimated bedtime
+    // based on nap 1's debt. Don't assume nap 2 will make up for it.
+    const hasNap1Data = napDurations !== undefined && napDurations.length >= 1;
+
+    if (!hasNap1Data) {
       // No nap data yet - use goal or baseline
       if (schedule.bedtimeGoalStart) {
         recommended = parseTimeString(schedule.bedtimeGoalStart, baseDate, timezone);
       } else {
         recommended = baselineBedtime;
       }
-    } else if (totalShortfall === 0 && nap2EndedAfter230) {
+    } else if (!hasNap2Data) {
+      // Nap 1 completed but nap 2 hasn't happened yet
+      // Calculate CURRENT debt from nap 1, and show what bedtime would be if nap 2 meets its goal
+      // This gives a realistic "best case" estimate
+      const currentDebt = nap1Shortfall;
+      if (currentDebt > 0) {
+        // Show early bedtime estimate based on current nap 1 debt
+        // Assuming nap 2 will meet its 60-minute goal
+        recommended = addMinutes(baselineBedtime, -currentDebt);
+        notes.push(`Nap 1 debt: ${currentDebt} min - early bedtime (assuming nap 2 meets goal)`);
+      } else {
+        // Nap 1 met/exceeded goal, bedtime depends on when nap 2 ends
+        recommended = baselineBedtime;
+        notes.push('Good nap 1! Bedtime depends on nap 2');
+      }
+    } else if (nap1Shortfall + nap2Shortfall === 0 && nap2EndedAfter230) {
       // Both naps met/exceeded goal AND nap 2 ended after 2:30pm
       recommended = parseTimeString('18:52', baseDate, timezone); // 6:52pm
       notes.push('Great naps! Standard bedtime (6:45-7pm)');
-    } else if (totalShortfall === 0) {
+    } else if (nap1Shortfall + nap2Shortfall === 0) {
       // Both naps met goal but nap 2 ended early
       recommended = parseTimeString('18:30', baseDate, timezone); // 6:30pm
       notes.push('Good naps, early end - slightly earlier bedtime');
     } else {
-      // Subtract shortfall from baseline
+      // Subtract total shortfall from baseline
+      const totalShortfall = nap1Shortfall + nap2Shortfall;
       recommended = addMinutes(baselineBedtime, -totalShortfall);
       if (totalShortfall > 0) {
         notes.push(`${totalShortfall} min nap shortfall - earlier bedtime`);
@@ -444,10 +466,13 @@ function calculateBedtime(
     }
 
     // Ensure wake window constraint (4-4.5 hours from nap 2 end, max 7:30pm)
-    const minBedtimeByWakeWindow = addMinutes(lastNapEndTime, wwMin);
-    if (isAfter(minBedtimeByWakeWindow, recommended)) {
-      recommended = minBedtimeByWakeWindow;
-      notes.push('Adjusted for minimum 4hr wake window');
+    // Only apply this if nap 2 has actually completed
+    if (hasNap2Data) {
+      const minBedtimeByWakeWindow = addMinutes(lastNapEndTime, wwMin);
+      if (isAfter(minBedtimeByWakeWindow, recommended)) {
+        recommended = minBedtimeByWakeWindow;
+        notes.push('Adjusted for minimum 4hr wake window');
+      }
     }
 
   } else {

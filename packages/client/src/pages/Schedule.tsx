@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Loader2,
   ArrowRight,
+  Bell,
 } from 'lucide-react';
 import {
   Card,
@@ -63,6 +64,9 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeLatest: '07:30',
     daySleepCap: 210, // 3.5h
     minimumCribMinutes: 60,
+    napReminderMinutes: 30,
+    bedtimeReminderMinutes: 30,
+    wakeDeadlineReminderMinutes: 15,
   },
   ONE_NAP: {
     type: 'ONE_NAP',
@@ -82,6 +86,9 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeLatest: '08:00',
     daySleepCap: 150, // 2.5h
     minimumCribMinutes: 60,
+    napReminderMinutes: 30,
+    bedtimeReminderMinutes: 30,
+    wakeDeadlineReminderMinutes: 15,
   },
   THREE_NAP: {
     type: 'THREE_NAP',
@@ -107,6 +114,9 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     wakeTimeLatest: '07:00',
     daySleepCap: 270, // 4.5h
     minimumCribMinutes: 60,
+    napReminderMinutes: 30,
+    bedtimeReminderMinutes: 30,
+    wakeDeadlineReminderMinutes: 15,
   },
 };
 
@@ -197,6 +207,9 @@ export default function Schedule() {
             wakeTimeLatest: scheduleResult.data.wakeTimeLatest,
             daySleepCap: scheduleResult.data.daySleepCap,
             minimumCribMinutes: scheduleResult.data.minimumCribMinutes ?? 60,
+            napReminderMinutes: scheduleResult.data.napReminderMinutes ?? 30,
+            bedtimeReminderMinutes: scheduleResult.data.bedtimeReminderMinutes ?? 30,
+            wakeDeadlineReminderMinutes: scheduleResult.data.wakeDeadlineReminderMinutes ?? 15,
           };
           setScheduleConfig(config);
         }
@@ -807,6 +820,90 @@ export default function Schedule() {
                         onChange={(e) => setScheduleConfig(prev => ({
                           ...prev,
                           minimumCribMinutes: parseInt(e.target.value) || 60
+                        }))}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground">
+                      Configure after selecting a schedule type
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Notification Settings */}
+            <Card className={cn(!selectedType && 'opacity-60')}>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Bell className="w-4 h-4" />
+                  Notification Reminders
+                </CardTitle>
+                <CardDescription>
+                  {selectedType
+                    ? 'How far in advance to send reminders'
+                    : 'Select a schedule type first'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {selectedType ? (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Nap Reminder (minutes before)
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Get notified before each nap time so you can prepare
+                      </p>
+                      <Input
+                        type="number"
+                        min={5}
+                        max={120}
+                        value={scheduleConfig.napReminderMinutes || 30}
+                        onChange={(e) => setScheduleConfig(prev => ({
+                          ...prev,
+                          napReminderMinutes: parseInt(e.target.value) || 30
+                        }))}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Bedtime Reminder (minutes before)
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Get notified before bedtime to start the routine
+                      </p>
+                      <Input
+                        type="number"
+                        min={5}
+                        max={120}
+                        value={scheduleConfig.bedtimeReminderMinutes || 30}
+                        onChange={(e) => setScheduleConfig(prev => ({
+                          ...prev,
+                          bedtimeReminderMinutes: parseInt(e.target.value) || 30
+                        }))}
+                        className="w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">
+                        Wake Deadline Alert (minutes before)
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Alert before the must-wake-by time during naps
+                      </p>
+                      <Input
+                        type="number"
+                        min={5}
+                        max={60}
+                        value={scheduleConfig.wakeDeadlineReminderMinutes || 15}
+                        onChange={(e) => setScheduleConfig(prev => ({
+                          ...prev,
+                          wakeDeadlineReminderMinutes: parseInt(e.target.value) || 15
                         }))}
                         className="w-full"
                       />

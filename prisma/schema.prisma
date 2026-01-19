@@ -204,6 +204,11 @@ model SleepSchedule {
   // Crib time settings (for naps only - not applicable to bedtime)
   minimumCribMinutes Int   @default(60)  // Minimum time in crib for sleep training
 
+  // Notification settings (lead time in minutes before event)
+  napReminderMinutes     Int   @default(30)  // How many minutes before nap time to notify
+  bedtimeReminderMinutes Int   @default(30)  // How many minutes before bedtime to notify
+  wakeDeadlineReminderMinutes Int @default(15) // How many minutes before wake deadline to notify
+
   child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

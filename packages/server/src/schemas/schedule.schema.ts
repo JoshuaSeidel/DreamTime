@@ -49,6 +49,11 @@ export const createScheduleSchema = z.object({
 
   // Crib time settings (for naps only - not applicable to bedtime)
   minimumCribMinutes: z.number().int().min(30).max(180).default(60),
+
+  // Notification settings (lead time in minutes before event)
+  napReminderMinutes: z.number().int().min(5).max(120).default(30),
+  bedtimeReminderMinutes: z.number().int().min(5).max(120).default(30),
+  wakeDeadlineReminderMinutes: z.number().int().min(5).max(60).default(15),
 });
 
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
@@ -115,6 +120,11 @@ export interface SleepScheduleResponse {
   napCapMinutes: number;
 
   minimumCribMinutes: number;
+
+  // Notification settings
+  napReminderMinutes: number;
+  bedtimeReminderMinutes: number;
+  wakeDeadlineReminderMinutes: number;
 
   createdAt: Date;
   updatedAt: Date;

@@ -19,9 +19,11 @@ setInterval(() => {
 }, 60 * 60 * 1000);
 
 // Configuration
-const REMINDER_MINUTES_BEFORE = 15; // Send reminder 15 minutes before
-const WAKE_DEADLINE_ALERT_MINUTES = 10; // Alert 10 minutes before must-wake-by
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
+// Default values if schedule doesn't have custom settings (for backwards compatibility)
+const DEFAULT_NAP_REMINDER_MINUTES = 30;
+const DEFAULT_BEDTIME_REMINDER_MINUTES = 30;
+const DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES = 15;
 
 let isRunning = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +38,7 @@ function shouldSendReminder(
   type: ReminderType,
   eventTime: Date,
   now: Date,
-  minutesBefore: number = REMINDER_MINUTES_BEFORE
+  minutesBefore: number = DEFAULT_NAP_REMINDER_MINUTES
 ): boolean {
   const key = `${childId}-${type}-${format(eventTime, 'yyyy-MM-dd')}`;
 
@@ -194,10 +196,11 @@ async function processChildReminders(
     // Only check if we haven't passed the deadline yet
     if (isBefore(now, mustWakeByTime)) {
       const minutesUntilDeadline = differenceInMinutes(mustWakeByTime, now);
+      const wakeDeadlineMinutes = schedule.wakeDeadlineReminderMinutes ?? DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES;
 
-      // Send alert 10 minutes before deadline
-      if (minutesUntilDeadline <= WAKE_DEADLINE_ALERT_MINUTES) {
-        if (shouldSendReminder(childId, 'wake_deadline', mustWakeByTime, now, WAKE_DEADLINE_ALERT_MINUTES)) {
+      // Send alert N minutes before deadline (configurable per schedule)
+      if (minutesUntilDeadline <= wakeDeadlineMinutes) {
+        if (shouldSendReminder(childId, 'wake_deadline', mustWakeByTime, now, wakeDeadlineMinutes)) {
           for (const caregiver of caregivers) {
             await sendWakeDeadlineAlert(
               caregiver.userId,
@@ -226,6 +229,10 @@ async function processChildReminders(
     timezone
   );
 
+  // Get reminder lead times from schedule (with defaults for backwards compatibility)
+  const napReminderMinutes = schedule.napReminderMinutes ?? DEFAULT_NAP_REMINDER_MINUTES;
+  const bedtimeReminderMinutes = schedule.bedtimeReminderMinutes ?? DEFAULT_BEDTIME_REMINDER_MINUTES;
+
   // Check each nap
   for (const nap of daySchedule.naps) {
     if (nap.napNumber <= completedNaps) {
@@ -235,7 +242,7 @@ async function processChildReminders(
     const napType = `nap${nap.napNumber}` as 'nap1' | 'nap2';
     const napTime = nap.putDownWindow.recommended;
 
-    if (shouldSendReminder(childId, napType, napTime, now)) {
+    if (shouldSendReminder(childId, napType, napTime, now, napReminderMinutes)) {
       const timeStr = format(toZonedTime(napTime, timezone), 'h:mm a');
 
       for (const caregiver of caregivers) {
@@ -250,7 +257,7 @@ async function processChildReminders(
   // Check bedtime
   const bedtime = daySchedule.bedtime.putDownWindow.recommended;
 
-  if (shouldSendReminder(childId, 'bedtime', bedtime, now)) {
+  if (shouldSendReminder(childId, 'bedtime', bedtime, now, bedtimeReminderMinutes)) {
     const timeStr = format(toZonedTime(bedtime, timezone), 'h:mm a');
 
     for (const caregiver of caregivers) {

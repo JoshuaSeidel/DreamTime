@@ -351,6 +351,10 @@ export interface SleepSchedule {
   daySleepCap: number;
   napCapMinutes: number;
   minimumCribMinutes: number;
+  // Notification settings (lead time in minutes before event)
+  napReminderMinutes: number;
+  bedtimeReminderMinutes: number;
+  wakeDeadlineReminderMinutes: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -394,6 +398,10 @@ export interface CreateScheduleInput {
   wakeTimeLatest: string;
   daySleepCap: number;
   minimumCribMinutes?: number;
+  // Notification settings (lead time in minutes before event)
+  napReminderMinutes?: number;
+  bedtimeReminderMinutes?: number;
+  wakeDeadlineReminderMinutes?: number;
 }
 
 export async function getSchedule(
@@ -524,6 +532,7 @@ export interface TodaySummary {
     recommended: string;
   };
   bedtimeNotes: string[];
+  bedtimeStatus: 'finalized' | 'estimated'; // 'finalized' when all required naps are complete
   sleepDebtMinutes: number;
   sleepDebtNote: string | null;
   scheduleType: string;
