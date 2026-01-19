@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScanFace, Fingerprint, Loader2, Moon } from 'lucide-react';
+import { KeyRound, Loader2, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useBiometricStore } from '@/store/biometricStore';
 
@@ -33,7 +33,7 @@ export default function BiometricLockScreen() {
 
       <h1 className="text-2xl font-bold mb-2">DreamTime</h1>
       <p className="text-muted-foreground text-center mb-8">
-        Unlock with Face ID or Touch ID to continue
+        Use your passkey to unlock the app
       </p>
 
       {/* Unlock Button */}
@@ -47,16 +47,15 @@ export default function BiometricLockScreen() {
           <Loader2 className="w-6 h-6 animate-spin" />
         ) : (
           <>
-            <ScanFace className="w-6 h-6" />
-            Unlock
+            <KeyRound className="w-6 h-6" />
+            Unlock with Passkey
           </>
         )}
       </Button>
 
-      {/* Alternative: fingerprint hint for Touch ID devices */}
-      <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1">
-        <Fingerprint className="w-4 h-4" />
-        Use Face ID or Touch ID
+      {/* Hint */}
+      <p className="text-xs text-muted-foreground mt-4 text-center max-w-xs">
+        Your passkey is secured with Face ID or Touch ID
       </p>
 
       {/* Error message */}

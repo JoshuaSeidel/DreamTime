@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, Fingerprint, Trash2, Loader2, ScanFace } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyRound, Trash2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
@@ -162,13 +162,13 @@ export default function Settings() {
     try {
       if (biometricEnabled) {
         disableBiometricLock();
-        toast.success('Face ID disabled', 'App lock has been turned off');
+        toast.success('Passkey lock disabled', 'App lock has been turned off');
       } else {
         const success = await enableBiometricLock();
         if (success) {
-          toast.success('Face ID enabled', 'App will require Face ID to unlock');
+          toast.success('Passkey lock enabled', 'App will require passkey to unlock');
         } else {
-          toast.error('Setup failed', 'Could not enable Face ID. Please try again.');
+          toast.error('Setup failed', 'Could not create passkey. Please try again.');
         }
       }
     } catch (err) {
@@ -435,15 +435,15 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        {/* Face ID & Security */}
+        {/* Passkey Lock */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Fingerprint className="w-4 h-4" />
-              Face ID & Security
+              <KeyRound className="w-4 h-4" />
+              Passkey Lock
             </CardTitle>
             <CardDescription>
-              Lock the app with Face ID for extra security
+              Lock the app with a passkey for extra security
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -455,7 +455,7 @@ export default function Settings() {
             ) : !biometricSupported ? (
               <div className="text-center py-4">
                 <p className="text-sm text-muted-foreground">
-                  Face ID is not available on this device.
+                  Passkey is not available on this device.
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Requires iOS Safari or Chrome with biometric hardware.
@@ -465,14 +465,14 @@ export default function Settings() {
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <div className="rounded-full bg-primary/10 p-2">
-                    <ScanFace className="w-4 h-4 text-primary" />
+                    <KeyRound className="w-4 h-4 text-primary" />
                   </div>
                   <div>
                     <p className="font-medium">App Lock</p>
                     <p className="text-sm text-muted-foreground">
                       {biometricEnabled
-                        ? 'Face ID required to open app'
-                        : 'Require Face ID to open the app'}
+                        ? 'Passkey required to open app'
+                        : 'Require passkey to open the app'}
                     </p>
                   </div>
                 </div>
