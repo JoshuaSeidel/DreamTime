@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => {
     return localStorage.getItem(SELECTED_CHILD_KEY);
   });
+  const [selectedChildName, setSelectedChildName] = useState<string>('Baby');
   const [activeSession, setActiveSession] = useState<SleepSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -191,7 +192,7 @@ export default function Dashboard() {
                 loadSessionData();
                 setSummaryRefreshTrigger(prev => prev + 1);
               } else {
-                toast.info('Woke up', timeDisplay ? `At ${timeDisplay}` : 'Baby is awake in crib');
+                toast.info('Woke up', timeDisplay ? `At ${timeDisplay}` : `${selectedChildName} is awake in crib`);
               }
               break;
             case 'out_of_crib':
@@ -280,7 +281,7 @@ export default function Dashboard() {
           sessionType === 'NAP' ? `Nap ${napNumber} started` : 'Bedtime started',
           timeDisplay
             ? `Put down at ${timeDisplay}`
-            : 'Tap "Fell Asleep" when baby is asleep'
+            : `Tap "Fell Asleep" when ${selectedChildName} is asleep`
         );
         loadSessionData();
       } else {
@@ -307,7 +308,7 @@ export default function Dashboard() {
 
     if (result.success && result.data) {
       const locationLabel = data.location.charAt(0) + data.location.slice(1).toLowerCase();
-      toast.success(`${locationLabel} nap started`, 'Tap "Awake" when baby wakes up');
+      toast.success(`${locationLabel} nap started`, `Tap "Awake" when ${selectedChildName} wakes up`);
 
       // Reload to show active session - this will update currentState to 'asleep'
       loadSessionData();
@@ -326,7 +327,10 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold hidden md:block">Dashboard</h1>
           <ChildSelector
             selectedId={selectedChildId}
-            onSelect={setSelectedChildId}
+            onSelect={(id, name) => {
+              setSelectedChildId(id);
+              setSelectedChildName(name);
+            }}
           />
         </div>
       </header>
@@ -387,12 +391,13 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Crib Time Countdown - Shows when baby is in crib for NAPs only (not bedtime) */}
+            {/* Crib Time Countdown - Shows when child is in crib for NAPs only (not bedtime) */}
             {activeSession && activeSession.sessionType === 'NAP' && (
               <CribTimeCountdown
                 session={activeSession}
                 minimumCribMinutes={schedule?.minimumCribMinutes ?? 60}
                 napCapMinutes={schedule?.napCapMinutes ?? 120}
+                childName={selectedChildName}
               />
             )}
 
@@ -401,6 +406,7 @@ export default function Dashboard() {
               <WakeDeadlineCountdown
                 session={activeSession}
                 mustWakeBy={schedule.mustWakeBy}
+                childName={selectedChildName}
               />
             )}
 
@@ -410,6 +416,7 @@ export default function Dashboard() {
               onAction={handleAction}
               disabled={isActionLoading}
               hasActiveSession={activeSession !== null}
+              childName={selectedChildName}
             />
 
             {/* Ad-Hoc Nap Button */}

@@ -7,12 +7,14 @@ interface CribTimeCountdownProps {
   session: SleepSession;
   minimumCribMinutes?: number;
   napCapMinutes?: number;
+  childName?: string;
 }
 
 export default function CribTimeCountdown({
   session,
   minimumCribMinutes = 60, // Default 60 minute crib rule
   napCapMinutes = 120, // Default 2 hour nap cap
+  childName = 'Baby',
 }: CribTimeCountdownProps) {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -142,7 +144,7 @@ export default function CribTimeCountdown({
                 Done
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Ready when baby is
+                Ready when {childName} is
               </p>
             </>
           ) : (
@@ -217,7 +219,7 @@ export default function CribTimeCountdown({
 
           {isNapCapExceeded && (
             <p className="text-xs text-red-700 dark:text-red-300 mt-2 text-center font-medium">
-              Over by {napCapOverageMinutes} minutes - consider waking baby
+              Over by {napCapOverageMinutes} minutes - consider waking {childName}
             </p>
           )}
         </div>

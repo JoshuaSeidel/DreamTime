@@ -20,6 +20,7 @@ interface QuickActionButtonsProps {
   onAction: (action: 'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib', customTime?: string) => void;
   disabled?: boolean;
   hasActiveSession?: boolean;
+  childName?: string;
 }
 
 export default function QuickActionButtons({
@@ -27,6 +28,7 @@ export default function QuickActionButtons({
   onAction,
   disabled = false,
   hasActiveSession = false,
+  childName = 'Baby',
 }: QuickActionButtonsProps) {
   const [showTimeDialog, setShowTimeDialog] = useState(false);
   const [selectedAction, setSelectedAction] = useState<'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib' | null>(null);
@@ -56,30 +58,30 @@ export default function QuickActionButtons({
       icon: Baby,
       bgClass: 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700',
       textClass: 'text-white',
-      description: 'Baby placed in crib',
+      description: `${childName} placed in crib`,
     },
     fell_asleep: {
       label: 'Fell Asleep',
       icon: Moon,
       bgClass: 'bg-violet-500 hover:bg-violet-600 dark:bg-violet-600 dark:hover:bg-violet-700',
       textClass: 'text-white',
-      description: 'Baby fell asleep',
+      description: `${childName} fell asleep`,
     },
     woke_up: {
       label: 'Woke Up',
       icon: Sun,
       bgClass: 'bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-500 dark:hover:bg-yellow-600',
       textClass: 'text-gray-900',
-      description: 'Baby woke up',
+      description: `${childName} woke up`,
     },
     out_of_crib: {
       label: 'Out of Crib',
       icon: LogOut,
       bgClass: 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700',
       textClass: 'text-white',
-      description: 'Baby taken out of crib',
+      description: `${childName} taken out of crib`,
     },
-  } as const;
+  };
 
   const availableActions = getAvailableActions();
 
@@ -178,7 +180,7 @@ export default function QuickActionButtons({
             <DialogTitle>Set Custom Time</DialogTitle>
             <DialogDescription>
               {selectedAction && (
-                <>Enter the time when baby {actionConfig[selectedAction].description.toLowerCase()}</>
+                <>Enter the time when {actionConfig[selectedAction].description.toLowerCase()}</>
               )}
             </DialogDescription>
           </DialogHeader>

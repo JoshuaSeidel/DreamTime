@@ -8,7 +8,7 @@ import AddChildDialog from './AddChildDialog';
 
 interface ChildSelectorProps {
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, name: string) => void;
 }
 
 const SELECTED_CHILD_KEY = 'selectedChildId';
@@ -21,13 +21,8 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
   const [isLoading, setIsLoading] = useState(true);
   const [hasShownNoChildToast, setHasShownNoChildToast] = useState(false);
 
-  // Load saved child ID from localStorage on mount
-  useEffect(() => {
-    const savedId = localStorage.getItem(SELECTED_CHILD_KEY);
-    if (savedId && !selectedId) {
-      onSelect(savedId);
-    }
-  }, []);
+  // Note: We don't load from localStorage here because we need the name too.
+  // The name is set when loadChildren() finds the saved child.
 
   // Save selected child ID to localStorage
   useEffect(() => {
@@ -70,11 +65,11 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
           const savedChild = savedId ? result.data.find(c => c.id === savedId) : null;
 
           if (savedChild) {
-            onSelect(savedChild.id);
+            onSelect(savedChild.id, savedChild.name);
           } else if (!selectedId && result.data.length > 0) {
             const firstChild = result.data[0];
             if (firstChild) {
-              onSelect(firstChild.id);
+              onSelect(firstChild.id, firstChild.name);
             }
           }
         }
@@ -147,7 +142,7 @@ export default function ChildSelector({ selectedId, onSelect }: ChildSelectorPro
                 <button
                   key={child.id}
                   onClick={() => {
-                    onSelect(child.id);
+                    onSelect(child.id, child.name);
                     setIsOpen(false);
                   }}
                   className={cn(

@@ -6,11 +6,13 @@ import type { SleepSession } from '@/lib/api';
 interface WakeDeadlineCountdownProps {
   session: SleepSession;
   mustWakeBy: string; // HH:mm format
+  childName?: string;
 }
 
 export default function WakeDeadlineCountdown({
   session,
   mustWakeBy,
+  childName = 'Baby',
 }: WakeDeadlineCountdownProps) {
   const [minutesRemaining, setMinutesRemaining] = useState<number | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(0);
@@ -111,7 +113,7 @@ export default function WakeDeadlineCountdown({
               +{minutesPastDeadline}m
             </p>
             <p className="text-sm text-red-700 dark:text-red-300 mt-2">
-              Wake baby now to preserve schedule!
+              Wake {childName} now to preserve schedule!
             </p>
           </>
         ) : (
