@@ -213,6 +213,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
         description: 'Send a test push notification to yourself',
         tags: ['Notifications'],
         security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          additionalProperties: true,
+        },
         response: {
           200: {
             type: 'object',

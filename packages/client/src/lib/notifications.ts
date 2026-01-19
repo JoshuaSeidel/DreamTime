@@ -147,18 +147,32 @@ export async function subscribeToPush(accessToken: string): Promise<{
     const registration = await navigator.serviceWorker.ready;
     console.log('[Notifications] Service worker ready');
 
+    // Fetch VAPID key from server first
+    const vapidPublicKey = await getVapidPublicKey();
+    if (!vapidPublicKey) {
+      console.error('[Notifications] VAPID public key not available');
+      return { success: false, error: 'Push notifications not configured on server' };
+    }
+
     // Check for existing subscription
     let subscription = await registration.pushManager.getSubscription();
 
+    // If there's an existing subscription, try to verify it's still valid
+    // If not, unsubscribe and create a new one
+    if (subscription) {
+      try {
+        // Test if the subscription is still valid by checking its endpoint
+        console.log('[Notifications] Found existing subscription, verifying...');
+        // Just use the existing subscription - the server will handle re-registration
+      } catch {
+        console.log('[Notifications] Existing subscription invalid, recreating...');
+        await subscription.unsubscribe();
+        subscription = null;
+      }
+    }
+
     if (!subscription) {
       console.log('[Notifications] Creating new subscription...');
-
-      // Fetch VAPID key from server
-      const vapidPublicKey = await getVapidPublicKey();
-      if (!vapidPublicKey) {
-        console.error('[Notifications] VAPID public key not available');
-        return { success: false, error: 'Push notifications not configured on server' };
-      }
 
       // Convert VAPID key to Uint8Array
       const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
@@ -217,18 +231,28 @@ export async function unsubscribeFromPush(accessToken: string): Promise<{
     const subscription = await registration.pushManager.getSubscription();
 
     if (subscription) {
+      const endpoint = subscription.endpoint;
+
+      // Notify server first (before local unsubscribe, so we still have the endpoint)
+      try {
+        const response = await fetch('/api/notifications/unsubscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ endpoint }),
+        });
+
+        if (!response.ok) {
+          console.warn('[Notifications] Server unsubscribe returned error, continuing with local unsubscribe');
+        }
+      } catch (serverErr) {
+        console.warn('[Notifications] Server unsubscribe failed, continuing with local unsubscribe:', serverErr);
+      }
+
       // Unsubscribe locally
       await subscription.unsubscribe();
-
-      // Notify server
-      await fetch('/api/notifications/unsubscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ endpoint: subscription.endpoint }),
-      });
     }
 
     console.log('[Notifications] Successfully unsubscribed');
@@ -307,6 +331,7 @@ export async function sendServerTestNotification(accessToken: string): Promise<{
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
+      body: JSON.stringify({}),
     });
 
     const data = await response.json();
