@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
@@ -33,6 +33,7 @@ import {
   isSubscribedToPush,
   isRunningAsPWA,
 } from '@/lib/notifications';
+import { getChildren, deleteChild, type Child } from '@/lib/api';
 
 interface PasskeyCredential {
   id: string;
@@ -61,6 +62,83 @@ export default function Settings() {
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
   const [isTogglingPush, setIsTogglingPush] = useState(false);
   const [isPWA, setIsPWA] = useState(false);
+
+  // Children state
+  const [children, setChildren] = useState<Child[]>([]);
+  const [isLoadingChildren, setIsLoadingChildren] = useState(false);
+  const [deletingChildId, setDeletingChildId] = useState<string | null>(null);
+
+  // Load children
+  const loadChildren = useCallback(async () => {
+    if (!accessToken) return;
+
+    setIsLoadingChildren(true);
+    try {
+      const result = await getChildren(accessToken);
+      if (result.success && result.data) {
+        setChildren(result.data);
+      }
+    } catch (err) {
+      console.error('[Settings] Failed to load children:', err);
+    } finally {
+      setIsLoadingChildren(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (accessToken) {
+      loadChildren();
+    }
+  }, [accessToken, loadChildren]);
+
+  const handleDeleteChild = async (childId: string, childName: string) => {
+    if (!accessToken) return;
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete ${childName}? This will remove all their sleep data.`)) {
+      return;
+    }
+
+    setDeletingChildId(childId);
+    try {
+      const result = await deleteChild(accessToken, childId);
+      if (result.success) {
+        setChildren((prev) => prev.filter((c) => c.id !== childId));
+        toast.success('Child removed', `${childName} has been removed`);
+      } else {
+        toast.error('Delete failed', result.error?.message || 'Failed to remove child');
+      }
+    } catch (err) {
+      console.error('[Settings] Delete child error:', err);
+      toast.error('Delete failed', 'An unexpected error occurred');
+    } finally {
+      setDeletingChildId(null);
+    }
+  };
+
+  const formatBirthDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const calculateAge = (birthDate: string) => {
+    const birth = new Date(birthDate);
+    const now = new Date();
+    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+    if (months < 12) {
+      return `${months} month${months !== 1 ? 's' : ''} old`;
+    }
+    const years = Math.floor(months / 12);
+    const remainingMonths = months % 12;
+    if (remainingMonths === 0) {
+      return `${years} year${years !== 1 ? 's' : ''} old`;
+    }
+    return `${years}y ${remainingMonths}m old`;
+  };
 
   // Check biometric and push support
   useEffect(() => {
@@ -307,8 +385,54 @@ export default function Settings() {
             </CardTitle>
             <CardDescription>Manage your children's profiles</CardDescription>
           </CardHeader>
-          <CardContent>
-            <AddChildDialog />
+          <CardContent className="space-y-4">
+            {/* Loading state */}
+            {isLoadingChildren ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : children.length > 0 ? (
+              <div className="space-y-3">
+                {children.map((child) => (
+                  <div
+                    key={child.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-full bg-primary/10 p-2">
+                        <Baby className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{child.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {calculateAge(child.birthDate)} · Born {formatBirthDate(child.birthDate)}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleDeleteChild(child.id, child.name)}
+                      disabled={deletingChildId === child.id}
+                    >
+                      {deletingChildId === child.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                No children added yet
+              </p>
+            )}
+
+            {/* Add Child Button */}
+            <AddChildDialog onChildAdded={loadChildren} />
           </CardContent>
         </Card>
 

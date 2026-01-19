@@ -23,6 +23,7 @@ const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'DreamTime';
 function getWebAuthnConfig(): { rpId: string; origin: string } {
   // Explicit config takes priority
   if (process.env.WEBAUTHN_RP_ID && process.env.WEBAUTHN_ORIGIN) {
+    console.log('[WebAuthn] Using explicit WEBAUTHN_RP_ID and WEBAUTHN_ORIGIN from environment');
     return {
       rpId: process.env.WEBAUTHN_RP_ID,
       origin: process.env.WEBAUTHN_ORIGIN,
@@ -30,16 +31,34 @@ function getWebAuthnConfig(): { rpId: string; origin: string } {
   }
 
   // Try to derive from CLIENT_URL
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const clientUrl = process.env.CLIENT_URL;
+  console.log('[WebAuthn] CLIENT_URL from environment:', clientUrl);
+
+  if (!clientUrl) {
+    console.warn('[WebAuthn] CLIENT_URL not set! WebAuthn/Face ID will not work correctly.');
+    console.warn('[WebAuthn] Set CLIENT_URL to your app URL (e.g., https://dreamtime.yourdomain.com)');
+    return {
+      rpId: 'localhost',
+      origin: 'http://localhost:5173',
+    };
+  }
+
   try {
     const url = new URL(clientUrl);
-    return {
+    const config = {
       rpId: url.hostname,
       origin: url.origin,
     };
-  } catch {
+
+    if (config.rpId === 'localhost') {
+      console.warn('[WebAuthn] RP_ID is "localhost" - Face ID will fail in production!');
+      console.warn('[WebAuthn] Set CLIENT_URL to your actual domain (e.g., https://dreamtime.yourdomain.com)');
+    }
+
+    return config;
+  } catch (e) {
     // Fallback to localhost
-    console.warn('[WebAuthn] Could not parse CLIENT_URL, using localhost defaults');
+    console.error('[WebAuthn] Could not parse CLIENT_URL:', clientUrl, 'Error:', e);
     return {
       rpId: 'localhost',
       origin: 'http://localhost:5173',
@@ -48,7 +67,7 @@ function getWebAuthnConfig(): { rpId: string; origin: string } {
 }
 
 const { rpId: RP_ID, origin: ORIGIN } = getWebAuthnConfig();
-console.log('[WebAuthn] Config - RP_ID:', RP_ID, 'ORIGIN:', ORIGIN);
+console.log('[WebAuthn] Final Config - RP_ID:', RP_ID, 'ORIGIN:', ORIGIN);
 
 // Challenge expiry in milliseconds (5 minutes)
 const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000;
