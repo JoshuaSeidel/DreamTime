@@ -25,6 +25,7 @@ import {
   unsubscribeFromPush,
   isSubscribedToPush,
   isRunningAsPWA,
+  sendServerTestNotification,
 } from '@/lib/notifications';
 import { getChildren, deleteChild, type Child } from '@/lib/api';
 
@@ -44,6 +45,7 @@ export default function Settings() {
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
   const [isTogglingPush, setIsTogglingPush] = useState(false);
+  const [isSendingTestNotification, setIsSendingTestNotification] = useState(false);
   const [isPWA, setIsPWA] = useState(false);
 
   // Children state
@@ -236,6 +238,29 @@ export default function Settings() {
     }
   };
 
+  const handleSendTestNotification = async () => {
+    if (!accessToken) {
+      toast.error('Not authenticated', 'Please log in again');
+      return;
+    }
+
+    setIsSendingTestNotification(true);
+
+    try {
+      const result = await sendServerTestNotification(accessToken);
+      if (result.success) {
+        toast.success('Test sent', `Notification sent to ${result.sent} device(s)`);
+      } else {
+        toast.error('Test failed', result.error || 'Could not send test notification');
+      }
+    } catch (err) {
+      console.error('[Settings] Test notification error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSendingTestNotification(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
   };
@@ -384,6 +409,25 @@ export default function Settings() {
                 />
               )}
             </div>
+
+            {/* Test Notification Button - only show when subscribed */}
+            {isPushSubscribed && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendTestNotification}
+                  disabled={isSendingTestNotification}
+                >
+                  {isSendingTestNotification ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Bell className="w-4 h-4 mr-2" />
+                  )}
+                  Send Test
+                </Button>
+              </div>
+            )}
 
             <Separator />
 

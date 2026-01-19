@@ -170,15 +170,20 @@ export async function subscribeToPush(accessToken: string): Promise<{
       console.log('[Notifications] Subscription created');
     }
 
-    // Send subscription to server
+    // Send subscription to server with user agent for debugging
     console.log('[Notifications] Sending subscription to server...');
+    const subscriptionData = {
+      ...subscription.toJSON(),
+      userAgent: navigator.userAgent,
+    };
+
     const response = await fetch('/api/notifications/subscribe', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify(subscription.toJSON()),
+      body: JSON.stringify(subscriptionData),
     });
 
     if (!response.ok) {
@@ -273,7 +278,7 @@ function urlBase64ToUint8Array(base64String: string): BufferSource {
 }
 
 /**
- * Send a test notification (for debugging)
+ * Send a local test notification (for debugging)
  */
 export async function sendTestNotification(): Promise<void> {
   if (Notification.permission === 'granted') {
@@ -283,5 +288,46 @@ export async function sendTestNotification(): Promise<void> {
       icon: '/favicon.svg',
       badge: '/favicon.svg',
     });
+  }
+}
+
+/**
+ * Send a server-side test push notification
+ */
+export async function sendServerTestNotification(accessToken: string): Promise<{
+  success: boolean;
+  sent?: number;
+  failed?: number;
+  error?: string;
+}> {
+  try {
+    const response = await fetch('/api/notifications/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error?.message || 'Failed to send test notification',
+      };
+    }
+
+    return {
+      success: true,
+      sent: data.data?.sent ?? 0,
+      failed: data.data?.failed ?? 0,
+    };
+  } catch (err) {
+    console.error('[Notifications] Test notification error:', err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to send test notification',
+    };
   }
 }
