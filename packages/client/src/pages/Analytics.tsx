@@ -35,17 +35,29 @@ function getLastNDays(n: number): string[] {
   return days;
 }
 
+// Format minutes to hours:minutes display
+function formatMinutes(mins: number): string {
+  if (mins === 0) return '0';
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h${minutes}m`;
+}
+
 // Simple bar chart component
 function BarChart({
   data,
   maxValue,
-  label,
+  unit = 'minutes',
   color = 'primary',
+  showLabels = true,
 }: {
-  data: { label: string; value: number; highlight?: boolean }[];
+  data: { label: string; value: number; highlight?: boolean; fullDate?: string }[];
   maxValue: number;
-  label: string;
+  unit?: 'minutes' | 'count';
   color?: 'primary' | 'blue' | 'violet';
+  showLabels?: boolean;
 }) {
   const colorClasses = {
     primary: 'bg-primary',
@@ -53,34 +65,60 @@ function BarChart({
     violet: 'bg-violet-500',
   };
 
+  // For longer ranges, show fewer labels to avoid crowding
+  const showEveryNth = data.length > 14 ? 7 : data.length > 7 ? 2 : 1;
+
   return (
     <div className="space-y-2">
-      <div className="flex items-end justify-between gap-1 h-24">
-        {data.map((item, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-            <div
+      {/* Y-axis scale indicators */}
+      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+        <span>{unit === 'minutes' ? formatMinutes(maxValue) : maxValue}</span>
+        <span>{unit === 'minutes' ? formatMinutes(Math.round(maxValue / 2)) : Math.round(maxValue / 2)}</span>
+        <span>0</span>
+      </div>
+      <div className="flex items-end justify-between gap-0.5 h-32 border-l border-b border-muted pl-1">
+        {data.map((item, i) => {
+          const heightPercent = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative group">
+              {/* Tooltip on hover */}
+              <div className="absolute bottom-full mb-1 hidden group-hover:block z-10 bg-popover border rounded px-2 py-1 text-xs whitespace-nowrap shadow-lg">
+                <div className="font-medium">{item.fullDate || item.label}</div>
+                <div>{unit === 'minutes' ? formatMinutes(item.value) : item.value}</div>
+              </div>
+              <div
+                className={cn(
+                  'w-full rounded-t transition-all cursor-pointer',
+                  colorClasses[color],
+                  item.highlight && 'opacity-100 ring-2 ring-offset-1 ring-primary',
+                  !item.highlight && 'opacity-70 hover:opacity-90'
+                )}
+                style={{
+                  height: `${heightPercent}%`,
+                  minHeight: item.value > 0 ? '4px' : '0',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {showLabels && (
+        <div className="flex justify-between text-xs text-muted-foreground">
+          {data.map((item, i) => (
+            <span
+              key={i}
               className={cn(
-                'w-full rounded-t transition-all',
-                colorClasses[color],
-                item.highlight && 'opacity-100',
-                !item.highlight && 'opacity-60'
+                'flex-1 text-center truncate',
+                item.highlight && 'font-medium text-foreground',
+                // Hide some labels on longer ranges to avoid crowding
+                i % showEveryNth !== 0 && data.length > 7 && 'invisible'
               )}
-              style={{
-                height: maxValue > 0 ? `${(item.value / maxValue) * 100}%` : '0%',
-                minHeight: item.value > 0 ? '4px' : '0',
-              }}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="flex justify-between text-xs text-muted-foreground">
-        {data.map((item, i) => (
-          <span key={i} className={cn('flex-1 text-center', item.highlight && 'font-medium text-foreground')}>
-            {item.label}
-          </span>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground text-center">{label}</p>
+            >
+              {item.label}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -177,14 +215,34 @@ export default function Analytics() {
     const grouped = groupSessionsByDate(sessions.filter(s => s.state === 'COMPLETED'));
     const today = new Date().toISOString().split('T')[0];
 
+    // Format date for label based on range
+    const formatLabel = (date: string) => {
+      const d = new Date(date + 'T12:00:00'); // noon to avoid timezone issues
+      if (days <= 7) {
+        // Show day of week for 7 days
+        return d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
+      } else if (days <= 14) {
+        // Show M/D for 14 days
+        return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      } else {
+        // Show M/D for 30 days
+        return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+      }
+    };
+
+    const formatFullDate = (date: string) => {
+      const d = new Date(date + 'T12:00:00');
+      return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    };
+
     // Daily sleep totals
     const dailySleep = lastNDays.map(date => {
       const daySessions = grouped[date] || [];
       const totalMinutes = daySessions.reduce((sum, s) => sum + (s.sleepMinutes || 0), 0);
-      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
       return {
         date,
-        label: dayOfWeek,
+        label: formatLabel(date),
+        fullDate: formatFullDate(date),
         value: totalMinutes,
         highlight: date === today,
       };
@@ -194,10 +252,10 @@ export default function Analytics() {
     const dailyNaps = lastNDays.map(date => {
       const daySessions = grouped[date] || [];
       const napCount = daySessions.filter(s => s.sessionType === 'NAP').length;
-      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
       return {
         date,
-        label: dayOfWeek,
+        label: formatLabel(date),
+        fullDate: formatFullDate(date),
         value: napCount,
         highlight: date === today,
       };
@@ -210,10 +268,10 @@ export default function Analytics() {
       const avg = naps.length > 0
         ? naps.reduce((sum, s) => sum + (s.sleepMinutes || 0), 0) / naps.length
         : 0;
-      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
       return {
         date,
-        label: dayOfWeek,
+        label: formatLabel(date),
+        fullDate: formatFullDate(date),
         value: Math.round(avg),
         highlight: date === today,
       };
@@ -242,18 +300,45 @@ export default function Analytics() {
       if (mins > 0) previousDaysWithData++;
     }
 
+    // Calculate sensible max values for charts
+    // For sleep: typical baby sleeps 12-14 hours/day, use nice round numbers
+    const actualMaxSleep = Math.max(...dailySleep.map(d => d.value));
+    const maxSleep = actualMaxSleep > 0
+      ? Math.ceil(actualMaxSleep / 60) * 60 // Round up to nearest hour
+      : 720; // Default 12 hours if no data
+
+    // For nap count: round up to nearest integer, min 3
+    const actualMaxNaps = Math.max(...dailyNaps.map(d => d.value));
+    const maxNaps = Math.max(actualMaxNaps, 3);
+
+    // For nap duration: typical naps are 30-120 min, round up to nearest 30
+    const actualMaxAvgNap = Math.max(...avgNapDurations.map(d => d.value));
+    const maxAvgNap = actualMaxAvgNap > 0
+      ? Math.ceil(actualMaxAvgNap / 30) * 30 // Round up to nearest 30 min
+      : 120; // Default 2 hours if no data
+
+    // Calculate average nap length for the selected time range (not all-time)
+    const rangeNaps = lastNDays.flatMap(date => {
+      const daySessions = grouped[date] || [];
+      return daySessions.filter(s => s.sessionType === 'NAP' && s.sleepMinutes && s.sleepMinutes > 0);
+    });
+    const avgNapMinutesInRange = rangeNaps.length > 0
+      ? Math.round(rangeNaps.reduce((sum, s) => sum + (s.sleepMinutes || 0), 0) / rangeNaps.length)
+      : 0;
+
     return {
       dailySleep,
       dailyNaps,
       avgNapDurations,
-      maxSleep: Math.max(...dailySleep.map(d => d.value), 60),
-      maxNaps: Math.max(...dailyNaps.map(d => d.value), 1),
-      maxAvgNap: Math.max(...avgNapDurations.map(d => d.value), 30),
+      maxSleep,
+      maxNaps,
+      maxAvgNap,
       recentSleep,
       previousSleep,
       recentDaysWithData,
       previousDaysWithData,
       avgDailySleep: recentDaysWithData > 0 ? recentSleep / recentDaysWithData : 0,
+      avgNapMinutesInRange,
     };
   }, [sessions, timeRange]);
 
@@ -349,10 +434,12 @@ export default function Analytics() {
                 <CardContent className="pt-4 pb-4">
                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
                     <Sun className="w-4 h-4" />
-                    <span className="text-xs">Avg Nap Length</span>
+                    <span className="text-xs">Avg Nap Length ({timeRange})</span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold">{analytics.avgNapMinutes}m</span>
+                    <span className="text-2xl font-bold">
+                      {weeklyData.avgNapMinutesInRange > 0 ? `${weeklyData.avgNapMinutesInRange}m` : '-'}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -365,13 +452,13 @@ export default function Analytics() {
                   <BarChart3 className="w-4 h-4" />
                   Daily Sleep
                 </CardTitle>
-                <CardDescription>Total sleep per day (minutes)</CardDescription>
+                <CardDescription>Total sleep per day (hover for details)</CardDescription>
               </CardHeader>
               <CardContent>
                 <BarChart
                   data={weeklyData.dailySleep}
                   maxValue={weeklyData.maxSleep}
-                  label="Total sleep minutes per day"
+                  unit="minutes"
                   color="violet"
                 />
               </CardContent>
@@ -390,7 +477,7 @@ export default function Analytics() {
                 <BarChart
                   data={weeklyData.dailyNaps}
                   maxValue={weeklyData.maxNaps}
-                  label="Number of naps per day"
+                  unit="count"
                   color="blue"
                 />
               </CardContent>
@@ -403,13 +490,13 @@ export default function Analytics() {
                   <Calendar className="w-4 h-4" />
                   Average Nap Duration
                 </CardTitle>
-                <CardDescription>Average nap length per day (minutes)</CardDescription>
+                <CardDescription>Average nap length per day</CardDescription>
               </CardHeader>
               <CardContent>
                 <BarChart
                   data={weeklyData.avgNapDurations}
                   maxValue={weeklyData.maxAvgNap}
-                  label="Average nap duration per day"
+                  unit="minutes"
                   color="primary"
                 />
               </CardContent>
