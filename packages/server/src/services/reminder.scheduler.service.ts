@@ -1,11 +1,11 @@
 import { prisma } from '../config/database.js';
-import { sendBedtimeReminder, sendNapReminder, sendNotificationToCaregivers } from './notification.service.js';
-import { calculateDaySchedule, calculateNextAction } from './schedule.calculator.service.js';
+import { sendBedtimeReminder, sendNapReminder, sendWakeDeadlineAlert, sendNapCapExceededAlert } from './notification.service.js';
+import { calculateDaySchedule } from './schedule.calculator.service.js';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
-import { startOfDay, format, differenceInMinutes, addMinutes, isAfter, isBefore } from 'date-fns';
+import { startOfDay, format, differenceInMinutes, addMinutes, isAfter, isBefore, parse } from 'date-fns';
 
 // Track which reminders have been sent to avoid duplicates
-// Key format: `${childId}-${type}-${date}` where type is 'nap1', 'nap2', 'bedtime'
+// Key format: `${childId}-${type}-${date}` where type is 'nap1', 'nap2', 'bedtime', 'wake_deadline', 'nap_cap'
 const sentReminders = new Map<string, Date>();
 
 // Clean up old entries every hour
@@ -20,19 +20,23 @@ setInterval(() => {
 
 // Configuration
 const REMINDER_MINUTES_BEFORE = 15; // Send reminder 15 minutes before
+const WAKE_DEADLINE_ALERT_MINUTES = 10; // Alert 10 minutes before must-wake-by
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
 
 let isRunning = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
+
+type ReminderType = 'nap1' | 'nap2' | 'bedtime' | 'wake_deadline' | 'nap_cap';
 
 /**
  * Check if we should send a reminder for a specific event
  */
 function shouldSendReminder(
   childId: string,
-  type: 'nap1' | 'nap2' | 'bedtime',
+  type: ReminderType,
   eventTime: Date,
-  now: Date
+  now: Date,
+  minutesBefore: number = REMINDER_MINUTES_BEFORE
 ): boolean {
   const key = `${childId}-${type}-${format(eventTime, 'yyyy-MM-dd')}`;
 
@@ -42,7 +46,7 @@ function shouldSendReminder(
   }
 
   // Check if we're within the reminder window
-  const reminderTime = addMinutes(eventTime, -REMINDER_MINUTES_BEFORE);
+  const reminderTime = addMinutes(eventTime, -minutesBefore);
   const reminderWindowEnd = eventTime;
 
   // Send if current time is between reminderTime and eventTime
@@ -50,10 +54,30 @@ function shouldSendReminder(
 }
 
 /**
+ * Check if we should send a one-time alert (already past threshold)
+ */
+function shouldSendOneTimeAlert(
+  childId: string,
+  type: ReminderType,
+  dateKey: string
+): boolean {
+  const key = `${childId}-${type}-${dateKey}`;
+  return !sentReminders.has(key);
+}
+
+/**
  * Mark a reminder as sent
  */
-function markReminderSent(childId: string, type: 'nap1' | 'nap2' | 'bedtime', eventTime: Date): void {
+function markReminderSent(childId: string, type: ReminderType, eventTime: Date): void {
   const key = `${childId}-${type}-${format(eventTime, 'yyyy-MM-dd')}`;
+  sentReminders.set(key, new Date());
+}
+
+/**
+ * Mark a one-time alert as sent
+ */
+function markOneTimeAlertSent(childId: string, type: ReminderType, dateKey: string): void {
+  const key = `${childId}-${type}-${dateKey}`;
   sentReminders.set(key, new Date());
 }
 
@@ -115,13 +139,84 @@ async function processChildReminders(
     s => s.sessionType === 'NAP' && s.state === 'COMPLETED'
   ).length;
 
-  // Check if child is currently asleep
-  const currentlyAsleep = sessions.some(
-    s => s.state === 'ASLEEP'
+  // Check if child is currently asleep (nap)
+  const currentNapSession = sessions.find(
+    s => s.sessionType === 'NAP' && s.state === 'ASLEEP' && s.asleepAt
   );
 
-  if (currentlyAsleep) {
-    return; // Don't send reminders while child is sleeping
+  // Check if child is currently in night sleep
+  const currentNightSession = sessions.find(
+    s => s.sessionType === 'NIGHT_SLEEP' && s.state === 'ASLEEP' && s.asleepAt
+  );
+
+  // Get caregivers for notifications
+  const caregivers = await prisma.childCaregiver.findMany({
+    where: {
+      childId,
+      isActive: true,
+      status: 'ACCEPTED',
+    },
+    select: { userId: true },
+  });
+
+  // Check nap cap - if child is currently napping and exceeded cap
+  if (currentNapSession?.asleepAt && schedule.napCapMinutes) {
+    const napDurationMinutes = differenceInMinutes(now, currentNapSession.asleepAt);
+
+    if (napDurationMinutes >= schedule.napCapMinutes) {
+      // Send alert once per nap session
+      const napKey = `${currentNapSession.id}`;
+      if (shouldSendOneTimeAlert(childId, 'nap_cap', napKey)) {
+        for (const caregiver of caregivers) {
+          await sendNapCapExceededAlert(
+            caregiver.userId,
+            childName,
+            napDurationMinutes,
+            schedule.napCapMinutes,
+            childId
+          );
+        }
+        markOneTimeAlertSent(childId, 'nap_cap', napKey);
+        console.log(`[ReminderScheduler] Sent nap cap exceeded alert for ${childName} (${napDurationMinutes}min)`);
+      }
+    }
+  }
+
+  // Check wake deadline for night sleep
+  if (currentNightSession?.asleepAt && schedule.mustWakeBy) {
+    // Parse mustWakeBy time for today
+    const [hours, minutes] = schedule.mustWakeBy.split(':').map(Number);
+    const zonedToday = toZonedTime(now, timezone);
+    const mustWakeByZoned = new Date(zonedToday);
+    mustWakeByZoned.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+    const mustWakeByTime = fromZonedTime(mustWakeByZoned, timezone);
+
+    // Only check if we haven't passed the deadline yet
+    if (isBefore(now, mustWakeByTime)) {
+      const minutesUntilDeadline = differenceInMinutes(mustWakeByTime, now);
+
+      // Send alert 10 minutes before deadline
+      if (minutesUntilDeadline <= WAKE_DEADLINE_ALERT_MINUTES) {
+        if (shouldSendReminder(childId, 'wake_deadline', mustWakeByTime, now, WAKE_DEADLINE_ALERT_MINUTES)) {
+          for (const caregiver of caregivers) {
+            await sendWakeDeadlineAlert(
+              caregiver.userId,
+              childName,
+              minutesUntilDeadline,
+              schedule.mustWakeBy,
+              childId
+            );
+          }
+          markReminderSent(childId, 'wake_deadline', mustWakeByTime);
+          console.log(`[ReminderScheduler] Sent wake deadline alert for ${childName} (${minutesUntilDeadline}min remaining)`);
+        }
+      }
+    }
+  }
+
+  // If child is currently asleep, don't send nap/bedtime reminders
+  if (currentNapSession || currentNightSession) {
+    return;
   }
 
   // Calculate day schedule
@@ -143,16 +238,6 @@ async function processChildReminders(
     if (shouldSendReminder(childId, napType, napTime, now)) {
       const timeStr = format(toZonedTime(napTime, timezone), 'h:mm a');
 
-      // Get all caregivers for this child
-      const caregivers = await prisma.childCaregiver.findMany({
-        where: {
-          childId,
-          isActive: true,
-          status: 'ACCEPTED',
-        },
-        select: { userId: true },
-      });
-
       for (const caregiver of caregivers) {
         await sendNapReminder(caregiver.userId, childName, nap.napNumber, timeStr, childId);
       }
@@ -167,16 +252,6 @@ async function processChildReminders(
 
   if (shouldSendReminder(childId, 'bedtime', bedtime, now)) {
     const timeStr = format(toZonedTime(bedtime, timezone), 'h:mm a');
-
-    // Get all caregivers for this child
-    const caregivers = await prisma.childCaregiver.findMany({
-      where: {
-        childId,
-        isActive: true,
-        status: 'ACCEPTED',
-      },
-      select: { userId: true },
-    });
 
     for (const caregiver of caregivers) {
       await sendBedtimeReminder(caregiver.userId, childName, timeStr, childId);

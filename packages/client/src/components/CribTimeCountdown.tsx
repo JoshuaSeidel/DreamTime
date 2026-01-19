@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SleepSession } from '@/lib/api';
 
 interface CribTimeCountdownProps {
   session: SleepSession;
   minimumCribMinutes?: number;
+  napCapMinutes?: number;
 }
 
 export default function CribTimeCountdown({
   session,
   minimumCribMinutes = 60, // Default 60 minute crib rule
+  napCapMinutes = 120, // Default 2 hour nap cap
 }: CribTimeCountdownProps) {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [sleepElapsedMinutes, setSleepElapsedMinutes] = useState(0);
 
   useEffect(() => {
     if (!session.putDownAt) return;
@@ -25,6 +28,13 @@ export default function CribTimeCountdown({
       const totalSeconds = Math.floor(elapsedMs / 1000);
       setElapsedMinutes(Math.floor(totalSeconds / 60));
       setElapsedSeconds(totalSeconds % 60);
+
+      // Track sleep elapsed time if baby is asleep
+      if (session.asleepAt) {
+        const asleepTime = new Date(session.asleepAt).getTime();
+        const sleepElapsedMs = now - asleepTime;
+        setSleepElapsedMinutes(Math.floor(sleepElapsedMs / 60000));
+      }
     };
 
     // Update immediately
@@ -34,12 +44,17 @@ export default function CribTimeCountdown({
     const interval = setInterval(updateElapsed, 1000);
 
     return () => clearInterval(interval);
-  }, [session.putDownAt]);
+  }, [session.putDownAt, session.asleepAt]);
 
   const remainingMinutes = Math.max(0, minimumCribMinutes - elapsedMinutes - 1);
   const remainingSeconds = remainingMinutes > 0 ? 60 - elapsedSeconds : 0;
   const isComplete = elapsedMinutes >= minimumCribMinutes;
   const progress = Math.min(100, (elapsedMinutes / minimumCribMinutes) * 100);
+
+  // Nap cap tracking (only when baby is asleep)
+  const isNapCapExceeded = session.state === 'ASLEEP' && sleepElapsedMinutes >= napCapMinutes;
+  const napCapOverageMinutes = Math.max(0, sleepElapsedMinutes - napCapMinutes);
+  const napCapProgress = session.state === 'ASLEEP' ? Math.min(100, (sleepElapsedMinutes / napCapMinutes) * 100) : 0;
 
   // Only show when session is active (not completed)
   if (session.state === 'COMPLETED') {
@@ -142,6 +157,66 @@ export default function CribTimeCountdown({
         <p className="text-xs text-amber-700 dark:text-amber-300 mt-3 text-center">
           Minimum {minimumCribMinutes} minutes recommended for sleep training
         </p>
+      )}
+
+      {/* Nap Cap Warning - Only for NAPs when asleep */}
+      {session.sessionType === 'NAP' && session.state === 'ASLEEP' && (
+        <div className={cn(
+          'mt-4 p-3 rounded-lg border',
+          isNapCapExceeded
+            ? 'bg-red-50 border-red-300 dark:bg-red-950 dark:border-red-700 animate-pulse'
+            : napCapProgress >= 80
+            ? 'bg-orange-50 border-orange-300 dark:bg-orange-950 dark:border-orange-700'
+            : 'bg-violet-50 border-violet-300 dark:bg-violet-950 dark:border-violet-700'
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Moon className={cn(
+                'w-4 h-4',
+                isNapCapExceeded
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-violet-600 dark:text-violet-400'
+              )} />
+              <span className={cn(
+                'font-medium text-sm',
+                isNapCapExceeded
+                  ? 'text-red-800 dark:text-red-200'
+                  : 'text-violet-800 dark:text-violet-200'
+              )}>
+                {isNapCapExceeded ? 'Nap Cap Exceeded!' : 'Nap Duration'}
+              </span>
+            </div>
+            <span className={cn(
+              'text-sm font-mono font-bold',
+              isNapCapExceeded
+                ? 'text-red-700 dark:text-red-300'
+                : 'text-violet-700 dark:text-violet-300'
+            )}>
+              {sleepElapsedMinutes}m / {napCapMinutes}m
+            </span>
+          </div>
+
+          {/* Nap cap progress bar */}
+          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full transition-all duration-1000 rounded-full',
+                isNapCapExceeded
+                  ? 'bg-red-500 dark:bg-red-400'
+                  : napCapProgress >= 80
+                  ? 'bg-orange-500 dark:bg-orange-400'
+                  : 'bg-violet-500 dark:bg-violet-400'
+              )}
+              style={{ width: `${Math.min(100, napCapProgress)}%` }}
+            />
+          </div>
+
+          {isNapCapExceeded && (
+            <p className="text-xs text-red-700 dark:text-red-300 mt-2 text-center font-medium">
+              Over by {napCapOverageMinutes} minutes - consider waking baby
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

@@ -190,9 +190,13 @@ model SleepSchedule {
   // Wake time constraints
   wakeTimeEarliest String
   wakeTimeLatest   String
+  // Must wake by time (hard deadline for morning wake - default 07:30)
+  mustWakeBy       String   @default("07:30")
 
   // Sleep caps
   daySleepCap     Int      // Total day sleep in minutes
+  // Individual nap cap in minutes (default 120 = 2 hours)
+  napCapMinutes   Int      @default(120)
 
   // Crib time settings (for naps only - not applicable to bedtime)
   minimumCribMinutes Int   @default(60)  // Minimum time in crib for sleep training

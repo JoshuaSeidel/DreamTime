@@ -4,6 +4,7 @@ import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
 import CribTimeCountdown from '../components/CribTimeCountdown';
+import WakeDeadlineCountdown from '../components/WakeDeadlineCountdown';
 import AddChildDialog from '../components/AddChildDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -349,6 +350,15 @@ export default function Dashboard() {
               <CribTimeCountdown
                 session={activeSession}
                 minimumCribMinutes={schedule?.minimumCribMinutes ?? 60}
+                napCapMinutes={schedule?.napCapMinutes ?? 120}
+              />
+            )}
+
+            {/* Wake Deadline Countdown - Shows for night sleep approaching must-wake-by time */}
+            {activeSession && activeSession.sessionType === 'NIGHT_SLEEP' && schedule?.mustWakeBy && (
+              <WakeDeadlineCountdown
+                session={activeSession}
+                mustWakeBy={schedule.mustWakeBy}
               />
             )}
 

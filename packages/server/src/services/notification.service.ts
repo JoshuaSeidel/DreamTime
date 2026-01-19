@@ -10,7 +10,7 @@ export interface NotificationPayload {
   badge?: string;
   tag?: string;
   data?: {
-    type: 'bedtime_reminder' | 'nap_reminder' | 'wake_window_alert' | 'session_update';
+    type: 'bedtime_reminder' | 'nap_reminder' | 'wake_window_alert' | 'session_update' | 'wake_deadline' | 'nap_cap_exceeded';
     childId?: string;
     childName?: string;
     url?: string;
@@ -240,5 +240,56 @@ export async function sendNotificationToCaregivers(
 export async function getSubscriptionCount(userId: string): Promise<number> {
   return prisma.pushSubscription.count({
     where: { userId },
+  });
+}
+
+/**
+ * Send wake deadline alert (approaching must-wake-by time)
+ */
+export async function sendWakeDeadlineAlert(
+  userId: string,
+  childName: string,
+  minutesRemaining: number,
+  mustWakeByTime: string,
+  childId: string
+): Promise<void> {
+  await sendNotificationToUser(userId, {
+    title: `Wake ${childName} Soon`,
+    body: `${minutesRemaining} minutes until ${mustWakeByTime} wake deadline!`,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: `wake-deadline-${childId}`,
+    data: {
+      type: 'wake_deadline',
+      childId,
+      childName,
+      url: '/',
+    },
+  });
+}
+
+/**
+ * Send nap cap exceeded alert
+ */
+export async function sendNapCapExceededAlert(
+  userId: string,
+  childName: string,
+  napDurationMinutes: number,
+  napCapMinutes: number,
+  childId: string
+): Promise<void> {
+  const overMinutes = napDurationMinutes - napCapMinutes;
+  await sendNotificationToUser(userId, {
+    title: `Nap Cap Reached`,
+    body: `${childName} has been napping ${napDurationMinutes} min (${overMinutes} min over ${napCapMinutes} min cap). Time to wake!`,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: `nap-cap-${childId}`,
+    data: {
+      type: 'nap_cap_exceeded',
+      childId,
+      childName,
+      url: '/',
+    },
   });
 }

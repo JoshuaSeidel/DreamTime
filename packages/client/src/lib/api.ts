@@ -319,7 +319,9 @@ export interface SleepSchedule {
   bedtimeGoalEnd: string | null;
   wakeTimeEarliest: string;
   wakeTimeLatest: string;
+  mustWakeBy: string;
   daySleepCap: number;
+  napCapMinutes: number;
   minimumCribMinutes: number;
   createdAt: string;
   updatedAt: string;
