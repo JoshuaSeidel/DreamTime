@@ -624,6 +624,67 @@ export async function createAdHocSession(
   return formatSession(session);
 }
 
+// Recalculate qualifiedRestMinutes for today's sessions
+// Used to fix sessions after a calculation bug fix
+export async function recalculateTodaySessions(
+  userId: string,
+  childId: string
+): Promise<{ recalculated: number; sessions: Array<{ id: string; oldQualifiedRest: number | null; newQualifiedRest: number | null }> }> {
+  await verifyChildAccess(userId, childId, true);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Get today's completed NAP sessions
+  const sessions = await prisma.sleepSession.findMany({
+    where: {
+      childId,
+      sessionType: 'NAP',
+      state: SessionState.COMPLETED,
+      createdAt: {
+        gte: today,
+        lt: tomorrow,
+      },
+    },
+  });
+
+  const results: Array<{ id: string; oldQualifiedRest: number | null; newQualifiedRest: number | null }> = [];
+
+  for (const session of sessions) {
+    const oldQualifiedRest = session.qualifiedRestMinutes;
+
+    // Recalculate durations
+    const durations = calculateDurations(
+      session.putDownAt,
+      session.asleepAt,
+      session.wokeUpAt,
+      session.outOfCribAt,
+      session.isAdHoc
+    );
+
+    // Update the session
+    await prisma.sleepSession.update({
+      where: { id: session.id },
+      data: {
+        settlingMinutes: durations.settlingMinutes,
+        postWakeMinutes: durations.postWakeMinutes,
+        awakeCribMinutes: durations.awakeCribMinutes,
+        qualifiedRestMinutes: durations.qualifiedRestMinutes,
+      },
+    });
+
+    results.push({
+      id: session.id,
+      oldQualifiedRest,
+      newQualifiedRest: durations.qualifiedRestMinutes,
+    });
+  }
+
+  return { recalculated: results.length, sessions: results };
+}
+
 export async function getDailySummary(
   userId: string,
   childId: string,

@@ -18,6 +18,7 @@ import {
   getActiveSession,
   getDailySummary,
   createAdHocSession,
+  recalculateTodaySessions,
   SessionServiceError,
 } from '../services/session.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -365,6 +366,46 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const session = await createAdHocSession(userId, childId, input);
 
         return reply.status(201).send(successResponse(session));
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Recalculate today's sessions (fix qualified rest after bug fix)
+  app.post<{ Params: { childId: string } }>(
+    '/:childId/sessions/recalculate',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Recalculate qualifiedRestMinutes for today\'s completed sessions',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { childId: string } }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+
+        const result = await recalculateTodaySessions(userId, childId);
+
+        return reply.send(successResponse(result));
       } catch (error) {
         if (error instanceof SessionServiceError) {
           return reply.status(error.statusCode).send(
