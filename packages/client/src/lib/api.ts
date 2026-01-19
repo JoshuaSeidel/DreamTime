@@ -192,6 +192,22 @@ export async function updateCaregiverTitle(
   );
 }
 
+export async function updateCaregiverRole(
+  accessToken: string,
+  childId: string,
+  caregiverUserId: string,
+  role: 'ADMIN' | 'CAREGIVER' | 'VIEWER'
+): Promise<ApiResponse<CaregiverInfo>> {
+  return fetchWithAuth<CaregiverInfo>(
+    `/children/${childId}/caregivers/${caregiverUserId}/role`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    },
+    accessToken
+  );
+}
+
 // Sessions API
 export interface SleepSession {
   id: string;

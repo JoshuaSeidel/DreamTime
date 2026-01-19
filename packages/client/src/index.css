@@ -108,6 +108,14 @@
     overflow-x: hidden;
     width: 100%;
     max-width: 100vw;
+    position: relative;
+  }
+
+  /* Prevent pinch zoom and horizontal scroll in PWA */
+  html {
+    touch-action: pan-y;
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
   }
 
   /* Safe area for iOS devices */

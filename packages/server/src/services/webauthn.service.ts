@@ -141,11 +141,15 @@ export async function generateRegistrationOptionsForUser(
     userDisplayName: user.name,
     // Don't allow re-registering existing credentials
     excludeCredentials,
-    // Prefer platform authenticators (Face ID, Touch ID)
+    // Force platform authenticators only (Face ID, Touch ID, Windows Hello)
+    // This prevents passkeys from being stored in password managers like 1Password
     authenticatorSelection: {
       authenticatorAttachment: 'platform',
       userVerification: 'required',
-      residentKey: 'preferred',
+      // 'discouraged' prevents discoverable/syncable credentials
+      // This ensures the credential stays on the device only
+      residentKey: 'discouraged',
+      requireResidentKey: false,
     },
     // We support ES256 and RS256 algorithms
     supportedAlgorithmIDs: [-7, -257],

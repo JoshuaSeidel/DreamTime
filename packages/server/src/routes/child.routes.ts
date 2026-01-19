@@ -5,11 +5,13 @@ import {
   shareChildSchema,
   toggleCaregiverAccessSchema,
   updateCaregiverTitleSchema,
+  updateCaregiverRoleSchema,
   type CreateChildInput,
   type UpdateChildInput,
   type ShareChildInput,
   type ToggleCaregiverAccessInput,
   type UpdateCaregiverTitleInput,
+  type UpdateCaregiverRoleInput,
 } from '../schemas/child.schema.js';
 import {
   listChildren,
@@ -24,6 +26,7 @@ import {
   getPendingInvitations,
   toggleCaregiverAccess,
   updateCaregiverTitle,
+  updateCaregiverRole,
   ChildServiceError,
 } from '../services/child.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -738,6 +741,78 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
         const input = updateCaregiverTitleSchema.parse(request.body);
 
         const caregiver = await updateCaregiverTitle(userId, id, caregiverId, input.title);
+
+        return reply.send(successResponse(caregiver));
+      } catch (error) {
+        if (error instanceof ChildServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Update caregiver role (promote to admin, etc.)
+  app.patch<{ Params: { id: string; caregiverId: string }; Body: UpdateCaregiverRoleInput }>(
+    '/:id/caregivers/:caregiverId/role',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Update caregiver role (ADMIN only)',
+        tags: ['Children'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            caregiverId: { type: 'string' },
+          },
+          required: ['id', 'caregiverId'],
+        },
+        body: {
+          type: 'object',
+          required: ['role'],
+          properties: {
+            role: { type: 'string', enum: ['ADMIN', 'CAREGIVER', 'VIEWER'] },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  userId: { type: 'string' },
+                  email: { type: 'string' },
+                  name: { type: 'string' },
+                  role: { type: 'string' },
+                  status: { type: 'string' },
+                  title: { type: 'string', nullable: true },
+                  isActive: { type: 'boolean' },
+                  invitedAt: { type: 'string' },
+                  acceptedAt: { type: 'string', nullable: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { id: string; caregiverId: string }; Body: UpdateCaregiverRoleInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { id, caregiverId } = request.params;
+        const input = updateCaregiverRoleSchema.parse(request.body);
+
+        const caregiver = await updateCaregiverRole(userId, id, caregiverId, input.role);
 
         return reply.send(successResponse(caregiver));
       } catch (error) {

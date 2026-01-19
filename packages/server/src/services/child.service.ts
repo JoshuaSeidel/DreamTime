@@ -91,6 +91,7 @@ export async function createChild(
         role: Role.ADMIN,
         status: InviteStatus.ACCEPTED,
         acceptedAt: new Date(),
+        isActive: true,
       },
     });
 
@@ -762,5 +763,103 @@ export async function updateCaregiverTitle(
     isActive: updated.isActive,
     invitedAt: updated.invitedAt,
     acceptedAt: updated.acceptedAt,
+  };
+}
+
+// Update caregiver role (e.g., promote to ADMIN)
+export async function updateCaregiverRole(
+  adminUserId: string,
+  childId: string,
+  caregiverUserId: string,
+  role: string
+): Promise<CaregiverInfo> {
+  // Check if user has ADMIN role for this child
+  const adminRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: adminUserId,
+      },
+    },
+  });
+
+  if (!adminRelation) {
+    throw new ChildServiceError(
+      'Child not found',
+      'CHILD_NOT_FOUND',
+      404
+    );
+  }
+
+  if (adminRelation.role !== Role.ADMIN) {
+    throw new ChildServiceError(
+      'Only admins can change caregiver roles',
+      'FORBIDDEN',
+      403
+    );
+  }
+
+  // Cannot change your own role
+  if (caregiverUserId === adminUserId) {
+    throw new ChildServiceError(
+      'Cannot change your own role',
+      'CANNOT_MODIFY_SELF',
+      400
+    );
+  }
+
+  // Validate role
+  if (![Role.ADMIN, Role.CAREGIVER, Role.VIEWER].includes(role as Role)) {
+    throw new ChildServiceError(
+      'Invalid role',
+      'INVALID_ROLE',
+      400
+    );
+  }
+
+  // Find the caregiver
+  const caregiverRelation = await prisma.childCaregiver.findUnique({
+    where: {
+      childId_userId: {
+        childId,
+        userId: caregiverUserId,
+      },
+    },
+  });
+
+  if (!caregiverRelation) {
+    throw new ChildServiceError(
+      'Caregiver not found',
+      'CAREGIVER_NOT_FOUND',
+      404
+    );
+  }
+
+  // Update the role
+  const updatedCaregiver = await prisma.childCaregiver.update({
+    where: { id: caregiverRelation.id },
+    data: { role },
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
+    },
+  });
+
+  return {
+    id: updatedCaregiver.id,
+    userId: updatedCaregiver.userId,
+    email: updatedCaregiver.user.email,
+    name: updatedCaregiver.user.name,
+    role: updatedCaregiver.role,
+    status: updatedCaregiver.status,
+    title: updatedCaregiver.title,
+    isActive: updatedCaregiver.isActive,
+    invitedAt: updatedCaregiver.invitedAt,
+    acceptedAt: updatedCaregiver.acceptedAt,
   };
 }

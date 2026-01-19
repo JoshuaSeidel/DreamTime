@@ -27,6 +27,7 @@ import {
   removeCaregiver,
   toggleCaregiverAccess,
   updateCaregiverTitle,
+  updateCaregiverRole,
   searchUsers,
   type Child,
   type CaregiverInfo,
@@ -35,12 +36,19 @@ import {
 
 const TITLE_OPTIONS = ['Dad', 'Mom', 'Grandma', 'Grandpa', 'Babysitter', 'Nanny', 'Au Pair', 'Sleep Coach'];
 
+const ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin', description: 'Full control' },
+  { value: 'CAREGIVER', label: 'Caregiver', description: 'Can track sleep' },
+  { value: 'VIEWER', label: 'Viewer', description: 'Read-only' },
+] as const;
+
 interface CaregiverRowProps {
   caregiver: CaregiverInfo;
   isAdmin: boolean;
   currentUserId: string;
   onToggleAccess: (userId: string, isActive: boolean) => Promise<void>;
   onUpdateTitle: (userId: string, title: string) => Promise<void>;
+  onUpdateRole: (userId: string, role: 'ADMIN' | 'CAREGIVER' | 'VIEWER') => Promise<void>;
   onRemove: (userId: string) => Promise<void>;
   isLoading: boolean;
 }
@@ -51,12 +59,14 @@ function CaregiverRow({
   currentUserId,
   onToggleAccess,
   onUpdateTitle,
+  onUpdateRole,
   onRemove,
   isLoading,
 }: CaregiverRowProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(caregiver.title || '');
   const [showTitleOptions, setShowTitleOptions] = useState(false);
+  const [showRoleOptions, setShowRoleOptions] = useState(false);
 
   const isCurrentUser = caregiver.userId === currentUserId;
   const isPending = caregiver.status === 'PENDING';
@@ -104,14 +114,56 @@ function CaregiverRow({
           </div>
           <p className="text-sm text-muted-foreground truncate">{caregiver.email}</p>
 
-          {/* Title */}
-          <div className="flex items-center gap-2 mt-1">
-            {caregiver.role === 'ADMIN' ? (
-              <Shield className="w-3 h-3 text-primary" />
-            ) : caregiver.role === 'VIEWER' ? (
-              <Eye className="w-3 h-3 text-muted-foreground" />
-            ) : null}
+          {/* Title & Role */}
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {/* Role selector */}
+            <div className="relative">
+              <button
+                onClick={() => isAdmin && !isCurrentUser && setShowRoleOptions(!showRoleOptions)}
+                disabled={!isAdmin || isCurrentUser}
+                className={cn(
+                  'text-xs flex items-center gap-1 px-1.5 py-0.5 rounded',
+                  caregiver.role === 'ADMIN' && 'bg-primary/10 text-primary',
+                  caregiver.role === 'CAREGIVER' && 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+                  caregiver.role === 'VIEWER' && 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+                  isAdmin && !isCurrentUser && 'hover:ring-1 hover:ring-primary/50 cursor-pointer'
+                )}
+              >
+                {caregiver.role === 'ADMIN' && <Shield className="w-3 h-3" />}
+                {caregiver.role === 'VIEWER' && <Eye className="w-3 h-3" />}
+                {caregiver.role}
+                {isAdmin && !isCurrentUser && (
+                  <ChevronDown className="w-3 h-3" />
+                )}
+              </button>
 
+              {showRoleOptions && (
+                <div className="absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-20 p-1 min-w-[140px]">
+                  {ROLE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={async () => {
+                        setShowRoleOptions(false);
+                        if (option.value !== caregiver.role) {
+                          await onUpdateRole(caregiver.userId, option.value);
+                        }
+                      }}
+                      className={cn(
+                        'w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted',
+                        option.value === caregiver.role && 'bg-muted'
+                      )}
+                    >
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-muted-foreground">{option.description}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <span className="text-muted-foreground">·</span>
+
+            {/* Title selector */}
             {editingTitle ? (
               <div className="flex items-center gap-1">
                 <Input
@@ -142,7 +194,7 @@ function CaregiverRow({
                     isAdmin && !isCurrentUser && 'hover:text-foreground cursor-pointer'
                   )}
                 >
-                  {caregiver.title || caregiver.role}
+                  {caregiver.title || 'Set title'}
                   {isAdmin && !isCurrentUser && (
                     showTitleOptions ? (
                       <ChevronUp className="w-3 h-3" />
@@ -433,6 +485,32 @@ export default function CaregiverManager() {
     }
   };
 
+  const handleUpdateRole = async (caregiverUserId: string, role: 'ADMIN' | 'CAREGIVER' | 'VIEWER') => {
+    if (!accessToken || !selectedChildId) return;
+
+    const roleLabel = role === 'ADMIN' ? 'Admin' : role === 'CAREGIVER' ? 'Caregiver' : 'Viewer';
+
+    if (role === 'ADMIN' && !confirm(`Promote this caregiver to Admin? They will have full control over this child's profile and caregivers.`)) {
+      return;
+    }
+
+    setIsActionLoading(true);
+    try {
+      const result = await updateCaregiverRole(accessToken, selectedChildId, caregiverUserId, role);
+      if (result.success) {
+        toast.success('Role updated', `Changed to ${roleLabel}`);
+        loadCaregivers();
+      } else {
+        toast.error('Update failed', result.error?.message || 'Could not update role');
+      }
+    } catch (err) {
+      console.error('[CaregiverManager] Update role error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   if (isLoadingChildren) {
     return (
       <Card>
@@ -517,6 +595,7 @@ export default function CaregiverManager() {
                 currentUserId={user?.id || ''}
                 onToggleAccess={handleToggleAccess}
                 onUpdateTitle={handleUpdateTitle}
+                onUpdateRole={handleUpdateRole}
                 onRemove={handleRemove}
                 isLoading={isActionLoading}
               />

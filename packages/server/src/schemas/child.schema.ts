@@ -80,3 +80,9 @@ export const updateCaregiverTitleSchema = z.object({
 });
 
 export type UpdateCaregiverTitleInput = z.infer<typeof updateCaregiverTitleSchema>;
+
+export const updateCaregiverRoleSchema = z.object({
+  role: z.enum([Role.ADMIN, Role.CAREGIVER, Role.VIEWER] as const),
+});
+
+export type UpdateCaregiverRoleInput = z.infer<typeof updateCaregiverRoleSchema>;
