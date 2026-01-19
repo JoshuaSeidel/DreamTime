@@ -42,7 +42,10 @@ export const listSessionsQuerySchema = z.object({
 
 export type ListSessionsQuery = z.infer<typeof listSessionsQuerySchema>;
 
-// Schema for creating ad-hoc naps (car, stroller, etc.) - logged after they happen
+// Schema for creating ad-hoc naps (car, stroller, etc.)
+// Two modes:
+// 1. Start mode: location + asleepAt only - starts in ASLEEP state for real-time tracking
+// 2. Complete mode: location + asleepAt + wokeUpAt - logs completed nap after the fact
 export const createAdHocSessionSchema = z.object({
   location: z.enum([
     NapLocation.CAR,
@@ -53,7 +56,7 @@ export const createAdHocSessionSchema = z.object({
     NapLocation.OTHER,
   ] as const),
   asleepAt: z.string().datetime(),
-  wokeUpAt: z.string().datetime(),
+  wokeUpAt: z.string().datetime().optional(), // Optional - if omitted, starts in ASLEEP state
   notes: z.string().max(500).optional(),
 });
 

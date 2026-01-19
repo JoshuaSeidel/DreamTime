@@ -178,7 +178,21 @@ export default function Dashboard() {
               break;
             case 'woke_up':
               setCurrentState('awake');
-              toast.info('Woke up', timeDisplay ? `At ${timeDisplay}` : 'Baby is awake in crib');
+              // Check if session was completed (ad-hoc naps complete on woke_up)
+              if (result.data.state === 'COMPLETED') {
+                const mins = result.data.sleepMinutes;
+                const credit = result.data.qualifiedRestMinutes;
+                toast.success(
+                  'Ad-hoc nap complete',
+                  mins && mins > 0
+                    ? `${mins}m sleep${credit && credit > 0 ? `, ${credit}m credit` : ''}`
+                    : 'Session recorded'
+                );
+                loadSessionData();
+                setSummaryRefreshTrigger(prev => prev + 1);
+              } else {
+                toast.info('Woke up', timeDisplay ? `At ${timeDisplay}` : 'Baby is awake in crib');
+              }
               break;
             case 'out_of_crib':
               setCurrentState('awake');
@@ -284,8 +298,6 @@ export default function Dashboard() {
   const handleAdHocNapSubmit = async (data: {
     location: Exclude<NapLocation, 'CRIB'>;
     asleepAt: string;
-    wokeUpAt: string;
-    notes?: string;
   }) => {
     if (!accessToken || !selectedChildId) {
       throw new Error('No child selected');
@@ -294,22 +306,14 @@ export default function Dashboard() {
     const result = await createAdHocSession(accessToken, selectedChildId, data);
 
     if (result.success && result.data) {
-      const mins = result.data.sleepMinutes || 0;
-      const credit = result.data.qualifiedRestMinutes || 0;
       const locationLabel = data.location.charAt(0) + data.location.slice(1).toLowerCase();
+      toast.success(`${locationLabel} nap started`, 'Tap "Awake" when baby wakes up');
 
-      toast.success(
-        `${locationLabel} nap logged`,
-        mins < 15
-          ? `${mins}m (too short for credit)`
-          : `${mins}m sleep, ${credit}m credit`
-      );
-
-      // Reload to update summary
+      // Reload to show active session - this will update currentState to 'asleep'
       loadSessionData();
       setSummaryRefreshTrigger(prev => prev + 1);
     } else {
-      throw new Error(result.error?.message || 'Failed to log nap');
+      throw new Error(result.error?.message || 'Failed to start nap');
     }
   };
 

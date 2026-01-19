@@ -82,11 +82,11 @@ export function isValidNapLocation(value: string): value is NapLocation {
 // State machine validation for sleep sessions
 // Supports multiple wake/sleep cycles:
 // - PENDING can go to ASLEEP (normal) or COMPLETED (baby never fell asleep)
-// - ASLEEP can go to AWAKE (baby woke up)
+// - ASLEEP can go to AWAKE (baby woke up) or COMPLETED (ad-hoc naps skip AWAKE)
 // - AWAKE can go to ASLEEP (baby fell back asleep) or COMPLETED (taken out)
 const validStateTransitions: Record<SessionState, SessionState[]> = {
   [SessionState.PENDING]: [SessionState.ASLEEP, SessionState.COMPLETED],
-  [SessionState.ASLEEP]: [SessionState.AWAKE],
+  [SessionState.ASLEEP]: [SessionState.AWAKE, SessionState.COMPLETED], // COMPLETED for ad-hoc naps
   [SessionState.AWAKE]: [SessionState.ASLEEP, SessionState.COMPLETED],
   [SessionState.COMPLETED]: [],
 };

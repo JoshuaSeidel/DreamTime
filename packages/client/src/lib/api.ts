@@ -323,14 +323,17 @@ export async function getActiveSession(
   return { success: true, data: null };
 }
 
-// Create ad-hoc nap (logged after it happens)
+// Create ad-hoc nap (car, stroller, etc.)
+// Two modes:
+// 1. Start mode: location + asleepAt only - starts real-time tracking in ASLEEP state
+// 2. Complete mode: location + asleepAt + wokeUpAt - logs completed nap after the fact
 export async function createAdHocSession(
   accessToken: string,
   childId: string,
   data: {
     location: Exclude<NapLocation, 'CRIB'>;
     asleepAt: string;
-    wokeUpAt: string;
+    wokeUpAt?: string; // Optional - if omitted, starts in ASLEEP state
     notes?: string;
   }
 ): Promise<ApiResponse<SleepSession>> {

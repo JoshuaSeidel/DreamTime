@@ -366,16 +366,34 @@ export async function updateSession(
         break;
 
       case 'woke_up':
-        newState = SessionState.AWAKE;
-        if (!isValidStateTransition(currentState, newState)) {
-          throw new SessionServiceError(
-            `Cannot transition from ${currentState} to ${newState}`,
-            'INVALID_STATE_TRANSITION',
-            400
-          );
+        // For ad-hoc naps (car, stroller, etc.), woke_up goes directly to COMPLETED
+        // since there's no "awake in crib" phase - baby is just done sleeping
+        if (session.isAdHoc) {
+          newState = SessionState.COMPLETED;
+          if (!isValidStateTransition(currentState, newState)) {
+            throw new SessionServiceError(
+              `Cannot transition from ${currentState} to ${newState}`,
+              'INVALID_STATE_TRANSITION',
+              400
+            );
+          }
+          updateData.state = newState;
+          const wokeUpTime = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
+          updateData.wokeUpAt = wokeUpTime;
+          updateData.outOfCribAt = wokeUpTime; // For ad-hoc, outOfCrib = wokeUp
+        } else {
+          // Regular crib nap - go to AWAKE state (baby still in crib)
+          newState = SessionState.AWAKE;
+          if (!isValidStateTransition(currentState, newState)) {
+            throw new SessionServiceError(
+              `Cannot transition from ${currentState} to ${newState}`,
+              'INVALID_STATE_TRANSITION',
+              400
+            );
+          }
+          updateData.state = newState;
+          updateData.wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
         }
-        updateData.state = newState;
-        updateData.wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
         break;
 
       case 'out_of_crib':
@@ -521,51 +539,80 @@ export async function getActiveSession(
   return formatSession(session);
 }
 
-// Create an ad-hoc nap (car, stroller, etc.) - typically logged after it happens
-// This creates a completed session in one go with the sleep times
+// Create an ad-hoc nap (car, stroller, etc.)
+// Two modes:
+// 1. Start mode: Just location + asleepAt - creates session in ASLEEP state for real-time tracking
+// 2. Complete mode: location + asleepAt + wokeUpAt - creates completed session (logged after the fact)
 export async function createAdHocSession(
   userId: string,
   childId: string,
   input: {
     location: string;
     asleepAt: string;
-    wokeUpAt: string;
+    wokeUpAt?: string; // Optional - if not provided, starts in ASLEEP state
     notes?: string;
   }
 ): Promise<SleepSessionResponse> {
   await verifyChildAccess(userId, childId, true);
 
   const asleepAt = new Date(input.asleepAt);
-  const wokeUpAt = new Date(input.wokeUpAt);
 
-  // Calculate durations for the ad-hoc nap
-  const durations = calculateDurations(
-    asleepAt, // For ad-hoc, putDown = asleep (no settling)
-    asleepAt,
-    wokeUpAt,
-    wokeUpAt, // For ad-hoc, outOfCrib = woke up (no post-wake in crib)
-    true // isAdHoc = true
-  );
+  // If wokeUpAt is provided, create a completed session
+  if (input.wokeUpAt) {
+    const wokeUpAt = new Date(input.wokeUpAt);
 
+    // Calculate durations for the ad-hoc nap
+    const durations = calculateDurations(
+      asleepAt, // For ad-hoc, putDown = asleep (no settling)
+      asleepAt,
+      wokeUpAt,
+      wokeUpAt, // For ad-hoc, outOfCrib = woke up (no post-wake in crib)
+      true // isAdHoc = true
+    );
+
+    const session = await prisma.sleepSession.create({
+      data: {
+        childId,
+        sessionType: 'NAP',
+        state: SessionState.COMPLETED,
+        napNumber: null, // Ad-hoc naps don't count as nap 1/2
+        isAdHoc: true,
+        location: input.location,
+        putDownAt: asleepAt,
+        asleepAt,
+        wokeUpAt,
+        outOfCribAt: wokeUpAt,
+        notes: input.notes ?? null,
+        totalMinutes: durations.totalMinutes,
+        sleepMinutes: durations.sleepMinutes,
+        settlingMinutes: 0,
+        postWakeMinutes: 0,
+        awakeCribMinutes: 0,
+        qualifiedRestMinutes: durations.qualifiedRestMinutes,
+        createdByUserId: userId,
+        lastUpdatedByUserId: userId,
+      },
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return formatSession(session);
+  }
+
+  // No wokeUpAt - start an ad-hoc nap in ASLEEP state (real-time tracking)
   const session = await prisma.sleepSession.create({
     data: {
       childId,
       sessionType: 'NAP',
-      state: SessionState.COMPLETED,
+      state: SessionState.ASLEEP,
       napNumber: null, // Ad-hoc naps don't count as nap 1/2
       isAdHoc: true,
       location: input.location,
-      putDownAt: asleepAt,
+      putDownAt: asleepAt, // For ad-hoc, putDown = asleep
       asleepAt,
-      wokeUpAt,
-      outOfCribAt: wokeUpAt,
       notes: input.notes ?? null,
-      totalMinutes: durations.totalMinutes,
-      sleepMinutes: durations.sleepMinutes,
-      settlingMinutes: 0,
-      postWakeMinutes: 0,
-      awakeCribMinutes: 0,
-      qualifiedRestMinutes: durations.qualifiedRestMinutes,
       createdByUserId: userId,
       lastUpdatedByUserId: userId,
     },

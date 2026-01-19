@@ -322,13 +322,16 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // Create an ad-hoc nap (logged after it happens - car, stroller, etc.)
+  // Create an ad-hoc nap (car, stroller, etc.)
+  // Two modes:
+  // 1. Start mode: location + asleepAt only - starts real-time tracking in ASLEEP state
+  // 2. Complete mode: location + asleepAt + wokeUpAt - logs completed nap after the fact
   app.post<{ Params: { childId: string }; Body: CreateAdHocSessionInput }>(
     '/:childId/sessions/adhoc',
     {
       onRequest: [app.authenticate],
       schema: {
-        description: 'Create an ad-hoc nap (car, stroller, etc.) - logged after it happens',
+        description: 'Create an ad-hoc nap (car, stroller, etc.) - either start real-time tracking or log after it happens',
         tags: ['Sessions'],
         security: [{ bearerAuth: [] }],
         params: {
@@ -340,11 +343,11 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         },
         body: {
           type: 'object',
-          required: ['location', 'asleepAt', 'wokeUpAt'],
+          required: ['location', 'asleepAt'],
           properties: {
             location: { type: 'string', enum: ['CAR', 'STROLLER', 'CARRIER', 'SWING', 'PLAYPEN', 'OTHER'] },
             asleepAt: { type: 'string', format: 'date-time' },
-            wokeUpAt: { type: 'string', format: 'date-time' },
+            wokeUpAt: { type: 'string', format: 'date-time' }, // Optional - if omitted, starts in ASLEEP state
             notes: { type: 'string', maxLength: 500 },
           },
         },
