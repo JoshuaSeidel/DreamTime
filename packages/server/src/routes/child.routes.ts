@@ -216,6 +216,8 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
                         name: { type: 'string' },
                         role: { type: 'string' },
                         status: { type: 'string' },
+                        title: { type: 'string', nullable: true },
+                        isActive: { type: 'boolean' },
                         invitedAt: { type: 'string' },
                         acceptedAt: { type: 'string', nullable: true },
                       },
