@@ -266,10 +266,12 @@ export async function updateSession(
   childId: string,
   sessionId: string,
   data: {
-    event: 'fell_asleep' | 'woke_up' | 'out_of_crib';
+    event?: 'fell_asleep' | 'woke_up' | 'out_of_crib';
+    putDownAt?: string;
     asleepAt?: string;
     wokeUpAt?: string;
     outOfCribAt?: string;
+    notes?: string;
   }
 ): Promise<ApiResponse<SleepSession>> {
   return fetchWithAuth<SleepSession>(
