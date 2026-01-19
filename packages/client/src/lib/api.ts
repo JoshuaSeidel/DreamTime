@@ -242,6 +242,11 @@ export interface SleepSession {
   postWakeMinutes: number | null;
   awakeCribMinutes: number | null;
   qualifiedRestMinutes: number | null;
+  // Who logged this entry
+  createdByUserId: string | null;
+  lastUpdatedByUserId: string | null;
+  createdByName: string | null;
+  lastUpdatedByName: string | null;
   createdAt: string;
   updatedAt: string;
 }

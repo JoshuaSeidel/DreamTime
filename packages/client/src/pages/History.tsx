@@ -670,6 +670,19 @@ export default function History() {
                   )}
                 </div>
 
+                {/* Logged By info */}
+                {(selectedSession.createdByName || selectedSession.lastUpdatedByName) && (
+                  <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+                    {selectedSession.createdByName && (
+                      <p>Logged by {selectedSession.createdByName}</p>
+                    )}
+                    {selectedSession.lastUpdatedByName &&
+                     selectedSession.lastUpdatedByUserId !== selectedSession.createdByUserId && (
+                      <p>Last updated by {selectedSession.lastUpdatedByName}</p>
+                    )}
+                  </div>
+                )}
+
                 <Button
                   className="w-full mt-4"
                   variant="outline"

@@ -54,7 +54,7 @@ async function verifyChildAccess(
   return relation.role;
 }
 
-function formatSession(session: {
+interface SessionWithUserInfo {
   id: string;
   childId: string;
   sessionType: string;
@@ -72,10 +72,25 @@ function formatSession(session: {
   postWakeMinutes: number | null;
   awakeCribMinutes: number | null;
   qualifiedRestMinutes: number | null;
+  createdByUserId: string | null;
+  lastUpdatedByUserId: string | null;
+  createdByUser?: { id: string; name: string; email: string } | null;
+  lastUpdatedByUser?: { id: string; name: string; email: string } | null;
   createdAt: Date;
   updatedAt: Date;
-}): SleepSessionResponse {
-  return session;
+}
+
+function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
+  createdByUserId?: string | null;
+  lastUpdatedByUserId?: string | null;
+  createdByName?: string | null;
+  lastUpdatedByName?: string | null;
+} {
+  return {
+    ...session,
+    createdByName: session.createdByUser?.name ?? null,
+    lastUpdatedByName: session.lastUpdatedByUser?.name ?? null,
+  };
 }
 
 // Calculate total time in crib, actual sleep time, and qualified rest
@@ -187,6 +202,10 @@ export async function listSessions(
     orderBy: { createdAt: 'desc' },
     skip,
     take: query.pageSize,
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+    },
   });
 
   return {
@@ -211,6 +230,10 @@ export async function getSession(
     where: {
       id: sessionId,
       childId,
+    },
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
     },
   });
 
@@ -238,6 +261,12 @@ export async function createSession(
       napNumber: input.napNumber ?? null,
       putDownAt,
       notes: input.notes ?? null,
+      createdByUserId: userId,
+      lastUpdatedByUserId: userId,
+    },
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
     },
   });
 
@@ -264,7 +293,7 @@ export async function updateSession(
     throw new SessionServiceError('Session not found', 'SESSION_NOT_FOUND', 404);
   }
 
-  // Build update data
+  // Build update data - always track who made the update
   const updateData: {
     state?: string;
     putDownAt?: Date;
@@ -279,7 +308,10 @@ export async function updateSession(
     postWakeMinutes?: number | null;
     awakeCribMinutes?: number | null;
     qualifiedRestMinutes?: number | null;
-  } = {};
+    lastUpdatedByUserId?: string;
+  } = {
+    lastUpdatedByUserId: userId,
+  };
 
   // Handle state transition events
   if (input.event) {
@@ -401,6 +433,10 @@ export async function updateSession(
   const updatedSession = await prisma.sleepSession.update({
     where: { id: sessionId },
     data: updateData,
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+    },
   });
 
   return formatSession(updatedSession);
@@ -445,6 +481,10 @@ export async function getActiveSession(
       },
     },
     orderBy: { createdAt: 'desc' },
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+    },
   });
 
   if (!session) {
@@ -482,6 +522,10 @@ export async function getDailySummary(
       },
     },
     orderBy: { createdAt: 'asc' },
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+    },
   });
 
   let totalSleepMinutes = 0;
