@@ -26,6 +26,9 @@ model User {
   refreshTokens RefreshToken[]
   webAuthnCredentials WebAuthnCredential[]
   pushSubscriptions PushSubscription[]
+  // Sleep sessions logged by this user
+  sessionsCreated SleepSession[]     @relation("SessionCreator")
+  sessionsUpdated SleepSession[]     @relation("SessionUpdater")
   // Store current WebAuthn challenge for verification (temporary, cleared after use)
   webAuthnChallenge String?
   webAuthnChallengeExpiry DateTime?
@@ -261,6 +264,12 @@ model SleepSession {
   cryingMinutes Int?     // For CIO/Ferber tracking
   notes         String?
 
+  // Who logged this entry (for multi-caregiver tracking)
+  createdByUserId  String?   // User who created the session
+  lastUpdatedByUserId String? // User who last updated the session
+  createdByUser    User?     @relation("SessionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lastUpdatedByUser User?    @relation("SessionUpdater", fields: [lastUpdatedByUserId], references: [id], onDelete: SetNull)
+
   // Calculated fields (stored for convenience)
   totalMinutes         Int?     // Total time in crib (putDown to outOfCrib)
   sleepMinutes         Int?     // Actual sleep time (asleep to wokeUp)
@@ -276,6 +285,7 @@ model SleepSession {
   @@index([childId])
   @@index([childId, createdAt])
   @@index([childId, sessionType])
+  @@index([createdByUserId])
 }
 
 // SessionType values: NAP, NIGHT_SLEEP
