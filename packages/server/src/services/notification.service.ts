@@ -1,133 +1,6 @@
 import webpush from 'web-push';
-import https from 'https';
-import { createSign } from 'crypto';
 import { prisma } from '../config/database.js';
 import { getVapidPublicKey, getVapidPrivateKey, getVapidSubject } from '../config/secrets.js';
-
-// Base64URL encoding helper
-function base64UrlEncode(data: string | Buffer): string {
-  const base64 = typeof data === 'string' ? Buffer.from(data).toString('base64') : data.toString('base64');
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-// Generate VAPID JWT with custom expiration for Apple compatibility
-function generateVapidJwt(audience: string, expirationSeconds: number = 3600): string {
-  const header = { typ: 'JWT', alg: 'ES256' };
-  const now = Math.floor(Date.now() / 1000);
-  const payload = {
-    aud: audience,
-    exp: now + expirationSeconds,
-    sub: getVapidSubject(),
-  };
-
-  const headerB64 = base64UrlEncode(JSON.stringify(header));
-  const payloadB64 = base64UrlEncode(JSON.stringify(payload));
-  const unsignedToken = `${headerB64}.${payloadB64}`;
-
-  // Get the private key and create signature
-  const privateKeyBase64Url = getVapidPrivateKey();
-  const privateKeyBuffer = Buffer.from(privateKeyBase64Url, 'base64url');
-
-  // Create the full DER-encoded private key for P-256
-  // ASN.1 structure for PKCS#8 EC private key
-  const privateKeyDer = Buffer.concat([
-    Buffer.from('308141020100301306072a8648ce3d020106082a8648ce3d030107042730250201010420', 'hex'),
-    privateKeyBuffer,
-  ]);
-
-  const sign = createSign('SHA256');
-  sign.update(unsignedToken);
-
-  try {
-    const signature = sign.sign({
-      key: `-----BEGIN PRIVATE KEY-----\n${privateKeyDer.toString('base64')}\n-----END PRIVATE KEY-----`,
-      dsaEncoding: 'ieee-p1363', // Required for ES256
-    });
-
-    return `${unsignedToken}.${base64UrlEncode(signature)}`;
-  } catch (err) {
-    // Fallback: return empty string to use library default
-    console.warn('[NotificationService] Failed to generate custom JWT:', err);
-    return '';
-  }
-}
-
-// Send push notification directly to Apple (bypassing web-push library's 12-hour JWT)
-async function sendToApple(
-  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
-  payload: string
-): Promise<void> {
-  // Use web-push to generate the encrypted request details
-  // but we'll replace the Authorization header with our own short-lived JWT
-  const requestDetails = webpush.generateRequestDetails(
-    subscription,
-    payload,
-    {
-      vapidDetails: {
-        subject: getVapidSubject(),
-        publicKey: getVapidPublicKey(),
-        privateKey: getVapidPrivateKey(),
-      },
-    }
-  );
-
-  // Extract the origin for JWT audience
-  const endpointUrl = new URL(subscription.endpoint);
-  const audience = endpointUrl.origin;
-
-  // Generate our custom short-lived JWT (1 hour expiry instead of 12 hours)
-  const jwt = generateVapidJwt(audience, 3600);
-
-  if (!jwt) {
-    throw new Error('Failed to generate VAPID JWT for Apple');
-  }
-
-  // Replace the Authorization header with our short-lived JWT
-  const authHeader = `vapid t=${jwt}, k=${getVapidPublicKey()}`;
-
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(subscription.endpoint);
-
-    const options = {
-      hostname: urlObj.hostname,
-      port: 443,
-      path: urlObj.pathname,
-      method: 'POST',
-      headers: {
-        ...requestDetails.headers,
-        Authorization: authHeader, // Override with our short-lived JWT
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => {
-        body += chunk;
-      });
-      res.on('end', () => {
-        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-          resolve();
-        } else {
-          const error = new Error(`Apple push failed: ${res.statusCode} ${body}`) as Error & {
-            statusCode?: number;
-            body?: string;
-          };
-          error.statusCode = res.statusCode;
-          error.body = body;
-          reject(error);
-        }
-      });
-    });
-
-    req.on('error', reject);
-
-    if (requestDetails.body) {
-      req.write(requestDetails.body);
-    }
-
-    req.end();
-  });
-}
 
 // Notification payload types
 export interface NotificationPayload {
@@ -199,36 +72,16 @@ export async function sendNotificationToUser(
 
   for (const sub of subscriptions) {
     try {
-      // Apple's APNS requires JWT expiration within 1 hour
-      // The web-push library uses 12 hours by default which Apple rejects with BadJwtToken
-      // We bypass the library entirely for Apple and make direct HTTPS requests
-      const isApple = sub.endpoint.includes('web.push.apple.com');
-
-      if (isApple) {
-        console.log('[NotificationService] Using direct HTTPS request for Apple push (bypassing web-push library)');
-        await sendToApple(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
-            },
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth,
           },
-          notificationPayload
-        );
-      } else {
-        // For non-Apple endpoints, use the web-push library normally
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
-            },
-          },
-          notificationPayload
-        );
-      }
+        },
+        notificationPayload
+      );
 
       // Update last used timestamp
       await prisma.pushSubscription.update({

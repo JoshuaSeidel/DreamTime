@@ -1,6 +1,7 @@
-import { randomBytes, generateKeyPairSync } from 'crypto';
+import { randomBytes } from 'crypto';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import webpush from 'web-push';
 
 interface Secrets {
   jwtSecret: string;
@@ -30,28 +31,12 @@ function generateSecret(length = 64): string {
 }
 
 function generateVapidKeys(): { publicKey: string; privateKey: string } {
-  // Generate ECDH key pair for VAPID (P-256 curve as required by Web Push)
-  const { publicKey, privateKey } = generateKeyPairSync('ec', {
-    namedCurve: 'prime256v1', // P-256
-    publicKeyEncoding: {
-      type: 'spki',
-      format: 'der',
-    },
-    privateKeyEncoding: {
-      type: 'pkcs8',
-      format: 'der',
-    },
-  });
-
-  // Extract the raw public key (remove ASN.1 header - last 65 bytes for uncompressed P-256)
-  const rawPublicKey = publicKey.subarray(-65);
-
-  // Extract the raw private key (remove ASN.1 header - last 32 bytes for P-256)
-  const rawPrivateKey = privateKey.subarray(-32);
-
+  // Use web-push's official VAPID key generation
+  // This ensures keys are in the correct format for all push services including Apple
+  const keys = webpush.generateVAPIDKeys();
   return {
-    publicKey: rawPublicKey.toString('base64url'),
-    privateKey: rawPrivateKey.toString('base64url'),
+    publicKey: keys.publicKey,
+    privateKey: keys.privateKey,
   };
 }
 
