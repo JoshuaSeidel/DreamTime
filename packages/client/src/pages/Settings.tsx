@@ -103,18 +103,23 @@ export default function Settings() {
   };
 
   const formatBirthDate = (dateString: string) => {
+    // Parse as UTC date to avoid timezone shift
+    // dateString is in ISO format like "2024-11-08T00:00:00.000Z"
     const date = new Date(dateString);
     return date.toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
+      timeZone: 'UTC', // Display in UTC to match what was stored
     });
   };
 
   const calculateAge = (birthDate: string) => {
+    // Parse the date in UTC to get correct year/month
     const birth = new Date(birthDate);
     const now = new Date();
-    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+    // Use UTC methods to avoid timezone issues
+    const months = (now.getUTCFullYear() - birth.getUTCFullYear()) * 12 + (now.getUTCMonth() - birth.getUTCMonth());
     if (months < 12) {
       return `${months} month${months !== 1 ? 's' : ''} old`;
     }
