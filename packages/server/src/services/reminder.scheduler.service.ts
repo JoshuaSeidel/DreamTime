@@ -141,14 +141,15 @@ async function processChildReminders(
     s => s.sessionType === 'NAP' && s.state === 'COMPLETED'
   ).length;
 
-  // Check if child is currently asleep (nap)
+  // Check if child is currently in a nap session (any state except COMPLETED)
+  // PENDING = put down but not asleep, ASLEEP = sleeping, AWAKE = woke but still in crib
   const currentNapSession = sessions.find(
-    s => s.sessionType === 'NAP' && s.state === 'ASLEEP' && s.asleepAt
+    s => s.sessionType === 'NAP' && s.state !== 'COMPLETED'
   );
 
-  // Check if child is currently in night sleep
+  // Check if child is currently in night sleep (any state except COMPLETED)
   const currentNightSession = sessions.find(
-    s => s.sessionType === 'NIGHT_SLEEP' && s.state === 'ASLEEP' && s.asleepAt
+    s => s.sessionType === 'NIGHT_SLEEP' && s.state !== 'COMPLETED'
   );
 
   // Get caregivers for notifications
