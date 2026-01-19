@@ -687,23 +687,24 @@ export async function toggleCaregiverAccess(
 }
 
 // Update caregiver title
+// Users can update their own title, or admins can update any caregiver's title
 export async function updateCaregiverTitle(
-  adminUserId: string,
+  requestingUserId: string,
   childId: string,
   caregiverUserId: string,
   title: string
 ): Promise<CaregiverInfo> {
-  // Check if user has ADMIN role for this child
-  const adminRelation = await prisma.childCaregiver.findUnique({
+  // Check if requesting user has access to this child
+  const requestingUserRelation = await prisma.childCaregiver.findUnique({
     where: {
       childId_userId: {
         childId,
-        userId: adminUserId,
+        userId: requestingUserId,
       },
     },
   });
 
-  if (!adminRelation) {
+  if (!requestingUserRelation) {
     throw new ChildServiceError(
       'Child not found',
       'CHILD_NOT_FOUND',
@@ -711,23 +712,29 @@ export async function updateCaregiverTitle(
     );
   }
 
-  if (adminRelation.role !== Role.ADMIN) {
+  // Users can update their own title, admins can update anyone's title
+  const isUpdatingSelf = requestingUserId === caregiverUserId;
+  const isAdmin = requestingUserRelation.role === Role.ADMIN;
+
+  if (!isUpdatingSelf && !isAdmin) {
     throw new ChildServiceError(
-      'Only admins can update caregiver titles',
+      'Only admins can update other caregiver titles',
       'FORBIDDEN',
       403
     );
   }
 
-  // Find the caregiver
-  const caregiverRelation = await prisma.childCaregiver.findUnique({
-    where: {
-      childId_userId: {
-        childId,
-        userId: caregiverUserId,
-      },
-    },
-  });
+  // Find the caregiver (if updating self, we already have the relation)
+  const caregiverRelation = isUpdatingSelf
+    ? requestingUserRelation
+    : await prisma.childCaregiver.findUnique({
+        where: {
+          childId_userId: {
+            childId,
+            userId: caregiverUserId,
+          },
+        },
+      });
 
   if (!caregiverRelation) {
     throw new ChildServiceError(

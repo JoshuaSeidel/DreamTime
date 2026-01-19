@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, Plus, ChevronRight, Globe, Fingerprint, Trash2, Loader2, Smartphone } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, Fingerprint, Trash2, Loader2, ScanFace } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
@@ -16,14 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import {
-  isWebAuthnSupported,
-  isPlatformAuthenticatorAvailable,
-  registerPasskey,
-  listPasskeys,
-  deletePasskey,
-  getDeviceName,
-} from '@/lib/webauthn';
+import { useBiometricStore, isPlatformAuthenticatorAvailable } from '@/store/biometricStore';
 import {
   isPushSupported,
   getNotificationPermission,
@@ -35,26 +28,16 @@ import {
 } from '@/lib/notifications';
 import { getChildren, deleteChild, type Child } from '@/lib/api';
 
-interface PasskeyCredential {
-  id: string;
-  friendlyName: string | null;
-  deviceType: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
 export default function Settings() {
   const { user, logout, accessToken } = useAuthStore();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const toast = useToast();
+  const { isEnabled: biometricEnabled, enableBiometricLock, disableBiometricLock } = useBiometricStore();
 
   // Biometric state
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricCheckDone, setBiometricCheckDone] = useState(false);
-  const [passkeys, setPasskeys] = useState<PasskeyCredential[]>([]);
-  const [isLoadingPasskeys, setIsLoadingPasskeys] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isTogglingBiometric, setIsTogglingBiometric] = useState(false);
 
   // Push notification state
   const [pushSupported, setPushSupported] = useState(false);
@@ -143,20 +126,11 @@ export default function Settings() {
   // Check biometric and push support
   useEffect(() => {
     const checkSupport = async () => {
-      // WebAuthn check
-      console.log('[Settings] Checking WebAuthn support...');
-      const supported = isWebAuthnSupported();
-      console.log('[Settings] WebAuthn supported:', supported);
-
-      let platformAvailable = false;
-      if (supported) {
-        platformAvailable = await isPlatformAuthenticatorAvailable();
-        console.log('[Settings] Platform authenticator available:', platformAvailable);
-      }
-
-      const isSupported = supported && platformAvailable;
-      console.log('[Settings] Final biometricSupported:', isSupported);
-      setBiometricSupported(isSupported);
+      // Biometric check
+      console.log('[Settings] Checking biometric support...');
+      const platformAvailable = await isPlatformAuthenticatorAvailable();
+      console.log('[Settings] Platform authenticator available:', platformAvailable);
+      setBiometricSupported(platformAvailable);
       setBiometricCheckDone(true);
 
       // Push notification check
@@ -182,82 +156,26 @@ export default function Settings() {
     checkSupport();
   }, []);
 
-  useEffect(() => {
-    if (accessToken) {
-      loadPasskeys();
-    }
-  }, [accessToken]);
-
-  const loadPasskeys = async () => {
-    if (!accessToken) return;
-
-    setIsLoadingPasskeys(true);
-    try {
-      console.log('[Settings] Loading passkeys...');
-      const result = await listPasskeys(accessToken);
-      console.log('[Settings] Passkeys result:', result);
-      if (result.success && result.data) {
-        setPasskeys(result.data);
-      }
-    } catch (err) {
-      console.error('[Settings] Failed to load passkeys:', err);
-    } finally {
-      setIsLoadingPasskeys(false);
-    }
-  };
-
-  const handleRegisterPasskey = async () => {
-    console.log('[Settings] handleRegisterPasskey called');
-    console.log('[Settings] accessToken exists:', !!accessToken);
-
-    if (!accessToken) {
-      toast.error('Not authenticated', 'Please log in again');
-      return;
-    }
-
-    setIsRegistering(true);
+  const handleToggleBiometric = async () => {
+    setIsTogglingBiometric(true);
 
     try {
-      const deviceName = `${getDeviceName()} Face ID`;
-      console.log('[Settings] Registering passkey with device name:', deviceName);
-
-      const result = await registerPasskey(accessToken, deviceName);
-      console.log('[Settings] Registration result:', result);
-
-      if (result.success) {
-        toast.success('Face ID enabled', 'You can now sign in with Face ID');
-        await loadPasskeys();
+      if (biometricEnabled) {
+        disableBiometricLock();
+        toast.success('Face ID disabled', 'App lock has been turned off');
       } else {
-        console.error('[Settings] Registration failed:', result.error);
-        toast.error('Setup failed', result.error || 'Failed to set up Face ID');
+        const success = await enableBiometricLock();
+        if (success) {
+          toast.success('Face ID enabled', 'App will require Face ID to unlock');
+        } else {
+          toast.error('Setup failed', 'Could not enable Face ID. Please try again.');
+        }
       }
     } catch (err) {
-      console.error('[Settings] Registration exception:', err);
-      toast.error('Setup failed', 'An unexpected error occurred');
+      console.error('[Settings] Biometric toggle error:', err);
+      toast.error('Error', 'An unexpected error occurred');
     } finally {
-      setIsRegistering(false);
-    }
-  };
-
-  const handleDeletePasskey = async (credentialId: string) => {
-    if (!accessToken) return;
-
-    setDeletingId(credentialId);
-
-    try {
-      console.log('[Settings] Deleting passkey:', credentialId);
-      const result = await deletePasskey(accessToken, credentialId);
-      if (result.success) {
-        setPasskeys((prev) => prev.filter((p) => p.id !== credentialId));
-        toast.success('Passkey removed', 'The device has been removed');
-      } else {
-        toast.error('Delete failed', result.error || 'Failed to remove passkey');
-      }
-    } catch (err) {
-      console.error('[Settings] Delete passkey error:', err);
-      toast.error('Delete failed', 'An unexpected error occurred');
-    } finally {
-      setDeletingId(null);
+      setIsTogglingBiometric(false);
     }
   };
 
@@ -327,14 +245,6 @@ export default function Settings() {
     { value: 'dark' as const, label: 'Dark', icon: Moon },
     { value: 'system' as const, label: 'System', icon: Monitor },
   ];
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
@@ -533,7 +443,7 @@ export default function Settings() {
               Face ID & Security
             </CardTitle>
             <CardDescription>
-              Use Face ID for quick and secure sign-in
+              Lock the app with Face ID for extra security
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -552,80 +462,29 @@ export default function Settings() {
                 </p>
               </div>
             ) : (
-              <>
-                {/* Registered Passkeys */}
-                {isLoadingPasskeys ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-primary/10 p-2">
+                    <ScanFace className="w-4 h-4 text-primary" />
                   </div>
-                ) : passkeys.length > 0 ? (
-                  <div className="space-y-3">
+                  <div>
+                    <p className="font-medium">App Lock</p>
                     <p className="text-sm text-muted-foreground">
-                      Registered devices:
+                      {biometricEnabled
+                        ? 'Face ID required to open app'
+                        : 'Require Face ID to open the app'}
                     </p>
-                    {passkeys.map((passkey) => (
-                      <div
-                        key={passkey.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-full bg-primary/10 p-2">
-                            <Smartphone className="w-4 h-4 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">
-                              {passkey.friendlyName || passkey.deviceType}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Added {formatDate(passkey.createdAt)}
-                              {passkey.lastUsedAt && (
-                                <> · Last used {formatDate(passkey.lastUsedAt)}</>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleDeletePasskey(passkey.id)}
-                          disabled={deletingId === passkey.id}
-                        >
-                          {deletingId === passkey.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    ))}
                   </div>
+                </div>
+                {isTogglingBiometric ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No Face ID set up yet. Add Face ID to sign in faster.
-                  </p>
+                  <Switch
+                    checked={biometricEnabled}
+                    onCheckedChange={handleToggleBiometric}
+                  />
                 )}
-
-                {/* Add Face ID Button */}
-                <Button
-                  onClick={handleRegisterPasskey}
-                  variant="outline"
-                  className="w-full"
-                  disabled={isRegistering}
-                >
-                  {isRegistering ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Setting up Face ID...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4 mr-2" />
-                      {passkeys.length > 0 ? 'Add Another Device' : 'Set Up Face ID'}
-                    </>
-                  )}
-                </Button>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>

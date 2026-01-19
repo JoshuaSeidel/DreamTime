@@ -1,8 +1,10 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { useAuthStore } from './store/authStore';
+import { useBiometricStore } from './store/biometricStore';
 import LoadingSpinner from './components/LoadingSpinner';
 import Layout from './components/Layout';
+import BiometricLockScreen from './components/BiometricLockScreen';
 
 // Lazy load pages
 const Login = lazy(() => import('./pages/Login'));
@@ -15,9 +17,15 @@ const Settings = lazy(() => import('./pages/Settings'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { isEnabled, isLocked } = useBiometricStore();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Show biometric lock screen if enabled and locked
+  if (isEnabled && isLocked) {
+    return <BiometricLockScreen />;
   }
 
   return <>{children}</>;
@@ -34,6 +42,23 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  const { isEnabled, lockApp } = useBiometricStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  // Lock app when it goes to background (visibility change)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isEnabled && isAuthenticated) {
+        lockApp();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isEnabled, isAuthenticated, lockApp]);
+
   return (
     <div className="min-h-screen bg-background text-foreground w-full max-w-full overflow-x-hidden">
       <Suspense fallback={<LoadingSpinner />}>

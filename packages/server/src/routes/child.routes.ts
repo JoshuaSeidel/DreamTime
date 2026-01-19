@@ -688,7 +688,7 @@ export async function childRoutes(app: FastifyInstance): Promise<void> {
     {
       onRequest: [app.authenticate],
       schema: {
-        description: 'Update caregiver title (ADMIN only)',
+        description: 'Update caregiver title (ADMIN can update any, users can update their own)',
         tags: ['Children'],
         security: [{ bearerAuth: [] }],
         params: {

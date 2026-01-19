@@ -163,7 +163,7 @@ function CaregiverRow({
 
             <span className="text-muted-foreground">·</span>
 
-            {/* Title selector */}
+            {/* Title selector - admins can edit others, anyone can edit their own */}
             {editingTitle ? (
               <div className="flex items-center gap-1">
                 <Input
@@ -187,15 +187,15 @@ function CaregiverRow({
             ) : (
               <div className="relative">
                 <button
-                  onClick={() => isAdmin && !isCurrentUser && setShowTitleOptions(!showTitleOptions)}
-                  disabled={!isAdmin || isCurrentUser}
+                  onClick={() => (isAdmin || isCurrentUser) && setShowTitleOptions(!showTitleOptions)}
+                  disabled={!isAdmin && !isCurrentUser}
                   className={cn(
                     'text-xs text-muted-foreground flex items-center gap-1',
-                    isAdmin && !isCurrentUser && 'hover:text-foreground cursor-pointer'
+                    (isAdmin || isCurrentUser) && 'hover:text-foreground cursor-pointer'
                   )}
                 >
                   {caregiver.title || 'Set title'}
-                  {isAdmin && !isCurrentUser && (
+                  {(isAdmin || isCurrentUser) && (
                     showTitleOptions ? (
                       <ChevronUp className="w-3 h-3" />
                     ) : (
