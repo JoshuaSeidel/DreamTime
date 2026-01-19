@@ -259,6 +259,14 @@ model SleepSession {
   state         String
   napNumber     Int?     // 1, 2, or null for night sleep
 
+  // Ad-hoc nap tracking (car naps, stroller naps, etc.)
+  // Ad-hoc naps have different qualified rest calculations:
+  // - Under 15 min: 0 credit (just lowers sleep pressure slightly)
+  // - 15+ min: sleepMinutes / 2 (half credit)
+  isAdHoc       Boolean  @default(false)
+  // NapLocation: CRIB, CAR, STROLLER, CARRIER, SWING, PLAYPEN, OTHER
+  location      String   @default("CRIB")
+
   // Timestamps (UTC)
   putDownAt     DateTime? // When baby was put in crib
   asleepAt      DateTime? // When baby fell asleep

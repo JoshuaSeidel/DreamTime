@@ -224,12 +224,17 @@ export async function updateCaregiverRole(
 }
 
 // Sessions API
+export type NapLocation = 'CRIB' | 'CAR' | 'STROLLER' | 'CARRIER' | 'SWING' | 'PLAYPEN' | 'OTHER';
+
 export interface SleepSession {
   id: string;
   childId: string;
   sessionType: 'NAP' | 'NIGHT_SLEEP';
   state: 'PENDING' | 'ASLEEP' | 'AWAKE' | 'COMPLETED';
   napNumber: number | null;
+  // Ad-hoc nap tracking
+  isAdHoc: boolean;
+  location: NapLocation;
   putDownAt: string | null;
   asleepAt: string | null;
   wokeUpAt: string | null;
@@ -316,6 +321,27 @@ export async function getActiveSession(
     return { success: true, data: activeSession || null };
   }
   return { success: true, data: null };
+}
+
+// Create ad-hoc nap (logged after it happens)
+export async function createAdHocSession(
+  accessToken: string,
+  childId: string,
+  data: {
+    location: Exclude<NapLocation, 'CRIB'>;
+    asleepAt: string;
+    wokeUpAt: string;
+    notes?: string;
+  }
+): Promise<ApiResponse<SleepSession>> {
+  return fetchWithAuth<SleepSession>(
+    `/children/${childId}/sessions/adhoc`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+    accessToken
+  );
 }
 
 // Schedule API
@@ -518,11 +544,24 @@ export interface TodaySummaryNap {
   status: 'completed' | 'in_progress' | 'upcoming';
 }
 
+export interface TodaySummaryAdHocNap {
+  id: string;
+  location: NapLocation;
+  asleepAt: string | null;
+  wokeUpAt: string | null;
+  sleepMinutes: number | null;
+  qualifiedRestMinutes: number | null;
+}
+
 export interface TodaySummary {
   wakeTime: string | null;
   currentState: 'awake' | 'asleep' | 'pending';
   completedNaps: number;
   naps: TodaySummaryNap[];
+  // Ad-hoc naps (car, stroller, etc.)
+  adHocNaps: TodaySummaryAdHocNap[];
+  totalAdHocMinutes: number;
+  totalAdHocCreditMinutes: number;
   totalNapMinutes: number; // Qualified rest (includes crib time credit)
   totalActualSleepMinutes: number; // Actual sleep time only
   napGoalMinutes: number;

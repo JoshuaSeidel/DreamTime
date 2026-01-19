@@ -42,6 +42,18 @@ export const SessionState = {
 
 export type SessionState = (typeof SessionState)[keyof typeof SessionState];
 
+export const NapLocation = {
+  CRIB: 'CRIB',
+  CAR: 'CAR',
+  STROLLER: 'STROLLER',
+  CARRIER: 'CARRIER',
+  SWING: 'SWING',
+  PLAYPEN: 'PLAYPEN',
+  OTHER: 'OTHER',
+} as const;
+
+export type NapLocation = (typeof NapLocation)[keyof typeof NapLocation];
+
 // Validation helpers
 export function isValidRole(value: string): value is Role {
   return Object.values(Role).includes(value as Role);
@@ -61,6 +73,10 @@ export function isValidSessionType(value: string): value is SessionType {
 
 export function isValidSessionState(value: string): value is SessionState {
   return Object.values(SessionState).includes(value as SessionState);
+}
+
+export function isValidNapLocation(value: string): value is NapLocation {
+  return Object.values(NapLocation).includes(value as NapLocation);
 }
 
 // State machine validation for sleep sessions

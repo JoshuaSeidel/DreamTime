@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SessionType, SessionState } from '../types/enums.js';
+import { SessionType, SessionState, NapLocation } from '../types/enums.js';
 
 export const createSessionSchema = z.object({
   sessionType: z.enum([SessionType.NAP, SessionType.NIGHT_SLEEP] as const),
@@ -42,12 +42,33 @@ export const listSessionsQuerySchema = z.object({
 
 export type ListSessionsQuery = z.infer<typeof listSessionsQuerySchema>;
 
+// Schema for creating ad-hoc naps (car, stroller, etc.) - logged after they happen
+export const createAdHocSessionSchema = z.object({
+  location: z.enum([
+    NapLocation.CAR,
+    NapLocation.STROLLER,
+    NapLocation.CARRIER,
+    NapLocation.SWING,
+    NapLocation.PLAYPEN,
+    NapLocation.OTHER,
+  ] as const),
+  asleepAt: z.string().datetime(),
+  wokeUpAt: z.string().datetime(),
+  notes: z.string().max(500).optional(),
+});
+
+export type CreateAdHocSessionInput = z.infer<typeof createAdHocSessionSchema>;
+
 export interface SleepSessionResponse {
   id: string;
   childId: string;
   sessionType: string;
   state: string;
   napNumber: number | null;
+
+  // Ad-hoc nap fields
+  isAdHoc: boolean;
+  location: string;
 
   putDownAt: Date | null;
   asleepAt: Date | null;
@@ -63,7 +84,8 @@ export interface SleepSessionResponse {
   settlingMinutes: number | null;   // Time to fall asleep (putDown to asleep)
   postWakeMinutes: number | null;   // Time awake in crib after waking (wokeUp to outOfCrib)
   awakeCribMinutes: number | null;  // Total awake time in crib (settling + postWake)
-  qualifiedRestMinutes: number | null; // (awakeCribTime ÷ 2) + sleepMinutes
+  qualifiedRestMinutes: number | null; // For crib: (awakeCribTime ÷ 2) + sleepMinutes
+                                       // For ad-hoc: <15min = 0, else sleepMinutes ÷ 2
 
   createdAt: Date;
   updatedAt: Date;

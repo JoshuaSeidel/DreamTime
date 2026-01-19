@@ -60,6 +60,8 @@ interface SessionWithUserInfo {
   sessionType: string;
   state: string;
   napNumber: number | null;
+  isAdHoc: boolean;
+  location: string;
   putDownAt: Date | null;
   asleepAt: Date | null;
   wokeUpAt: Date | null;
@@ -94,13 +96,21 @@ function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
 }
 
 // Calculate total time in crib, actual sleep time, and qualified rest
-// Qualified rest = (awake crib time ÷ 2) + actual sleep time
-// This is a sleep training methodology where rest in crib has half value
+//
+// For CRIB naps (scheduled):
+//   Qualified rest = (awake crib time ÷ 2) + actual sleep time
+//   This is a sleep training methodology where rest in crib has half value
+//
+// For AD-HOC naps (car, stroller, etc.):
+//   - Under 15 min: 0 credit (just lowers sleep pressure slightly, doesn't count)
+//   - 15+ min: sleepMinutes ÷ 2 (half credit of actual sleep only)
+//   - No crib time rules apply
 function calculateDurations(
   putDownAt: Date | null,
   asleepAt: Date | null,
   wokeUpAt: Date | null,
-  outOfCribAt: Date | null
+  outOfCribAt: Date | null,
+  isAdHoc: boolean = false
 ): {
   totalMinutes: number | null;
   sleepMinutes: number | null;
@@ -116,7 +126,7 @@ function calculateDurations(
   let awakeCribMinutes: number | null = null;
   let qualifiedRestMinutes: number | null = null;
 
-  // Total time in crib
+  // Total time (in crib for scheduled naps, or total duration for ad-hoc)
   if (putDownAt && outOfCribAt) {
     totalMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - putDownAt.getTime()) / 60000));
   }
@@ -126,27 +136,43 @@ function calculateDurations(
     sleepMinutes = Math.max(0, Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000));
   }
 
-  // Settling time (put down to fell asleep)
-  if (putDownAt && asleepAt) {
-    settlingMinutes = Math.max(0, Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000));
-  }
+  if (isAdHoc) {
+    // Ad-hoc naps (car, stroller, etc.): simpler calculation
+    // - Under 15 min: 0 credit (just lowers sleep pressure)
+    // - 15+ min: half credit of actual sleep time
+    // No settling/awake crib time calculations for ad-hoc naps
+    if (sleepMinutes !== null) {
+      if (sleepMinutes < 15) {
+        qualifiedRestMinutes = 0;
+      } else {
+        qualifiedRestMinutes = Math.round(sleepMinutes / 2);
+      }
+    }
+  } else {
+    // Scheduled crib naps: full calculation with crib time credit
 
-  // Post-wake time (woke up to out of crib)
-  if (wokeUpAt && outOfCribAt) {
-    postWakeMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - wokeUpAt.getTime()) / 60000));
-  }
+    // Settling time (put down to fell asleep)
+    if (putDownAt && asleepAt) {
+      settlingMinutes = Math.max(0, Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000));
+    }
 
-  // Total awake time in crib
-  if (settlingMinutes !== null || postWakeMinutes !== null) {
-    awakeCribMinutes = (settlingMinutes ?? 0) + (postWakeMinutes ?? 0);
-  }
+    // Post-wake time (woke up to out of crib)
+    if (wokeUpAt && outOfCribAt) {
+      postWakeMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - wokeUpAt.getTime()) / 60000));
+    }
 
-  // Qualified rest = (awake crib time ÷ 2) + actual sleep
-  // This gives "credit" for time spent resting in crib even if not sleeping
-  if (totalMinutes !== null) {
-    const actualSleep = sleepMinutes ?? 0;
-    const awakeCrib = awakeCribMinutes ?? (totalMinutes - actualSleep);
-    qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
+    // Total awake time in crib
+    if (settlingMinutes !== null || postWakeMinutes !== null) {
+      awakeCribMinutes = (settlingMinutes ?? 0) + (postWakeMinutes ?? 0);
+    }
+
+    // Qualified rest = (awake crib time ÷ 2) + actual sleep
+    // This gives "credit" for time spent resting in crib even if not sleeping
+    if (totalMinutes !== null) {
+      const actualSleep = sleepMinutes ?? 0;
+      const awakeCrib = awakeCribMinutes ?? (totalMinutes - actualSleep);
+      qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
+    }
   }
 
   return {
@@ -402,7 +428,8 @@ export async function updateSession(
     finalPutDownAt,
     finalAsleepAt,
     finalWokeUpAt,
-    finalOutOfCribAt
+    finalOutOfCribAt,
+    session.isAdHoc // Pass ad-hoc flag for different calculation
   );
 
   if (durations.totalMinutes !== null) {
@@ -490,6 +517,63 @@ export async function getActiveSession(
   if (!session) {
     return null;
   }
+
+  return formatSession(session);
+}
+
+// Create an ad-hoc nap (car, stroller, etc.) - typically logged after it happens
+// This creates a completed session in one go with the sleep times
+export async function createAdHocSession(
+  userId: string,
+  childId: string,
+  input: {
+    location: string;
+    asleepAt: string;
+    wokeUpAt: string;
+    notes?: string;
+  }
+): Promise<SleepSessionResponse> {
+  await verifyChildAccess(userId, childId, true);
+
+  const asleepAt = new Date(input.asleepAt);
+  const wokeUpAt = new Date(input.wokeUpAt);
+
+  // Calculate durations for the ad-hoc nap
+  const durations = calculateDurations(
+    asleepAt, // For ad-hoc, putDown = asleep (no settling)
+    asleepAt,
+    wokeUpAt,
+    wokeUpAt, // For ad-hoc, outOfCrib = woke up (no post-wake in crib)
+    true // isAdHoc = true
+  );
+
+  const session = await prisma.sleepSession.create({
+    data: {
+      childId,
+      sessionType: 'NAP',
+      state: SessionState.COMPLETED,
+      napNumber: null, // Ad-hoc naps don't count as nap 1/2
+      isAdHoc: true,
+      location: input.location,
+      putDownAt: asleepAt,
+      asleepAt,
+      wokeUpAt,
+      outOfCribAt: wokeUpAt,
+      notes: input.notes ?? null,
+      totalMinutes: durations.totalMinutes,
+      sleepMinutes: durations.sleepMinutes,
+      settlingMinutes: 0,
+      postWakeMinutes: 0,
+      awakeCribMinutes: 0,
+      qualifiedRestMinutes: durations.qualifiedRestMinutes,
+      createdByUserId: userId,
+      lastUpdatedByUserId: userId,
+    },
+    include: {
+      createdByUser: { select: { id: true, name: true, email: true } },
+      lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+    },
+  });
 
   return formatSession(session);
 }

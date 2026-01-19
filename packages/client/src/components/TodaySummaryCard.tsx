@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Moon, Clock, AlertTriangle, CheckCircle, Loader2, Car } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { getTodaySummary, type TodaySummary } from '@/lib/api';
+import { getTodaySummary, type TodaySummary, type NapLocation } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+
+const LOCATION_LABELS: Record<Exclude<NapLocation, 'CRIB'>, string> = {
+  CAR: 'Car',
+  STROLLER: 'Stroller',
+  CARRIER: 'Carrier',
+  SWING: 'Swing',
+  PLAYPEN: 'Playpen',
+  OTHER: 'Other',
+};
 
 interface TodaySummaryCardProps {
   childId: string;
@@ -69,7 +78,7 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
     return null; // Don't show card if no schedule is set
   }
 
-  const hasCompletedNaps = summary.completedNaps > 0;
+  const hasCompletedNaps = summary.completedNaps > 0 || (summary.adHocNaps?.length ?? 0) > 0;
   const hasSleepDebt = summary.sleepDebtMinutes > 0;
 
   return (
@@ -161,6 +170,48 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
               </div>
             ))}
           </div>
+
+          {/* Ad-hoc Naps */}
+          {summary.adHocNaps && summary.adHocNaps.length > 0 && (
+            <div className="pt-2 border-t border-border/50">
+              <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1">
+                <Car className="w-3 h-3" />
+                Ad-Hoc Naps
+              </p>
+              <div className="grid gap-2">
+                {summary.adHocNaps.map((nap) => (
+                  <div
+                    key={nap.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-blue-500/10"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Car className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm font-medium">
+                        {nap.location !== 'CRIB' ? LOCATION_LABELS[nap.location as Exclude<NapLocation, 'CRIB'>] : nap.location}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span className={cn(
+                        (nap.qualifiedRestMinutes ?? 0) > 0
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-amber-600 dark:text-amber-400"
+                      )}>
+                        {formatDuration(nap.sleepMinutes)}
+                        {(nap.qualifiedRestMinutes ?? 0) > 0 && (
+                          <span className="text-xs ml-1">
+                            ({formatDuration(nap.qualifiedRestMinutes)} credit)
+                          </span>
+                        )}
+                        {(nap.qualifiedRestMinutes ?? 0) === 0 && (
+                          <span className="text-xs ml-1">(no credit)</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Total Day Sleep */}
           {hasCompletedNaps && (

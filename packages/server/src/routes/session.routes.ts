@@ -3,9 +3,11 @@ import {
   createSessionSchema,
   updateSessionSchema,
   listSessionsQuerySchema,
+  createAdHocSessionSchema,
   type CreateSessionInput,
   type UpdateSessionInput,
   type ListSessionsQuery,
+  type CreateAdHocSessionInput,
 } from '../schemas/session.schema.js';
 import {
   listSessions,
@@ -15,6 +17,7 @@ import {
   deleteSession,
   getActiveSession,
   getDailySummary,
+  createAdHocSession,
   SessionServiceError,
 } from '../services/session.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -308,6 +311,57 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const session = await updateSession(userId, childId, sessionId, input);
 
         return reply.send(successResponse(session));
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Create an ad-hoc nap (logged after it happens - car, stroller, etc.)
+  app.post<{ Params: { childId: string }; Body: CreateAdHocSessionInput }>(
+    '/:childId/sessions/adhoc',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Create an ad-hoc nap (car, stroller, etc.) - logged after it happens',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+        body: {
+          type: 'object',
+          required: ['location', 'asleepAt', 'wokeUpAt'],
+          properties: {
+            location: { type: 'string', enum: ['CAR', 'STROLLER', 'CARRIER', 'SWING', 'PLAYPEN', 'OTHER'] },
+            asleepAt: { type: 'string', format: 'date-time' },
+            wokeUpAt: { type: 'string', format: 'date-time' },
+            notes: { type: 'string', maxLength: 500 },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Params: { childId: string }; Body: CreateAdHocSessionInput }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+        const input = createAdHocSessionSchema.parse(request.body);
+
+        const session = await createAdHocSession(userId, childId, input);
+
+        return reply.status(201).send(successResponse(session));
       } catch (error) {
         if (error instanceof SessionServiceError) {
           return reply.status(error.statusCode).send(

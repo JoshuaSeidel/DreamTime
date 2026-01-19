@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, Loader2, Plus, Baby } from 'lucide-react';
+import { Moon, Clock, Loader2, Plus, Baby, Car } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
+import AdHocNapDialog from '../components/AdHocNapDialog';
 import CribTimeCountdown from '../components/CribTimeCountdown';
 import WakeDeadlineCountdown from '../components/WakeDeadlineCountdown';
 import AddChildDialog from '../components/AddChildDialog';
@@ -16,12 +17,14 @@ import {
   getActiveSession,
   getSessions,
   createSession,
+  createAdHocSession,
   updateSession,
   getNextAction,
   getSchedule,
   type SleepSession,
   type NextActionRecommendation,
   type SleepSchedule,
+  type NapLocation,
 } from '@/lib/api';
 
 type SleepState = 'awake' | 'pending' | 'asleep';
@@ -278,6 +281,38 @@ export default function Dashboard() {
     }
   };
 
+  const handleAdHocNapSubmit = async (data: {
+    location: Exclude<NapLocation, 'CRIB'>;
+    asleepAt: string;
+    wokeUpAt: string;
+    notes?: string;
+  }) => {
+    if (!accessToken || !selectedChildId) {
+      throw new Error('No child selected');
+    }
+
+    const result = await createAdHocSession(accessToken, selectedChildId, data);
+
+    if (result.success && result.data) {
+      const mins = result.data.sleepMinutes || 0;
+      const credit = result.data.qualifiedRestMinutes || 0;
+      const locationLabel = data.location.charAt(0) + data.location.slice(1).toLowerCase();
+
+      toast.success(
+        `${locationLabel} nap logged`,
+        mins < 15
+          ? `${mins}m (too short for credit)`
+          : `${mins}m sleep, ${credit}m credit`
+      );
+
+      // Reload to update summary
+      loadSessionData();
+      setSummaryRefreshTrigger(prev => prev + 1);
+    } else {
+      throw new Error(result.error?.message || 'Failed to log nap');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       {/* Header */}
@@ -371,6 +406,20 @@ export default function Dashboard() {
               onAction={handleAction}
               disabled={isActionLoading}
               hasActiveSession={activeSession !== null}
+            />
+
+            {/* Ad-Hoc Nap Button */}
+            <AdHocNapDialog
+              onSubmit={handleAdHocNapSubmit}
+              trigger={
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-dashed border-muted-foreground/30 hover:border-blue-500/50 hover:bg-blue-500/5"
+                >
+                  <Car className="w-4 h-4 text-blue-500" />
+                  Log Car/Stroller Nap
+                </Button>
+              }
             />
 
             {/* Today's Summary */}
