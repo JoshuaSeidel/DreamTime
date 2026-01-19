@@ -509,7 +509,7 @@ export default function Dashboard() {
                     <p className="text-sm text-muted-foreground mt-1">
                       {hasSchedule && nextAction ? (
                         <>
-                          {nextAction.description}
+                          {nextAction.description.replace('Child', selectedChildName)}
                           {nextAction.timeWindow && (
                             <span className="block mt-1 font-medium text-foreground">
                               {nextAction.minutesUntilEarliest && nextAction.minutesUntilEarliest > 0 ? (
