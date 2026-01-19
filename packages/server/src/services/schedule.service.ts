@@ -86,7 +86,9 @@ function formatSchedule(
     bedtimeGoalEnd: string | null;
     wakeTimeEarliest: string;
     wakeTimeLatest: string;
+    mustWakeBy?: string;
     daySleepCap: number;
+    napCapMinutes?: number;
     minimumCribMinutes?: number;
     createdAt: Date;
     updatedAt: Date;
@@ -94,6 +96,8 @@ function formatSchedule(
 ): SleepScheduleResponse {
   return {
     ...schedule,
+    mustWakeBy: schedule.mustWakeBy ?? '07:30',
+    napCapMinutes: schedule.napCapMinutes ?? 120,
     minimumCribMinutes: schedule.minimumCribMinutes ?? 90,
   };
 }

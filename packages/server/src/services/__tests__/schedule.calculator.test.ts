@@ -35,7 +35,10 @@ const createTwoNapSchedule = (): SleepScheduleResponse => ({
   bedtimeGoalEnd: '19:30',
   wakeTimeEarliest: '06:30',
   wakeTimeLatest: '07:30',
+  mustWakeBy: '07:30',
   daySleepCap: 210, // 3.5 hours
+  napCapMinutes: 120,
+  minimumCribMinutes: 60,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
@@ -66,7 +69,10 @@ const createOneNapSchedule = (): SleepScheduleResponse => ({
   bedtimeGoalEnd: '19:30',
   wakeTimeEarliest: '06:30',
   wakeTimeLatest: '08:00',
+  mustWakeBy: '07:30',
   daySleepCap: 150,
+  napCapMinutes: 150,
+  minimumCribMinutes: 90,
   createdAt: new Date(),
   updatedAt: new Date(),
 });

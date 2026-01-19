@@ -99,6 +99,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "file:./test.db"
+      TZ: "America/New_York"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -114,6 +117,9 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
+
+      - name: Run database migrations
+        run: npx prisma migrate deploy
 
       - name: Run linting
         run: npm run lint || true

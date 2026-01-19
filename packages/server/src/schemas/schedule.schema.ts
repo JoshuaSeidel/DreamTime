@@ -109,8 +109,10 @@ export interface SleepScheduleResponse {
 
   wakeTimeEarliest: string;
   wakeTimeLatest: string;
+  mustWakeBy: string;
 
   daySleepCap: number;
+  napCapMinutes: number;
 
   minimumCribMinutes: number;
 
