@@ -206,18 +206,22 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           s => s.state === SessionState.ASLEEP
         );
 
-        // Calculate day schedule using qualified rest from scheduled naps only
-        // Ad-hoc naps contribute to sleep debt reduction but don't count as nap 1/2
-        const napDurations = scheduledNaps
+        // Calculate day schedule using qualified rest
+        // Scheduled naps count as nap 1/2 for sequence timing
+        // Ad-hoc naps contribute to total rest credit for sleep debt/bedtime calculation
+        const scheduledNapDurations = scheduledNaps
           .filter(s => s.state === SessionState.COMPLETED && (s.qualifiedRestMinutes || s.sleepMinutes))
           .map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+        const adHocNapDurations = adHocNaps.map(s => s.qualifiedRestMinutes ?? 0);
+        // Combine for total rest credit (same as today-summary)
+        const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
 
         const daySchedule = calculateDaySchedule(
           wakeTime,
           schedule,
           timezone,
           transition,
-          napDurations
+          napDurations.length > 0 ? napDurations : undefined
         );
 
         // Calculate ad-hoc bedtime bump (15 min if any ad-hoc nap >= 30 min)
