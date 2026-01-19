@@ -46,9 +46,13 @@ export default function CribTimeCountdown({
     return () => clearInterval(interval);
   }, [session.putDownAt, session.asleepAt]);
 
-  const remainingMinutes = Math.max(0, minimumCribMinutes - elapsedMinutes - 1);
-  const remainingSeconds = remainingMinutes > 0 ? 60 - elapsedSeconds : 0;
-  const isComplete = elapsedMinutes >= minimumCribMinutes;
+  // Calculate total remaining seconds for accurate countdown
+  const totalElapsedSeconds = elapsedMinutes * 60 + elapsedSeconds;
+  const totalTargetSeconds = minimumCribMinutes * 60;
+  const totalRemainingSeconds = Math.max(0, totalTargetSeconds - totalElapsedSeconds);
+  const remainingMinutes = Math.floor(totalRemainingSeconds / 60);
+  const remainingSeconds = totalRemainingSeconds % 60;
+  const isComplete = totalRemainingSeconds === 0;
   const progress = Math.min(100, (elapsedMinutes / minimumCribMinutes) * 100);
 
   // Nap cap tracking (only when baby is asleep)
