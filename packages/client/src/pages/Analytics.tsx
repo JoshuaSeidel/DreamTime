@@ -224,15 +224,23 @@ export default function Analytics() {
     const recentHalf = lastNDays.slice(halfPoint);
     const previousHalf = lastNDays.slice(0, halfPoint);
 
-    const recentSleep = recentHalf.reduce((sum, d) => {
-      const mins = (grouped[d] || []).reduce((s, sess) => s + (sess.sleepMinutes || 0), 0);
-      return sum + mins;
-    }, 0);
+    let recentSleep = 0;
+    let recentDaysWithData = 0;
+    for (const d of recentHalf) {
+      const daySessions = grouped[d] || [];
+      const mins = daySessions.reduce((s, sess) => s + (sess.sleepMinutes || 0), 0);
+      recentSleep += mins;
+      if (mins > 0) recentDaysWithData++;
+    }
 
-    const previousSleep = previousHalf.reduce((sum, d) => {
-      const mins = (grouped[d] || []).reduce((s, sess) => s + (sess.sleepMinutes || 0), 0);
-      return sum + mins;
-    }, 0);
+    let previousSleep = 0;
+    let previousDaysWithData = 0;
+    for (const d of previousHalf) {
+      const daySessions = grouped[d] || [];
+      const mins = daySessions.reduce((s, sess) => s + (sess.sleepMinutes || 0), 0);
+      previousSleep += mins;
+      if (mins > 0) previousDaysWithData++;
+    }
 
     return {
       dailySleep,
@@ -243,7 +251,9 @@ export default function Analytics() {
       maxAvgNap: Math.max(...avgNapDurations.map(d => d.value), 30),
       recentSleep,
       previousSleep,
-      avgDailySleep: recentSleep / recentHalf.length,
+      recentDaysWithData,
+      previousDaysWithData,
+      avgDailySleep: recentDaysWithData > 0 ? recentSleep / recentDaysWithData : 0,
     };
   }, [sessions, timeRange]);
 
@@ -329,8 +339,8 @@ export default function Analytics() {
                       {(weeklyData.avgDailySleep / 60).toFixed(1)}h
                     </span>
                     <TrendIndicator
-                      current={weeklyData.recentSleep}
-                      previous={weeklyData.previousSleep}
+                      current={weeklyData.recentDaysWithData > 0 ? weeklyData.recentSleep / weeklyData.recentDaysWithData : 0}
+                      previous={weeklyData.previousDaysWithData > 0 ? weeklyData.previousSleep / weeklyData.previousDaysWithData : 0}
                     />
                   </div>
                 </CardContent>
@@ -447,11 +457,17 @@ export default function Analytics() {
                   <div>
                     <h3 className="font-semibold text-primary">Tracking Progress</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {weeklyData.recentSleep > weeklyData.previousSleep
-                        ? 'Sleep time is improving! Keep up the great work.'
-                        : weeklyData.recentSleep < weeklyData.previousSleep
-                        ? 'Sleep time has decreased recently. Check your schedule settings.'
-                        : 'Sleep patterns are stable. Continue with the current routine.'}
+                      {(() => {
+                        const recentAvg = weeklyData.recentDaysWithData > 0 ? weeklyData.recentSleep / weeklyData.recentDaysWithData : 0;
+                        const previousAvg = weeklyData.previousDaysWithData > 0 ? weeklyData.previousSleep / weeklyData.previousDaysWithData : 0;
+                        if (recentAvg > previousAvg * 1.05) {
+                          return 'Sleep time is improving! Keep up the great work.';
+                        } else if (recentAvg < previousAvg * 0.95) {
+                          return 'Sleep time has decreased recently. Check your schedule settings.';
+                        } else {
+                          return 'Sleep patterns are stable. Continue with the current routine.';
+                        }
+                      })()}
                     </p>
                   </div>
                 </div>
