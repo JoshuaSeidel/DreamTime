@@ -69,41 +69,46 @@ function BarChart({
   const showEveryNth = data.length > 14 ? 7 : data.length > 7 ? 2 : 1;
 
   return (
-    <div className="space-y-2">
-      {/* Y-axis scale indicators */}
-      <div className="flex justify-between text-xs text-muted-foreground mb-1">
-        <span>{unit === 'minutes' ? formatMinutes(maxValue) : maxValue}</span>
-        <span>{unit === 'minutes' ? formatMinutes(Math.round(maxValue / 2)) : Math.round(maxValue / 2)}</span>
-        <span>0</span>
-      </div>
-      <div className="flex items-end justify-between gap-0.5 h-32 border-l border-b border-muted pl-1">
-        {data.map((item, i) => {
-          const heightPercent = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
-          return (
-            <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative group">
-              {/* Tooltip on hover */}
-              <div className="absolute bottom-full mb-1 hidden group-hover:block z-10 bg-popover border rounded px-2 py-1 text-xs whitespace-nowrap shadow-lg">
-                <div className="font-medium">{item.fullDate || item.label}</div>
-                <div>{unit === 'minutes' ? formatMinutes(item.value) : item.value}</div>
+    <div className="space-y-1">
+      {/* Chart with Y-axis on left */}
+      <div className="flex">
+        {/* Y-axis labels on left side */}
+        <div className="flex flex-col justify-between text-xs text-muted-foreground pr-2 h-32 text-right w-12 shrink-0">
+          <span>{unit === 'minutes' ? formatMinutes(maxValue) : maxValue}</span>
+          <span>{unit === 'minutes' ? formatMinutes(Math.round(maxValue / 2)) : Math.round(maxValue / 2)}</span>
+          <span>0</span>
+        </div>
+        {/* Bars */}
+        <div className="flex items-end justify-between gap-0.5 h-32 border-l border-b border-muted flex-1">
+          {data.map((item, i) => {
+            const heightPercent = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
+            return (
+              <div key={i} className="flex-1 flex flex-col items-center justify-end h-full relative group">
+                {/* Tooltip on hover */}
+                <div className="absolute bottom-full mb-1 hidden group-hover:block z-10 bg-popover border rounded px-2 py-1 text-xs whitespace-nowrap shadow-lg">
+                  <div className="font-medium">{item.fullDate || item.label}</div>
+                  <div>{unit === 'minutes' ? formatMinutes(item.value) : item.value}</div>
+                </div>
+                <div
+                  className={cn(
+                    'w-full rounded-t transition-all cursor-pointer',
+                    colorClasses[color],
+                    item.highlight && 'opacity-100 ring-2 ring-offset-1 ring-primary',
+                    !item.highlight && 'opacity-70 hover:opacity-90'
+                  )}
+                  style={{
+                    height: `${heightPercent}%`,
+                    minHeight: item.value > 0 ? '4px' : '0',
+                  }}
+                />
               </div>
-              <div
-                className={cn(
-                  'w-full rounded-t transition-all cursor-pointer',
-                  colorClasses[color],
-                  item.highlight && 'opacity-100 ring-2 ring-offset-1 ring-primary',
-                  !item.highlight && 'opacity-70 hover:opacity-90'
-                )}
-                style={{
-                  height: `${heightPercent}%`,
-                  minHeight: item.value > 0 ? '4px' : '0',
-                }}
-              />
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
+      {/* X-axis labels at bottom */}
       {showLabels && (
-        <div className="flex justify-between text-xs text-muted-foreground">
+        <div className="flex text-xs text-muted-foreground pl-12">
           {data.map((item, i) => (
             <span
               key={i}

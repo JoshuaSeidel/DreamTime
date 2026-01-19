@@ -195,24 +195,34 @@ export async function subscribeToPush(accessToken: string): Promise<{
       body: JSON.stringify(subscriptionData),
     });
 
+    const responseData = await response.json();
+    console.log('[Notifications] Subscribe response:', response.status, responseData);
+
     if (!response.ok) {
-      const error = await response.json();
-      console.error('[Notifications] Server error:', error);
-      return { success: false, error: error.error?.message || 'Failed to register subscription' };
+      console.error('[Notifications] Server error:', responseData);
+      return { success: false, error: responseData.error?.message || 'Failed to register subscription' };
     }
 
+    // Small delay to ensure database write completes
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // Verify subscription was saved by checking status
+    console.log('[Notifications] Verifying subscription was saved...');
     const statusResponse = await fetch('/api/notifications/status', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
+    const statusData = await statusResponse.json();
+    console.log('[Notifications] Status response:', statusResponse.status, statusData);
+
     if (statusResponse.ok) {
-      const statusData = await statusResponse.json();
       if (!statusData.data?.hasSubscriptions) {
         console.error('[Notifications] Subscription not saved - status check failed');
-        return { success: false, error: 'Subscription was not saved. Please try again.' };
+        return { success: false, error: 'Subscription was not saved to database. Please try again.' };
       }
       console.log('[Notifications] Verified subscription saved, count:', statusData.data.subscriptionCount);
+    } else {
+      console.error('[Notifications] Status check failed:', statusResponse.status, statusData);
     }
 
     console.log('[Notifications] Successfully subscribed');

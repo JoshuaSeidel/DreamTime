@@ -91,8 +91,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
+        console.log(`[Notifications] Saving subscription for user ${userId}, endpoint: ${subscription.endpoint.substring(0, 60)}...`);
+
         // Upsert the subscription (update if endpoint exists, create if not)
-        await prisma.pushSubscription.upsert({
+        const result = await prisma.pushSubscription.upsert({
           where: { endpoint: subscription.endpoint },
           update: {
             userId,
@@ -111,12 +113,17 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
           },
         });
 
-        console.log(`[Notifications] Subscription saved for user ${userId}`);
+        console.log(`[Notifications] Subscription saved for user ${userId}, id: ${result.id}`);
+
+        // Verify immediately
+        const count = await prisma.pushSubscription.count({ where: { userId } });
+        console.log(`[Notifications] Verified: user ${userId} now has ${count} subscription(s)`);
 
         return reply.send({
           success: true,
           data: {
             message: 'Push subscription registered successfully',
+            subscriptionId: result.id,
           },
         });
       } catch (error) {
@@ -299,13 +306,16 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const userId = request.user.userId;
+      console.log(`[Notifications] Status check for user ${userId}`);
       const count = await getSubscriptionCount(userId);
+      console.log(`[Notifications] User ${userId} has ${count} subscription(s)`);
 
       return reply.send({
         success: true,
         data: {
           subscriptionCount: count,
           hasSubscriptions: count > 0,
+          userId, // Include for debugging
         },
       });
     }
