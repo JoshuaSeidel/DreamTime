@@ -1,6 +1,55 @@
 import webpush from 'web-push';
+import { createSign } from 'crypto';
 import { prisma } from '../config/database.js';
 import { getVapidPublicKey, getVapidPrivateKey, getVapidSubject } from '../config/secrets.js';
+
+// Base64URL encoding helper
+function base64UrlEncode(data: string | Buffer): string {
+  const base64 = typeof data === 'string' ? Buffer.from(data).toString('base64') : data.toString('base64');
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+// Generate VAPID JWT with custom expiration for Apple compatibility
+function generateVapidJwt(audience: string, expirationSeconds: number = 3600): string {
+  const header = { typ: 'JWT', alg: 'ES256' };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    aud: audience,
+    exp: now + expirationSeconds,
+    sub: getVapidSubject(),
+  };
+
+  const headerB64 = base64UrlEncode(JSON.stringify(header));
+  const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+  const unsignedToken = `${headerB64}.${payloadB64}`;
+
+  // Get the private key and create signature
+  const privateKeyBase64Url = getVapidPrivateKey();
+  const privateKeyBuffer = Buffer.from(privateKeyBase64Url, 'base64url');
+
+  // Create the full DER-encoded private key for P-256
+  // ASN.1 structure for PKCS#8 EC private key
+  const privateKeyDer = Buffer.concat([
+    Buffer.from('308141020100301306072a8648ce3d020106082a8648ce3d030107042730250201010420', 'hex'),
+    privateKeyBuffer,
+  ]);
+
+  const sign = createSign('SHA256');
+  sign.update(unsignedToken);
+
+  try {
+    const signature = sign.sign({
+      key: `-----BEGIN PRIVATE KEY-----\n${privateKeyDer.toString('base64')}\n-----END PRIVATE KEY-----`,
+      dsaEncoding: 'ieee-p1363', // Required for ES256
+    });
+
+    return `${unsignedToken}.${base64UrlEncode(signature)}`;
+  } catch {
+    // Fallback: return empty string to use library default
+    console.warn('[NotificationService] Failed to generate custom JWT, falling back to library default');
+    return '';
+  }
+}
 
 // Notification payload types
 export interface NotificationPayload {
@@ -72,6 +121,30 @@ export async function sendNotificationToUser(
 
   for (const sub of subscriptions) {
     try {
+      // Apple's APNS requires JWT expiration within 1 hour
+      // The web-push library uses 12 hours by default which Apple rejects with BadJwtToken
+      const isApple = sub.endpoint.includes('web.push.apple.com');
+      let options: webpush.RequestOptions = {};
+
+      if (isApple) {
+        // Extract the origin from the endpoint URL for the JWT audience
+        const endpointUrl = new URL(sub.endpoint);
+        const audience = endpointUrl.origin;
+
+        // Generate a JWT with 1 hour expiration (Apple's maximum)
+        const jwt = generateVapidJwt(audience, 3600);
+
+        if (jwt) {
+          // Use custom Authorization header with our short-lived JWT
+          options = {
+            headers: {
+              Authorization: `vapid t=${jwt}, k=${getVapidPublicKey()}`,
+            },
+          };
+          console.log('[NotificationService] Using custom short-lived JWT for Apple push');
+        }
+      }
+
       await webpush.sendNotification(
         {
           endpoint: sub.endpoint,
@@ -80,7 +153,8 @@ export async function sendNotificationToUser(
             auth: sub.auth,
           },
         },
-        notificationPayload
+        notificationPayload,
+        options
       );
 
       // Update last used timestamp
