@@ -336,15 +336,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         let sleepDebtMinutes = 0;
         let sleepDebtNote: string | null = null;
 
-        if (completedNaps.length > 0) {
+        if (completedNaps.length > 0 || adHocNaps.length > 0) {
           sleepDebtMinutes = Math.max(0, expectedTotalNapMinutes - totalQualifiedRestMinutes);
           if (sleepDebtMinutes > 0) {
-            // Show both qualified rest and actual sleep in the note for clarity
-            if (totalQualifiedRestMinutes !== totalActualSleepMinutes) {
-              sleepDebtNote = `${sleepDebtMinutes} min debt (${totalActualSleepMinutes}min sleep + ${totalQualifiedRestMinutes - totalActualSleepMinutes}min crib rest credit) - earlier bedtime recommended`;
-            } else {
-              sleepDebtNote = `${sleepDebtMinutes} min less sleep than goal - earlier bedtime recommended`;
-            }
+            // Build a clear explanation of how rest credit was calculated
+            // Goal is expectedTotalNapMinutes, got totalQualifiedRestMinutes, debt is the difference
+            sleepDebtNote = `${sleepDebtMinutes} min short of ${expectedTotalNapMinutes} min goal (got ${totalQualifiedRestMinutes} min credit) - earlier bedtime recommended`;
           }
         }
 

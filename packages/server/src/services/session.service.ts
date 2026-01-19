@@ -168,11 +168,10 @@ function calculateDurations(
 
     // Qualified rest = (awake crib time ÷ 2) + actual sleep
     // This gives "credit" for time spent resting in crib even if not sleeping
-    if (totalMinutes !== null) {
-      const actualSleep = sleepMinutes ?? 0;
-      const awakeCrib = awakeCribMinutes ?? (totalMinutes - actualSleep);
-      qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
-    }
+    // Only count explicitly tracked awake crib time (settling + post-wake)
+    const actualSleep = sleepMinutes ?? 0;
+    const awakeCrib = awakeCribMinutes ?? 0; // Don't guess - only use tracked time
+    qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
   }
 
   return {
