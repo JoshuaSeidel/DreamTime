@@ -103,22 +103,22 @@ function calculateDurations(
 
   // Total time in crib
   if (putDownAt && outOfCribAt) {
-    totalMinutes = Math.round((outOfCribAt.getTime() - putDownAt.getTime()) / 60000);
+    totalMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - putDownAt.getTime()) / 60000));
   }
 
   // Actual sleep time
   if (asleepAt && wokeUpAt) {
-    sleepMinutes = Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000);
+    sleepMinutes = Math.max(0, Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000));
   }
 
   // Settling time (put down to fell asleep)
   if (putDownAt && asleepAt) {
-    settlingMinutes = Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000);
+    settlingMinutes = Math.max(0, Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000));
   }
 
   // Post-wake time (woke up to out of crib)
   if (wokeUpAt && outOfCribAt) {
-    postWakeMinutes = Math.round((outOfCribAt.getTime() - wokeUpAt.getTime()) / 60000);
+    postWakeMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - wokeUpAt.getTime()) / 60000));
   }
 
   // Total awake time in crib

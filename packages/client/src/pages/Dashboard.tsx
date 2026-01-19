@@ -180,7 +180,7 @@ export default function Dashboard() {
               const mins = result.data.sleepMinutes;
               toast.success(
                 'Session complete',
-                mins ? `Total sleep: ${Math.floor(mins / 60)}h ${mins % 60}m` : 'Session recorded'
+                mins && mins > 0 ? `Total sleep: ${Math.floor(mins / 60)}h ${mins % 60}m` : 'Session recorded'
               );
               // Reload to update summary
               loadSessionData();

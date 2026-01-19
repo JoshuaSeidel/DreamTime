@@ -219,7 +219,13 @@ export interface SleepSession {
   asleepAt: string | null;
   wokeUpAt: string | null;
   outOfCribAt: string | null;
+  cryingMinutes: number | null;
+  notes: string | null;
+  totalMinutes: number | null;
   sleepMinutes: number | null;
+  settlingMinutes: number | null;
+  postWakeMinutes: number | null;
+  awakeCribMinutes: number | null;
   qualifiedRestMinutes: number | null;
   createdAt: string;
   updatedAt: string;

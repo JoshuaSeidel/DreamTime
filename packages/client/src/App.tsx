@@ -5,6 +5,7 @@ import { useBiometricStore } from './store/biometricStore';
 import LoadingSpinner from './components/LoadingSpinner';
 import Layout from './components/Layout';
 import BiometricLockScreen from './components/BiometricLockScreen';
+import UpdatePrompt from './components/UpdatePrompt';
 
 // Lazy load pages
 const Login = lazy(() => import('./pages/Login'));
@@ -100,6 +101,9 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
+
+      {/* PWA Update Prompt */}
+      <UpdatePrompt />
     </div>
   );
 }
