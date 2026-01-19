@@ -486,19 +486,7 @@ function calculateBedtime(
     }
   }
 
-  // Apply bounds
-  let earliest = earliestByWakeWindow;
-  let latest = latestByWakeWindow;
-
-  if (isBefore(earliest, bedtimeEarliest)) {
-    earliest = bedtimeEarliest;
-  }
-
-  if (isAfter(latest, bedtimeLatest)) {
-    latest = bedtimeLatest;
-  }
-
-  // Clamp recommended to bounds
+  // Clamp recommended to schedule bounds first
   if (isBefore(recommended, bedtimeEarliest)) {
     recommended = bedtimeEarliest;
     notes.push(`Held to earliest bedtime ${schedule.bedtimeEarliest}`);
@@ -506,6 +494,20 @@ function calculateBedtime(
   if (isAfter(recommended, bedtimeLatest)) {
     recommended = bedtimeLatest;
     notes.push(`Capped at latest bedtime ${schedule.bedtimeLatest}`);
+  }
+
+  // Create a tight 15-minute window centered on recommended time
+  // This matches consultant guidance for precise bedtime targets
+  const WINDOW_HALF_WIDTH = 7; // 7 minutes each side = 14 min window (rounds to ~15)
+  let earliest = addMinutes(recommended, -WINDOW_HALF_WIDTH);
+  let latest = addMinutes(recommended, WINDOW_HALF_WIDTH);
+
+  // Apply schedule bounds to the window
+  if (isBefore(earliest, bedtimeEarliest)) {
+    earliest = bedtimeEarliest;
+  }
+  if (isAfter(latest, bedtimeLatest)) {
+    latest = bedtimeLatest;
   }
 
   // Ensure earliest is not after latest
