@@ -26,6 +26,12 @@ export default function WakeDeadlineCountdown({
       const deadline = new Date();
       deadline.setHours(hours ?? 7, minutes ?? 30, 0, 0);
 
+      // If deadline already passed today (e.g., it's 6pm and deadline is 7:30am),
+      // use tomorrow's deadline since this is for overnight sleep
+      if (deadline.getTime() < now.getTime()) {
+        deadline.setDate(deadline.getDate() + 1);
+      }
+
       const diffMs = deadline.getTime() - now.getTime();
 
       if (diffMs <= 0) {
