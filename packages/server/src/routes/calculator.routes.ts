@@ -191,9 +191,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           wakeTime = nightSession.wokeUpAt;
         }
 
-        // Count completed naps
-        const completedNaps = todaySessions.filter(
-          s => s.sessionType === SessionType.NAP && s.state === SessionState.COMPLETED
+        // Separate scheduled naps from ad-hoc naps (same logic as today-summary)
+        const napSessions = todaySessions.filter(s => s.sessionType === SessionType.NAP);
+        const scheduledNaps = napSessions.filter(s => !s.isAdHoc);
+        const adHocNaps = napSessions.filter(s => s.isAdHoc && s.state === SessionState.COMPLETED);
+
+        // Count completed SCHEDULED naps only (ad-hoc don't count toward nap 1/2)
+        const completedNaps = scheduledNaps.filter(
+          s => s.state === SessionState.COMPLETED
         ).length;
 
         // Check if currently asleep
@@ -201,9 +206,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           s => s.state === SessionState.ASLEEP
         );
 
-        // Calculate day schedule using qualified rest (accounts for awake crib time)
-        const napDurations = todaySessions
-          .filter(s => s.sessionType === SessionType.NAP && (s.qualifiedRestMinutes || s.sleepMinutes))
+        // Calculate day schedule using qualified rest from scheduled naps only
+        // Ad-hoc naps contribute to sleep debt reduction but don't count as nap 1/2
+        const napDurations = scheduledNaps
+          .filter(s => s.state === SessionState.COMPLETED && (s.qualifiedRestMinutes || s.sleepMinutes))
           .map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
 
         const daySchedule = calculateDaySchedule(
@@ -213,6 +219,19 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           transition,
           napDurations
         );
+
+        // Calculate ad-hoc bedtime bump (15 min if any ad-hoc nap >= 30 min)
+        const hasSignificantAdHocNap = adHocNaps.some(s => (s.sleepMinutes ?? 0) >= 30);
+        const adHocBedtimeBumpMinutes = hasSignificantAdHocNap ? 15 : 0;
+
+        // Apply ad-hoc bump to daySchedule bedtime before calculating next action
+        if (adHocBedtimeBumpMinutes > 0) {
+          const bump = adHocBedtimeBumpMinutes * 60000; // Convert to ms
+          daySchedule.bedtime.putDownWindow.earliest = new Date(daySchedule.bedtime.putDownWindow.earliest.getTime() + bump);
+          daySchedule.bedtime.putDownWindow.latest = new Date(daySchedule.bedtime.putDownWindow.latest.getTime() + bump);
+          daySchedule.bedtime.putDownWindow.recommended = new Date(daySchedule.bedtime.putDownWindow.recommended.getTime() + bump);
+          daySchedule.bedtime.notes.push('+15 min bump for ad-hoc nap (30+ min)');
+        }
 
         const nextAction = calculateNextAction(
           new Date(),
