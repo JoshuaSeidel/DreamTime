@@ -234,6 +234,181 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // Get today's detailed recommendation with consultant's logic
+  app.get<{ Params: { childId: string } }>(
+    '/:childId/calculator/today-summary',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Get detailed today\'s recommendation including bedtime calculation based on actual nap data',
+        tags: ['Calculator'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+          },
+          required: ['childId'],
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { childId: string } }>, reply: FastifyReply) => {
+      try {
+        const { userId } = request.user;
+        const { childId } = request.params;
+
+        // Get schedule and today's sessions
+        const [schedule, transition, timezone] = await Promise.all([
+          getActiveSchedule(userId, childId),
+          getActiveTransition(userId, childId),
+          getUserTimezone(userId),
+        ]);
+
+        if (!schedule) {
+          return reply.status(404).send(
+            errorResponse('SCHEDULE_NOT_FOUND', 'No active schedule found')
+          );
+        }
+
+        // Get today's sessions
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const todaySessions = await prisma.sleepSession.findMany({
+          where: {
+            childId,
+            createdAt: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        // Find wake time from night sleep or use schedule default
+        let wakeTime: Date | null = null;
+        const nightSession = todaySessions.find(
+          s => s.sessionType === SessionType.NIGHT_SLEEP && s.wokeUpAt
+        );
+        if (nightSession?.wokeUpAt) {
+          wakeTime = nightSession.wokeUpAt;
+        }
+
+        // Get nap sessions
+        const napSessions = todaySessions.filter(s => s.sessionType === SessionType.NAP);
+        const completedNaps = napSessions.filter(s => s.state === SessionState.COMPLETED);
+        const inProgressNap = napSessions.find(s => s.state === SessionState.ASLEEP || s.state === SessionState.PENDING);
+
+        // Determine current state
+        let currentState: 'awake' | 'asleep' | 'pending' = 'awake';
+        if (todaySessions.some(s => s.state === SessionState.ASLEEP)) {
+          currentState = 'asleep';
+        } else if (todaySessions.some(s => s.state === SessionState.PENDING)) {
+          currentState = 'pending';
+        }
+
+        // Build nap durations for bedtime calculation
+        const napDurations = completedNaps.map(s => s.sleepMinutes ?? 0);
+        const totalNapMinutes = napDurations.reduce((sum, d) => sum + d, 0);
+
+        // Determine schedule type
+        const scheduleType = schedule.type;
+        const isOnOneNapSchedule = scheduleType === 'ONE_NAP' || scheduleType === 'TRANSITION';
+
+        // Calculate expected nap goal
+        const napGoalMinutes = isOnOneNapSchedule ? 90 : 60; // 90 min for 1-nap, 60 min per nap for 2-nap
+        const expectedTotalNapMinutes = isOnOneNapSchedule ? 90 : 120; // Single 90min nap or 2x60min naps
+
+        // Sleep debt calculation
+        let sleepDebtMinutes = 0;
+        let sleepDebtNote: string | null = null;
+
+        if (completedNaps.length > 0) {
+          sleepDebtMinutes = Math.max(0, expectedTotalNapMinutes - totalNapMinutes);
+          if (sleepDebtMinutes > 0) {
+            sleepDebtNote = `${sleepDebtMinutes} min less sleep than goal - earlier bedtime recommended`;
+          }
+        }
+
+        // Calculate recommended bedtime using actual nap data
+        const defaultWakeTime = new Date();
+        defaultWakeTime.setHours(7, 0, 0, 0);
+        const effectiveWakeTime = wakeTime || defaultWakeTime;
+
+        const daySchedule = calculateDaySchedule(
+          effectiveWakeTime,
+          schedule,
+          timezone,
+          transition,
+          napDurations.length > 0 ? napDurations : undefined
+        );
+
+        // Build naps summary
+        const expectedNapCount = isOnOneNapSchedule ? 1 : 2;
+        const naps = [];
+
+        for (let i = 0; i < expectedNapCount; i++) {
+          const napNum = i + 1;
+          const completedNap = completedNaps.find(n => n.napNumber === napNum);
+          const isInProgress = inProgressNap?.napNumber === napNum;
+
+          if (completedNap) {
+            naps.push({
+              napNumber: napNum,
+              duration: completedNap.sleepMinutes,
+              asleepAt: completedNap.asleepAt,
+              wokeUpAt: completedNap.wokeUpAt,
+              status: 'completed' as const,
+            });
+          } else if (isInProgress) {
+            naps.push({
+              napNumber: napNum,
+              duration: null,
+              asleepAt: inProgressNap?.asleepAt || null,
+              wokeUpAt: null,
+              status: 'in_progress' as const,
+            });
+          } else {
+            naps.push({
+              napNumber: napNum,
+              duration: null,
+              asleepAt: null,
+              wokeUpAt: null,
+              status: 'upcoming' as const,
+            });
+          }
+        }
+
+        const response = {
+          wakeTime,
+          currentState,
+          completedNaps: completedNaps.length,
+          naps,
+          totalNapMinutes,
+          napGoalMinutes,
+          recommendedBedtime: daySchedule.bedtime.putDownWindow.recommended,
+          bedtimeWindow: daySchedule.bedtime.putDownWindow,
+          bedtimeNotes: daySchedule.bedtime.notes,
+          sleepDebtMinutes,
+          sleepDebtNote,
+          scheduleType,
+          isOnOneNapSchedule,
+        };
+
+        return reply.send(successResponse(response));
+      } catch (error) {
+        if (error instanceof ScheduleServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
   // Calculate adjusted bedtime based on actual naps
   app.post<{ Params: { childId: string }; Body: CalculateBedtimeInput }>(
     '/:childId/calculator/bedtime',

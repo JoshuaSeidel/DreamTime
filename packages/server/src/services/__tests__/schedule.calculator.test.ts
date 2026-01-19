@@ -231,10 +231,11 @@ describe('Schedule Calculator Service', () => {
         const schedule = createTwoNapSchedule();
         const wakeTime = new Date('2024-01-15T07:00:00-05:00');
 
-        // Both naps were short (30 min each vs expected 210 total)
+        // Both naps were short (30 min each vs 1hr goal per nap = 60min shortfall)
         const result = calculateDaySchedule(wakeTime, schedule, TIMEZONE, null, [30, 30]);
 
-        expect(result.bedtime.notes.some(n => n.includes('sleep debt'))).toBe(true);
+        // 2-nap schedule uses "shortfall" terminology per consultant guidance
+        expect(result.bedtime.notes.some(n => n.includes('shortfall') || n.includes('earlier bedtime'))).toBe(true);
       });
     });
   });
@@ -334,7 +335,7 @@ describe('Schedule Calculator Service', () => {
       const schedule = createTwoNapSchedule();
       const wakeTime = new Date('2024-01-15T07:00:00-05:00');
 
-      // Short naps - only 60 min total
+      // Short naps - only 60 min total (30 min each vs 1hr goal per nap)
       const actualNaps = [
         {
           asleepAt: new Date('2024-01-15T09:00:00-05:00'),
@@ -348,7 +349,8 @@ describe('Schedule Calculator Service', () => {
 
       const result = calculateAdjustedBedtime(wakeTime, schedule, TIMEZONE, actualNaps);
 
-      expect(result.notes.some(n => n.includes('sleep debt'))).toBe(true);
+      // 2-nap schedule uses "shortfall" terminology per consultant guidance
+      expect(result.notes.some(n => n.includes('shortfall') || n.includes('earlier bedtime'))).toBe(true);
     });
 
     it('handles single nap', () => {

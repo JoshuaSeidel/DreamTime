@@ -6,6 +6,7 @@ import SleepTypeDialog from '../components/SleepTypeDialog';
 import CribTimeCountdown from '../components/CribTimeCountdown';
 import WakeDeadlineCountdown from '../components/WakeDeadlineCountdown';
 import AddChildDialog from '../components/AddChildDialog';
+import TodaySummaryCard from '../components/TodaySummaryCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ export default function Dashboard() {
   const [nextAction, setNextAction] = useState<NextActionRecommendation | null>(null);
   const [hasSchedule, setHasSchedule] = useState(false);
   const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
+  const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
 
   // Save selected child to localStorage
   useEffect(() => {
@@ -182,8 +184,9 @@ export default function Dashboard() {
                 'Session complete',
                 mins && mins > 0 ? `Total sleep: ${Math.floor(mins / 60)}h ${mins % 60}m` : 'Session recorded'
               );
-              // Reload to update summary
+              // Reload to update summary and trigger bedtime refresh
               loadSessionData();
+              setSummaryRefreshTrigger(prev => prev + 1);
               break;
           }
         } else {
@@ -393,6 +396,14 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Today's Bedtime Recommendation - Dynamic based on actual nap data */}
+            {hasSchedule && (
+              <TodaySummaryCard
+                childId={selectedChildId}
+                refreshTrigger={summaryRefreshTrigger}
+              />
+            )}
 
             {/* Next Recommendation */}
             <Card className={cn(

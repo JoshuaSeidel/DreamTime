@@ -86,6 +86,21 @@ export async function deleteChild(
   );
 }
 
+export async function updateChild(
+  accessToken: string,
+  childId: string,
+  data: { name?: string; birthDate?: string }
+): Promise<ApiResponse<Child>> {
+  return fetchWithAuth<Child>(
+    `/children/${childId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    },
+    accessToken
+  );
+}
+
 // Caregiver types and API
 export interface CaregiverInfo {
   id: string;
@@ -476,6 +491,46 @@ export async function getNextAction(
 ): Promise<ApiResponse<NextActionRecommendation>> {
   return fetchWithAuth<NextActionRecommendation>(
     `/children/${childId}/calculator/next-action`,
+    { method: 'GET' },
+    accessToken
+  );
+}
+
+// Today's Summary with consultant bedtime logic
+export interface TodaySummaryNap {
+  napNumber: number;
+  duration: number | null;
+  asleepAt: string | null;
+  wokeUpAt: string | null;
+  status: 'completed' | 'in_progress' | 'upcoming';
+}
+
+export interface TodaySummary {
+  wakeTime: string | null;
+  currentState: 'awake' | 'asleep' | 'pending';
+  completedNaps: number;
+  naps: TodaySummaryNap[];
+  totalNapMinutes: number;
+  napGoalMinutes: number;
+  recommendedBedtime: string;
+  bedtimeWindow: {
+    earliest: string;
+    latest: string;
+    recommended: string;
+  };
+  bedtimeNotes: string[];
+  sleepDebtMinutes: number;
+  sleepDebtNote: string | null;
+  scheduleType: string;
+  isOnOneNapSchedule: boolean;
+}
+
+export async function getTodaySummary(
+  accessToken: string,
+  childId: string
+): Promise<ApiResponse<TodaySummary>> {
+  return fetchWithAuth<TodaySummary>(
+    `/children/${childId}/calculator/today-summary`,
     { method: 'GET' },
     accessToken
   );

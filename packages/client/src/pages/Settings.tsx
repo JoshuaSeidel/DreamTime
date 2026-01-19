@@ -3,6 +3,7 @@ import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyR
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
+import EditChildDialog from '../components/EditChildDialog';
 import CaregiverManager from '../components/CaregiverManager';
 import { useToast } from '@/components/ui/toaster';
 import {
@@ -344,19 +345,22 @@ export default function Settings() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => handleDeleteChild(child.id, child.name)}
-                      disabled={deletingChildId === child.id}
-                    >
-                      {deletingChildId === child.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <EditChildDialog child={child} onChildUpdated={loadChildren} />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDeleteChild(child.id, child.name)}
+                        disabled={deletingChildId === child.id}
+                      >
+                        {deletingChildId === child.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
