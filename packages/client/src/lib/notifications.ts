@@ -157,32 +157,27 @@ export async function subscribeToPush(accessToken: string): Promise<{
     // Check for existing subscription
     let subscription = await registration.pushManager.getSubscription();
 
-    // If there's an existing subscription, try to verify it's still valid
-    // If not, unsubscribe and create a new one
+    // Always unsubscribe and create fresh to avoid stale subscriptions
     if (subscription) {
+      console.log('[Notifications] Found existing subscription, unsubscribing to create fresh...');
       try {
-        // Test if the subscription is still valid by checking its endpoint
-        console.log('[Notifications] Found existing subscription, verifying...');
-        // Just use the existing subscription - the server will handle re-registration
-      } catch {
-        console.log('[Notifications] Existing subscription invalid, recreating...');
         await subscription.unsubscribe();
-        subscription = null;
+      } catch (e) {
+        console.warn('[Notifications] Failed to unsubscribe existing:', e);
       }
+      subscription = null;
     }
 
-    if (!subscription) {
-      console.log('[Notifications] Creating new subscription...');
+    console.log('[Notifications] Creating new subscription...');
 
-      // Convert VAPID key to Uint8Array
-      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+    // Convert VAPID key to Uint8Array
+    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
 
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey,
-      });
-      console.log('[Notifications] Subscription created');
-    }
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey,
+    });
+    console.log('[Notifications] Subscription created:', subscription.endpoint);
 
     // Send subscription to server with user agent for debugging
     console.log('[Notifications] Sending subscription to server...');
@@ -204,6 +199,20 @@ export async function subscribeToPush(accessToken: string): Promise<{
       const error = await response.json();
       console.error('[Notifications] Server error:', error);
       return { success: false, error: error.error?.message || 'Failed to register subscription' };
+    }
+
+    // Verify subscription was saved by checking status
+    const statusResponse = await fetch('/api/notifications/status', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (statusResponse.ok) {
+      const statusData = await statusResponse.json();
+      if (!statusData.data?.hasSubscriptions) {
+        console.error('[Notifications] Subscription not saved - status check failed');
+        return { success: false, error: 'Subscription was not saved. Please try again.' };
+      }
+      console.log('[Notifications] Verified subscription saved, count:', statusData.data.subscriptionCount);
     }
 
     console.log('[Notifications] Successfully subscribed');
