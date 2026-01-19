@@ -523,7 +523,8 @@ export interface TodaySummary {
   currentState: 'awake' | 'asleep' | 'pending';
   completedNaps: number;
   naps: TodaySummaryNap[];
-  totalNapMinutes: number;
+  totalNapMinutes: number; // Qualified rest (includes crib time credit)
+  totalActualSleepMinutes: number; // Actual sleep time only
   napGoalMinutes: number;
   recommendedBedtime: string;
   bedtimeWindow: {

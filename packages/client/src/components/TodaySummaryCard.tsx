@@ -164,16 +164,31 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
 
           {/* Total Day Sleep */}
           {hasCompletedNaps && (
-            <div className="flex justify-between items-center pt-2 border-t border-border/50">
-              <span className="text-xs text-muted-foreground">Total Day Sleep</span>
-              <span className={cn(
-                "text-sm font-medium",
-                summary.totalNapMinutes >= (summary.isOnOneNapSchedule ? 90 : 120)
-                  ? "text-green-600 dark:text-green-400"
-                  : "text-muted-foreground"
-              )}>
-                {formatDuration(summary.totalNapMinutes)}
-              </span>
+            <div className="pt-2 border-t border-border/50 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground">Actual Sleep</span>
+                <span className={cn(
+                  "text-sm font-medium",
+                  summary.totalActualSleepMinutes >= (summary.isOnOneNapSchedule ? 90 : 120)
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-muted-foreground"
+                )}>
+                  {formatDuration(summary.totalActualSleepMinutes)}
+                </span>
+              </div>
+              {summary.totalNapMinutes !== summary.totalActualSleepMinutes && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">Qualified Rest</span>
+                  <span className={cn(
+                    "text-sm font-medium",
+                    summary.totalNapMinutes >= (summary.isOnOneNapSchedule ? 90 : 120)
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-muted-foreground"
+                  )}>
+                    {formatDuration(summary.totalNapMinutes)}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

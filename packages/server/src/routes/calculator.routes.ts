@@ -201,10 +201,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           s => s.state === SessionState.ASLEEP
         );
 
-        // Calculate day schedule
+        // Calculate day schedule using qualified rest (accounts for awake crib time)
         const napDurations = todaySessions
-          .filter(s => s.sessionType === SessionType.NAP && s.sleepMinutes)
-          .map(s => s.sleepMinutes!);
+          .filter(s => s.sessionType === SessionType.NAP && (s.qualifiedRestMinutes || s.sleepMinutes))
+          .map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
 
         const daySchedule = calculateDaySchedule(
           wakeTime,
@@ -310,8 +310,13 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         }
 
         // Build nap durations for bedtime calculation
-        const napDurations = completedNaps.map(s => s.sleepMinutes ?? 0);
-        const totalNapMinutes = napDurations.reduce((sum, d) => sum + d, 0);
+        // Use qualifiedRestMinutes which accounts for awake crib time:
+        // Qualified Rest = (Awake Crib Time ÷ 2) + Actual Sleep Time
+        // This gives credit for rest even when baby doesn't sleep
+        const napDurations = completedNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+        const totalQualifiedRestMinutes = napDurations.reduce((sum, d) => sum + d, 0);
+        // Also track actual sleep for display
+        const totalActualSleepMinutes = completedNaps.reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
 
         // Determine schedule type
         const scheduleType = schedule.type;
@@ -321,14 +326,19 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const napGoalMinutes = isOnOneNapSchedule ? 90 : 60; // 90 min for 1-nap, 60 min per nap for 2-nap
         const expectedTotalNapMinutes = isOnOneNapSchedule ? 90 : 120; // Single 90min nap or 2x60min naps
 
-        // Sleep debt calculation
+        // Sleep debt calculation - use qualified rest for debt calculation
         let sleepDebtMinutes = 0;
         let sleepDebtNote: string | null = null;
 
         if (completedNaps.length > 0) {
-          sleepDebtMinutes = Math.max(0, expectedTotalNapMinutes - totalNapMinutes);
+          sleepDebtMinutes = Math.max(0, expectedTotalNapMinutes - totalQualifiedRestMinutes);
           if (sleepDebtMinutes > 0) {
-            sleepDebtNote = `${sleepDebtMinutes} min less sleep than goal - earlier bedtime recommended`;
+            // Show both qualified rest and actual sleep in the note for clarity
+            if (totalQualifiedRestMinutes !== totalActualSleepMinutes) {
+              sleepDebtNote = `${sleepDebtMinutes} min debt (${totalActualSleepMinutes}min sleep + ${totalQualifiedRestMinutes - totalActualSleepMinutes}min crib rest credit) - earlier bedtime recommended`;
+            } else {
+              sleepDebtNote = `${sleepDebtMinutes} min less sleep than goal - earlier bedtime recommended`;
+            }
           }
         }
 
@@ -393,7 +403,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           currentState,
           completedNaps: completedNaps.length,
           naps,
-          totalNapMinutes,
+          totalNapMinutes: totalQualifiedRestMinutes, // Qualified rest for bedtime calculation
+          totalActualSleepMinutes, // Actual sleep time for display
           napGoalMinutes,
           recommendedBedtime: daySchedule.bedtime.putDownWindow.recommended,
           bedtimeWindow: daySchedule.bedtime.putDownWindow,
