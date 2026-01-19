@@ -69,8 +69,24 @@ services:
       DATA_DIR: /app/data
       SECRETS_DIR: /app/data/secrets
 
-      # Internal
+      # -----------------------------------------------------------------------
+      # CLIENT URL (required for WebAuthn/Face ID to work)
+      # -----------------------------------------------------------------------
+      # Set this to the URL users access the app from
+      # Examples:
+      #   - http://dreamtime.local
+      #   - https://dreamtime.yourdomain.com
+      #   - http://192.168.1.100
       CLIENT_URL: ${CLIENT_URL:-http://localhost}
+
+      # -----------------------------------------------------------------------
+      # WEBAUTHN / FACE ID (optional - derived from CLIENT_URL if not set)
+      # -----------------------------------------------------------------------
+      # Only set these if you need to override the auto-detected values
+      # WEBAUTHN_RP_ID: The hostname only (e.g., "dreamtime.example.com")
+      # WEBAUTHN_ORIGIN: Full URL including protocol (e.g., "https://dreamtime.example.com")
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-}
 
     # Folder mappings for Unraid compatibility (no named volumes)
     volumes:

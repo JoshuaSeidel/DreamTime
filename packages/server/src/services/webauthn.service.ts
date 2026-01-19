@@ -13,10 +13,42 @@ import {
 } from '@simplewebauthn/server';
 import { prisma } from '../config/database.js';
 
-// Configuration - should be set via environment variables in production
+// Configuration - set via environment variables in production
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'DreamTime';
-const RP_ID = process.env.WEBAUTHN_RP_ID || 'localhost';
-const ORIGIN = process.env.WEBAUTHN_ORIGIN || 'http://localhost:5173';
+
+// For WebAuthn to work:
+// - RP_ID must be the hostname (e.g., "dreamtime.example.com" or "localhost")
+// - ORIGIN must be the full URL including protocol and port (e.g., "https://dreamtime.example.com")
+// If not set, we'll try to use CLIENT_URL as the source of truth
+function getWebAuthnConfig(): { rpId: string; origin: string } {
+  // Explicit config takes priority
+  if (process.env.WEBAUTHN_RP_ID && process.env.WEBAUTHN_ORIGIN) {
+    return {
+      rpId: process.env.WEBAUTHN_RP_ID,
+      origin: process.env.WEBAUTHN_ORIGIN,
+    };
+  }
+
+  // Try to derive from CLIENT_URL
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  try {
+    const url = new URL(clientUrl);
+    return {
+      rpId: url.hostname,
+      origin: url.origin,
+    };
+  } catch {
+    // Fallback to localhost
+    console.warn('[WebAuthn] Could not parse CLIENT_URL, using localhost defaults');
+    return {
+      rpId: 'localhost',
+      origin: 'http://localhost:5173',
+    };
+  }
+}
+
+const { rpId: RP_ID, origin: ORIGIN } = getWebAuthnConfig();
+console.log('[WebAuthn] Config - RP_ID:', RP_ID, 'ORIGIN:', ORIGIN);
 
 // Challenge expiry in milliseconds (5 minutes)
 const CHALLENGE_EXPIRY_MS = 5 * 60 * 1000;
