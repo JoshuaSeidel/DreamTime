@@ -562,6 +562,7 @@ export interface TodaySummary {
   adHocNaps: TodaySummaryAdHocNap[];
   totalAdHocMinutes: number;
   totalAdHocCreditMinutes: number;
+  adHocBedtimeBumpMinutes: number; // 15 min bump if any ad-hoc nap was 30+ min
   totalNapMinutes: number; // Qualified rest (includes crib time credit)
   totalActualSleepMinutes: number; // Actual sleep time only
   napGoalMinutes: number;

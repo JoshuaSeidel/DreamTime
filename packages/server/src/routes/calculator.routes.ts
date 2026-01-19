@@ -414,6 +414,26 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           qualifiedRestMinutes: s.qualifiedRestMinutes,
         }));
 
+        // Calculate bedtime bump for ad-hoc naps 30+ minutes (max 15 min bump per consultant)
+        // Any ad-hoc nap >= 30 min adds a 15-min bump to bedtime
+        const hasSignificantAdHocNap = adHocNaps.some(s => (s.sleepMinutes ?? 0) >= 30);
+        const adHocBedtimeBumpMinutes = hasSignificantAdHocNap ? 15 : 0;
+
+        // Apply the bump to bedtime recommendations
+        let adjustedRecommendedBedtime = daySchedule.bedtime.putDownWindow.recommended;
+        let adjustedBedtimeWindow = { ...daySchedule.bedtime.putDownWindow };
+        const bedtimeNotesWithBump = [...daySchedule.bedtime.notes];
+
+        if (adHocBedtimeBumpMinutes > 0) {
+          adjustedRecommendedBedtime = new Date(adjustedRecommendedBedtime.getTime() + adHocBedtimeBumpMinutes * 60000);
+          adjustedBedtimeWindow = {
+            earliest: new Date(adjustedBedtimeWindow.earliest.getTime() + adHocBedtimeBumpMinutes * 60000),
+            latest: new Date(adjustedBedtimeWindow.latest.getTime() + adHocBedtimeBumpMinutes * 60000),
+            recommended: adjustedRecommendedBedtime,
+          };
+          bedtimeNotesWithBump.push(`+15 min bump for ad-hoc nap (30+ min)`);
+        }
+
         const response = {
           wakeTime,
           currentState,
@@ -423,12 +443,13 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           adHocNaps: adHocNapsSummary,
           totalAdHocMinutes: adHocActualSleepMinutes,
           totalAdHocCreditMinutes: adHocNapDurations.reduce((sum, d) => sum + d, 0),
+          adHocBedtimeBumpMinutes, // 15 min bump if any ad-hoc nap was 30+ min
           totalNapMinutes: totalQualifiedRestMinutes, // Qualified rest for bedtime calculation
           totalActualSleepMinutes, // Actual sleep time for display
           napGoalMinutes,
-          recommendedBedtime: daySchedule.bedtime.putDownWindow.recommended,
-          bedtimeWindow: daySchedule.bedtime.putDownWindow,
-          bedtimeNotes: daySchedule.bedtime.notes,
+          recommendedBedtime: adjustedRecommendedBedtime,
+          bedtimeWindow: adjustedBedtimeWindow,
+          bedtimeNotes: bedtimeNotesWithBump,
           bedtimeStatus, // 'finalized' when all required naps complete, 'estimated' otherwise
           sleepDebtMinutes,
           sleepDebtNote,
