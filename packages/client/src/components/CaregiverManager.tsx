@@ -68,6 +68,11 @@ function CaregiverRow({
   const [showTitleOptions, setShowTitleOptions] = useState(false);
   const [showRoleOptions, setShowRoleOptions] = useState(false);
 
+  // Sync titleValue when caregiver prop changes (after API updates)
+  useEffect(() => {
+    setTitleValue(caregiver.title || '');
+  }, [caregiver.title]);
+
   const isCurrentUser = caregiver.userId === currentUserId;
   const isPending = caregiver.status === 'PENDING';
 
@@ -432,6 +437,13 @@ export default function CaregiverManager() {
           isActive ? 'Access enabled' : 'Access disabled',
           isActive ? 'Caregiver can now see this child' : 'Caregiver can no longer see this child'
         );
+        // Optimistically update the local state for immediate UI feedback
+        setCaregivers((prev) =>
+          prev.map((c) =>
+            c.userId === caregiverUserId ? { ...c, isActive } : c
+          )
+        );
+        // Also refresh from server to ensure consistency
         loadCaregivers();
       } else {
         toast.error('Action failed', result.error?.message || 'Could not update access');

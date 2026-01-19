@@ -6,6 +6,8 @@ interface BiometricState {
   isEnabled: boolean;
   // Whether the app is currently locked (requires Face ID to unlock)
   isLocked: boolean;
+  // Stored credential ID for biometric verification (base64 encoded)
+  credentialId: string | null;
   // Enable biometric lock
   enableBiometricLock: () => Promise<boolean>;
   // Disable biometric lock
@@ -33,32 +35,53 @@ async function isPlatformAuthenticatorAvailable(): Promise<boolean> {
 }
 
 /**
- * Trigger Face ID / Touch ID verification
- * This uses a dummy WebAuthn challenge just to invoke the biometric prompt
- * No actual credential is created or stored
+ * Convert ArrayBuffer to base64 string for storage
  */
-async function triggerBiometricVerification(): Promise<boolean> {
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i] as number);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Convert base64 string back to ArrayBuffer
+ */
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Create a credential for biometric lock (called once when enabling)
+ * Returns the credential ID to store for later verification
+ */
+async function createBiometricCredential(): Promise<string | null> {
   try {
-    // Create a simple challenge for biometric verification
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
 
-    // Use navigator.credentials.create with a dummy request
-    // This will trigger Face ID/Touch ID without creating a persistent passkey
     const credential = await navigator.credentials.create({
       publicKey: {
         challenge,
         rp: {
-          name: 'DreamTime Session Lock',
+          name: 'DreamTime',
           id: window.location.hostname,
         },
         user: {
-          id: new Uint8Array([1, 2, 3, 4]), // Dummy user ID
+          id: new Uint8Array([1, 2, 3, 4]),
           name: 'session-lock',
-          displayName: 'Session Lock',
+          displayName: 'DreamTime Session Lock',
         },
         pubKeyCredParams: [
           { type: 'public-key', alg: -7 }, // ES256
+          { type: 'public-key', alg: -257 }, // RS256
         ],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
@@ -67,17 +90,46 @@ async function triggerBiometricVerification(): Promise<boolean> {
           requireResidentKey: false,
         },
         timeout: 60000,
-        // Exclude all credentials to prevent actual passkey creation
-        // This makes it a pure biometric check
-        excludeCredentials: [],
       },
     });
 
-    // If we got here, biometric verification succeeded
-    // We don't actually need the credential, just the fact that Face ID passed
+    if (credential && credential instanceof PublicKeyCredential) {
+      // Store the credential ID so we can use it for verification later
+      return arrayBufferToBase64(credential.rawId);
+    }
+    return null;
+  } catch (error) {
+    console.log('[BiometricStore] Failed to create biometric credential:', error);
+    return null;
+  }
+}
+
+/**
+ * Verify with Face ID using stored credential
+ */
+async function verifyWithBiometric(credentialId: string): Promise<boolean> {
+  try {
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+
+    const credential = await navigator.credentials.get({
+      publicKey: {
+        challenge,
+        rpId: window.location.hostname,
+        allowCredentials: [
+          {
+            type: 'public-key',
+            id: base64ToArrayBuffer(credentialId),
+            transports: ['internal'],
+          },
+        ],
+        userVerification: 'required',
+        timeout: 60000,
+      },
+    });
+
     return credential !== null;
   } catch (error) {
-    // User cancelled or biometric failed
     console.log('[BiometricStore] Biometric verification failed:', error);
     return false;
   }
@@ -88,6 +140,7 @@ export const useBiometricStore = create<BiometricState>()(
     (set, get) => ({
       isEnabled: false,
       isLocked: false,
+      credentialId: null,
 
       enableBiometricLock: async () => {
         // Check if biometrics are available
@@ -97,17 +150,17 @@ export const useBiometricStore = create<BiometricState>()(
           return false;
         }
 
-        // Verify with Face ID to confirm the user wants to enable it
-        const verified = await triggerBiometricVerification();
-        if (verified) {
-          set({ isEnabled: true, isLocked: false });
+        // Create a credential for biometric verification
+        const credentialId = await createBiometricCredential();
+        if (credentialId) {
+          set({ isEnabled: true, isLocked: false, credentialId });
           return true;
         }
         return false;
       },
 
       disableBiometricLock: () => {
-        set({ isEnabled: false, isLocked: false });
+        set({ isEnabled: false, isLocked: false, credentialId: null });
       },
 
       lockApp: () => {
@@ -118,13 +171,13 @@ export const useBiometricStore = create<BiometricState>()(
       },
 
       unlockWithBiometric: async () => {
-        const { isEnabled } = get();
-        if (!isEnabled) {
+        const { isEnabled, credentialId } = get();
+        if (!isEnabled || !credentialId) {
           set({ isLocked: false });
           return true;
         }
 
-        const verified = await triggerBiometricVerification();
+        const verified = await verifyWithBiometric(credentialId);
         if (verified) {
           set({ isLocked: false });
           return true;
@@ -134,14 +187,15 @@ export const useBiometricStore = create<BiometricState>()(
     }),
     {
       name: 'dreamtime-biometric',
-      version: 1,
+      version: 2, // Bumped version due to schema change (added credentialId)
       partialize: (state) => ({
         isEnabled: state.isEnabled,
+        credentialId: state.credentialId,
         // Don't persist isLocked - start locked if enabled
       }),
       onRehydrateStorage: () => (state) => {
         // When the store is rehydrated (app starts), lock if enabled
-        if (state?.isEnabled) {
+        if (state?.isEnabled && state?.credentialId) {
           state.isLocked = true;
         }
       },
