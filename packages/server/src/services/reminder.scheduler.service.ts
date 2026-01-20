@@ -28,7 +28,7 @@ const DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES = 15;
 let isRunning = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
-type ReminderType = 'nap1' | 'nap2' | 'bedtime' | 'wake_deadline' | 'nap_cap';
+type ReminderType = 'nap1' | 'nap2' | 'bedtime' | 'wake_deadline_30' | 'wake_deadline_15' | 'nap_cap';
 
 /**
  * Check if we should send a reminder for a specific event
@@ -185,7 +185,7 @@ async function processChildReminders(
     }
   }
 
-  // Check wake deadline for night sleep
+  // Check wake deadline for night sleep - send reminders at 30 and 15 minutes before
   if (currentNightSession?.asleepAt && schedule.mustWakeBy) {
     // Parse mustWakeBy time for today
     const [hours, minutes] = schedule.mustWakeBy.split(':').map(Number);
@@ -197,11 +197,10 @@ async function processChildReminders(
     // Only check if we haven't passed the deadline yet
     if (isBefore(now, mustWakeByTime)) {
       const minutesUntilDeadline = differenceInMinutes(mustWakeByTime, now);
-      const wakeDeadlineMinutes = schedule.wakeDeadlineReminderMinutes ?? DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES;
 
-      // Send alert N minutes before deadline (configurable per schedule)
-      if (minutesUntilDeadline <= wakeDeadlineMinutes) {
-        if (shouldSendReminder(childId, 'wake_deadline', mustWakeByTime, now, wakeDeadlineMinutes)) {
+      // Send 30-minute reminder
+      if (minutesUntilDeadline <= 30 && minutesUntilDeadline > 15) {
+        if (shouldSendReminder(childId, 'wake_deadline_30', mustWakeByTime, now, 30)) {
           for (const caregiver of caregivers) {
             await sendWakeDeadlineAlert(
               caregiver.userId,
@@ -211,8 +210,25 @@ async function processChildReminders(
               childId
             );
           }
-          markReminderSent(childId, 'wake_deadline', mustWakeByTime);
-          console.log(`[ReminderScheduler] Sent wake deadline alert for ${childName} (${minutesUntilDeadline}min remaining)`);
+          markReminderSent(childId, 'wake_deadline_30', mustWakeByTime);
+          console.log(`[ReminderScheduler] Sent 30-min wake deadline alert for ${childName} (${minutesUntilDeadline}min remaining)`);
+        }
+      }
+
+      // Send 15-minute reminder
+      if (minutesUntilDeadline <= 15) {
+        if (shouldSendReminder(childId, 'wake_deadline_15', mustWakeByTime, now, 15)) {
+          for (const caregiver of caregivers) {
+            await sendWakeDeadlineAlert(
+              caregiver.userId,
+              childName,
+              minutesUntilDeadline,
+              schedule.mustWakeBy,
+              childId
+            );
+          }
+          markReminderSent(childId, 'wake_deadline_15', mustWakeByTime);
+          console.log(`[ReminderScheduler] Sent 15-min wake deadline alert for ${childName} (${minutesUntilDeadline}min remaining)`);
         }
       }
     }
