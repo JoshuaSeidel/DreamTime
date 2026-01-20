@@ -33,7 +33,7 @@ export interface DayScheduleRecommendation {
 }
 
 export interface NextActionRecommendation {
-  action: 'NAP' | 'BEDTIME' | 'WAIT';
+  action: 'NAP' | 'BEDTIME' | 'WAIT' | 'WAKE';
   description: string;
   timeWindow: TimeWindow | null;
   napNumber?: number;
@@ -655,12 +655,44 @@ export function calculateNextAction(
   daySchedule: DayScheduleRecommendation,
   completedNaps: number,
   currentlyAsleep: boolean,
-  timezone: string
+  timezone: string,
+  isNightSleep?: boolean,
+  mustWakeBy?: string // HH:mm format
 ): NextActionRecommendation {
   const notes: string[] = [];
 
-  // If child is currently asleep, recommend waiting
+  // If child is currently asleep, check wake deadline first
   if (currentlyAsleep) {
+    // Check if this is night sleep and past wake deadline
+    if (isNightSleep && mustWakeBy) {
+      const [hours, minutes] = mustWakeBy.split(':').map(Number);
+      const wakeDeadline = new Date(currentTime);
+      wakeDeadline.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+
+      // If deadline is in the past today (e.g., it's after 7:30am), check if we're past it
+      if (currentTime >= wakeDeadline) {
+        const minutesPast = differenceInMinutes(currentTime, wakeDeadline);
+        return {
+          action: 'WAKE',
+          description: `Wake deadline passed by ${minutesPast} minutes`,
+          timeWindow: null,
+          notes: ['Wake child now to preserve schedule!'],
+        };
+      } else {
+        // Deadline is coming up today
+        const minutesUntil = differenceInMinutes(wakeDeadline, currentTime);
+        if (minutesUntil <= 30) {
+          return {
+            action: 'WAIT',
+            description: `Child is sleeping - wake by ${mustWakeBy}`,
+            timeWindow: null,
+            minutesUntilEarliest: minutesUntil,
+            notes: [`Wake deadline in ${minutesUntil} minutes`],
+          };
+        }
+      }
+    }
+
     return {
       action: 'WAIT',
       description: 'Child is currently sleeping',

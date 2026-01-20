@@ -201,10 +201,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           s => s.state === SessionState.COMPLETED
         ).length;
 
-        // Check if currently asleep
-        const currentlyAsleep = todaySessions.some(
-          s => s.state === SessionState.ASLEEP
-        );
+        // Check if currently asleep and if it's night sleep
+        const asleepSession = todaySessions.find(s => s.state === SessionState.ASLEEP);
+        const currentlyAsleep = asleepSession !== undefined;
+        const isNightSleep = asleepSession?.sessionType === SessionType.NIGHT_SLEEP;
 
         // Calculate day schedule using qualified rest
         // Scheduled naps count as nap 1/2 for sequence timing
@@ -242,7 +242,9 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           daySchedule,
           completedNaps,
           currentlyAsleep,
-          timezone
+          timezone,
+          isNightSleep,
+          schedule.mustWakeBy ?? undefined
         );
 
         return reply.send(successResponse(nextAction));

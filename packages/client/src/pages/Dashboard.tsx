@@ -480,6 +480,7 @@ export default function Dashboard() {
                     nextAction?.action === 'NAP' && "bg-blue-500/20",
                     nextAction?.action === 'BEDTIME' && "bg-violet-500/20",
                     nextAction?.action === 'WAIT' && "bg-primary/20",
+                    nextAction?.action === 'WAKE' && "bg-red-500/20",
                     !hasSchedule && "bg-muted"
                   )}>
                     <Moon className={cn(
@@ -487,6 +488,7 @@ export default function Dashboard() {
                       nextAction?.action === 'NAP' && "text-blue-500",
                       nextAction?.action === 'BEDTIME' && "text-violet-500",
                       nextAction?.action === 'WAIT' && "text-primary",
+                      nextAction?.action === 'WAKE' && "text-red-500",
                       !hasSchedule && "text-muted-foreground"
                     )} />
                   </div>
@@ -496,11 +498,13 @@ export default function Dashboard() {
                       nextAction?.action === 'NAP' && "text-blue-600 dark:text-blue-400",
                       nextAction?.action === 'BEDTIME' && "text-violet-600 dark:text-violet-400",
                       nextAction?.action === 'WAIT' && "text-primary",
+                      nextAction?.action === 'WAKE' && "text-red-600 dark:text-red-400",
                       !hasSchedule && "text-muted-foreground"
                     )}>
                       {hasSchedule && nextAction ? (
                         nextAction.action === 'NAP' ? `Nap ${nextAction.napNumber}` :
                         nextAction.action === 'BEDTIME' ? 'Bedtime' :
+                        nextAction.action === 'WAKE' ? 'Wake Now!' :
                         'Wait'
                       ) : (
                         'Next Recommendation'

@@ -519,7 +519,7 @@ export interface TimeWindow {
 }
 
 export interface NextActionRecommendation {
-  action: 'NAP' | 'BEDTIME' | 'WAIT';
+  action: 'NAP' | 'BEDTIME' | 'WAIT' | 'WAKE';
   description: string;
   timeWindow: TimeWindow | null;
   napNumber?: number;
