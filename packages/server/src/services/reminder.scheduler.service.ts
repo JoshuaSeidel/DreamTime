@@ -20,9 +20,12 @@ setInterval(() => {
 
 // Configuration
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
-// Default values if schedule doesn't have custom settings (for backwards compatibility)
-const DEFAULT_NAP_REMINDER_MINUTES = 30;
-const DEFAULT_BEDTIME_REMINDER_MINUTES = 30;
+// Default values if schedule doesn't have custom settings
+// Based on consultant's routine recommendations:
+// - Bedtime routine: 15-20 minutes → remind 20 min before
+// - Nap routine: 5-10 minutes → remind 10 min before
+const DEFAULT_NAP_REMINDER_MINUTES = 10;
+const DEFAULT_BEDTIME_REMINDER_MINUTES = 20;
 const DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES = 15;
 
 let isRunning = false;

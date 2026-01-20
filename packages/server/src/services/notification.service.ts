@@ -125,6 +125,7 @@ export async function sendNotificationToUser(
 
 /**
  * Send a bedtime reminder notification
+ * Bedtime routine: 15-20 min (diaper, pajamas, milk, teeth, book, song, sleep)
  */
 export async function sendBedtimeReminder(
   userId: string,
@@ -133,8 +134,8 @@ export async function sendBedtimeReminder(
   childId: string
 ): Promise<void> {
   await sendNotificationToUser(userId, {
-    title: `Bedtime for ${childName}`,
-    body: `It's almost ${bedtime} - time to start the bedtime routine!`,
+    title: `Start Bedtime Routine - ${childName}`,
+    body: `Target bedtime ${bedtime}. Start routine now (15-20 min): diaper, pajamas, milk, teeth, book, song.`,
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     tag: `bedtime-${childId}`,
@@ -149,6 +150,7 @@ export async function sendBedtimeReminder(
 
 /**
  * Send a nap reminder notification
+ * Nap routine: 5-10 min (shortened version of bedtime routine)
  */
 export async function sendNapReminder(
   userId: string,
@@ -158,8 +160,8 @@ export async function sendNapReminder(
   childId: string
 ): Promise<void> {
   await sendNotificationToUser(userId, {
-    title: `Nap ${napNumber} for ${childName}`,
-    body: `It's almost ${napTime} - time for nap ${napNumber}!`,
+    title: `Start Nap ${napNumber} Routine - ${childName}`,
+    body: `Target nap time ${napTime}. Start routine now (5-10 min): diaper, book, song, crib.`,
     icon: '/pwa-192x192.png',
     badge: '/pwa-192x192.png',
     tag: `nap-${childId}-${napNumber}`,
