@@ -57,10 +57,12 @@ export default function Dashboard() {
   }, [selectedChildId]);
 
   // Load active session and today's summary
-  const loadSessionData = useCallback(async () => {
+  const loadSessionData = useCallback(async (showLoading = true) => {
     if (!accessToken || !selectedChildId) return;
 
-    setIsLoading(true);
+    if (showLoading) {
+      setIsLoading(true);
+    }
     try {
       // Get active session
       const activeResult = await getActiveSession(accessToken, selectedChildId);
@@ -116,13 +118,28 @@ export default function Dashboard() {
     } catch (err) {
       console.error('[Dashboard] Failed to load session data:', err);
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [accessToken, selectedChildId]);
 
   useEffect(() => {
     loadSessionData();
   }, [loadSessionData]);
+
+  // Auto-refresh data every 30 seconds for real-time sync across caregivers
+  useEffect(() => {
+    if (!accessToken || !selectedChildId) return;
+
+    const refreshInterval = setInterval(() => {
+      // Silently refresh data in background (don't show loading state)
+      loadSessionData(false);
+      setSummaryRefreshTrigger(prev => prev + 1);
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [accessToken, selectedChildId, loadSessionData]);
 
   // Track pending put_down custom time for the sleep type dialog
   const [pendingPutDownTime, setPendingPutDownTime] = useState<string | null>(null);

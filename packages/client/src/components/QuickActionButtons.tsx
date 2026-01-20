@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Moon, Sun, Baby, LogOut, Clock, Loader2, Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,16 @@ export default function QuickActionButtons({
   const [selectedAction, setSelectedAction] = useState<'put_down' | 'fell_asleep' | 'woke_up' | 'out_of_crib' | null>(null);
   const [customTime, setCustomTime] = useState('');
   const [customDate, setCustomDate] = useState('');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update clock every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const getAvailableActions = () => {
     switch (currentState) {
@@ -161,7 +171,7 @@ export default function QuickActionButtons({
                   title="Click to enter custom time"
                 >
                   <Clock className="w-4 h-4" />
-                  {new Date().toLocaleTimeString([], {
+                  {currentTime.toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
