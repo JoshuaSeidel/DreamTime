@@ -31,7 +31,7 @@ const DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES = 15;
 let isRunning = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
-type ReminderType = 'nap1' | 'nap2' | 'bedtime' | 'wake_deadline_30' | 'wake_deadline_15' | 'nap_cap';
+type ReminderType = 'nap1_30' | 'nap1_15' | 'nap2_30' | 'nap2_15' | 'bedtime_30' | 'bedtime_15' | 'wake_deadline_30' | 'wake_deadline_15' | 'nap_cap';
 
 /**
  * Check if we should send a reminder for a specific event
@@ -253,39 +253,66 @@ async function processChildReminders(
   const napReminderMinutes = schedule.napReminderMinutes ?? DEFAULT_NAP_REMINDER_MINUTES;
   const bedtimeReminderMinutes = schedule.bedtimeReminderMinutes ?? DEFAULT_BEDTIME_REMINDER_MINUTES;
 
-  // Check each nap
+  // Check each nap - send reminders at 30 and 15 minutes before (for 5-10 min routine)
   for (const nap of daySchedule.naps) {
     if (nap.napNumber <= completedNaps) {
       continue; // Already completed
     }
 
-    const napType = `nap${nap.napNumber}` as 'nap1' | 'nap2';
     const napTime = nap.putDownWindow.recommended;
+    const minutesUntilNap = differenceInMinutes(napTime, now);
+    const timeStr = format(toZonedTime(napTime, timezone), 'h:mm a');
 
-    if (shouldSendReminder(childId, napType, napTime, now, napReminderMinutes)) {
-      const timeStr = format(toZonedTime(napTime, timezone), 'h:mm a');
-
-      for (const caregiver of caregivers) {
-        await sendNapReminder(caregiver.userId, childName, nap.napNumber, timeStr, childId);
+    // Send 30-minute nap reminder (start thinking about routine)
+    if (minutesUntilNap <= 30 && minutesUntilNap > 15) {
+      const napType30 = `nap${nap.napNumber}_30` as 'nap1_30' | 'nap2_30';
+      if (shouldSendReminder(childId, napType30, napTime, now, 30)) {
+        for (const caregiver of caregivers) {
+          await sendNapReminder(caregiver.userId, childName, nap.napNumber, timeStr, childId);
+        }
+        markReminderSent(childId, napType30, napTime);
+        console.log(`[ReminderScheduler] Sent 30-min nap ${nap.napNumber} reminder for ${childName}`);
       }
+    }
 
-      markReminderSent(childId, napType, napTime);
-      console.log(`[ReminderScheduler] Sent nap ${nap.napNumber} reminder for ${childName}`);
+    // Send 15-minute nap reminder (start routine now - 5-10 min routine)
+    if (minutesUntilNap <= 15 && minutesUntilNap > 0) {
+      const napType15 = `nap${nap.napNumber}_15` as 'nap1_15' | 'nap2_15';
+      if (shouldSendReminder(childId, napType15, napTime, now, 15)) {
+        for (const caregiver of caregivers) {
+          await sendNapReminder(caregiver.userId, childName, nap.napNumber, timeStr, childId);
+        }
+        markReminderSent(childId, napType15, napTime);
+        console.log(`[ReminderScheduler] Sent 15-min nap ${nap.napNumber} reminder for ${childName}`);
+      }
     }
   }
 
-  // Check bedtime
+  // Check bedtime - send reminders at 30 and 15 minutes before (for 15-20 min routine)
   const bedtime = daySchedule.bedtime.putDownWindow.recommended;
+  const minutesUntilBedtime = differenceInMinutes(bedtime, now);
+  const bedtimeStr = format(toZonedTime(bedtime, timezone), 'h:mm a');
 
-  if (shouldSendReminder(childId, 'bedtime', bedtime, now, bedtimeReminderMinutes)) {
-    const timeStr = format(toZonedTime(bedtime, timezone), 'h:mm a');
-
-    for (const caregiver of caregivers) {
-      await sendBedtimeReminder(caregiver.userId, childName, timeStr, childId);
+  // Send 30-minute bedtime reminder (get ready for routine)
+  if (minutesUntilBedtime <= 30 && minutesUntilBedtime > 15) {
+    if (shouldSendReminder(childId, 'bedtime_30', bedtime, now, 30)) {
+      for (const caregiver of caregivers) {
+        await sendBedtimeReminder(caregiver.userId, childName, bedtimeStr, childId);
+      }
+      markReminderSent(childId, 'bedtime_30', bedtime);
+      console.log(`[ReminderScheduler] Sent 30-min bedtime reminder for ${childName}`);
     }
+  }
 
-    markReminderSent(childId, 'bedtime', bedtime);
-    console.log(`[ReminderScheduler] Sent bedtime reminder for ${childName}`);
+  // Send 15-minute bedtime reminder (start routine now - 15-20 min routine)
+  if (minutesUntilBedtime <= 15 && minutesUntilBedtime > 0) {
+    if (shouldSendReminder(childId, 'bedtime_15', bedtime, now, 15)) {
+      for (const caregiver of caregivers) {
+        await sendBedtimeReminder(caregiver.userId, childName, bedtimeStr, childId);
+      }
+      markReminderSent(childId, 'bedtime_15', bedtime);
+      console.log(`[ReminderScheduler] Sent 15-min bedtime reminder for ${childName}`);
+    }
   }
 }
 
