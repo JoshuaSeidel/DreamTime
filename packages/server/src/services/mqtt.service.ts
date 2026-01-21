@@ -1,4 +1,5 @@
 import mqtt, { MqttClient, IClientOptions } from 'mqtt';
+import net from 'net';
 import { prisma } from '../config/database.js';
 import { SessionState } from '../types/enums.js';
 
@@ -145,7 +146,6 @@ async function publishAllDiscoveryConfigs(): Promise<void> {
 // Test TCP connectivity before MQTT connection
 async function testTcpConnection(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const net = require('net');
     const socket = new net.Socket();
 
     socket.setTimeout(5000);
