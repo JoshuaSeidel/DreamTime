@@ -110,6 +110,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    # Connect to both internal network (for client proxy) and external bridge (for MQTT/LAN)
+    networks:
+      - default
+      - external-bridge
+
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
@@ -140,7 +145,7 @@ services:
 networks:
   default:
     name: dreamtime-network
-    # Enable external access for MQTT and other integrations
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.enable_ip_masquerade: "true"
+  # External bridge network for LAN access (MQTT, etc.)
+  external-bridge:
+    external: true
+    name: bridge
