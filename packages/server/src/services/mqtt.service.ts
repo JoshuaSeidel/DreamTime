@@ -152,8 +152,9 @@ export async function initializeMqtt(): Promise<void> {
   const options: IClientOptions = {
     clientId: `dreamtime-server-${Date.now()}`,
     clean: true,
-    connectTimeout: 4000,
+    connectTimeout: 30000, // 30 seconds - HA can be slow
     reconnectPeriod: 5000,
+    keepalive: 60,
   };
 
   if (MQTT_USERNAME) {
@@ -161,7 +162,10 @@ export async function initializeMqtt(): Promise<void> {
     options.password = MQTT_PASSWORD;
   }
 
+  // Log connection details (hide password)
   console.log(`MQTT: Connecting to ${MQTT_BROKER_URL}...`);
+  console.log(`MQTT: Username: ${MQTT_USERNAME || '(anonymous)'}`);
+  console.log(`MQTT: Password: ${MQTT_PASSWORD ? '(set)' : '(not set)'}`);
 
   client = mqtt.connect(MQTT_BROKER_URL, options);
 
@@ -180,11 +184,17 @@ export async function initializeMqtt(): Promise<void> {
   });
 
   client.on('error', (error) => {
-    // Only log errors periodically to avoid flooding logs during HA reboots
-    const now = Date.now();
-    if (now - lastErrorLog > ERROR_LOG_INTERVAL) {
-      console.warn(`MQTT: Connection error (will auto-retry): ${error.message}`);
-      lastErrorLog = now;
+    // Log all errors during initial connection attempts for debugging
+    if (reconnectAttempts < 3) {
+      console.error(`MQTT: Connection error: ${error.message}`);
+      console.error(`MQTT: Error details:`, error);
+    } else {
+      // Only log errors periodically to avoid flooding logs during HA reboots
+      const now = Date.now();
+      if (now - lastErrorLog > ERROR_LOG_INTERVAL) {
+        console.warn(`MQTT: Connection error (will auto-retry): ${error.message}`);
+        lastErrorLog = now;
+      }
     }
   });
 
