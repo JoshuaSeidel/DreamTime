@@ -17,6 +17,11 @@ let client: MqttClient | null = null;
 // Track connected state
 let isConnected = false;
 
+// Track reconnection attempts to reduce log noise
+let reconnectAttempts = 0;
+let lastErrorLog = 0;
+const ERROR_LOG_INTERVAL = 60000; // Only log errors every 60 seconds
+
 // Session state mapping for MQTT - user-friendly display values
 type MqttSessionState = 'Awake' | 'In Crib' | 'Asleep' | 'Awake in Crib';
 
@@ -52,7 +57,10 @@ function slugify(name: string): string {
 
 // Publish Home Assistant MQTT Discovery config for a child
 async function publishDiscoveryConfig(childId: string, childName: string): Promise<void> {
-  if (!client || !isConnected) return;
+  if (!client || !isConnected) {
+    // Silently skip - broker is down, will republish on reconnect
+    return;
+  }
 
   const slug = slugify(childName);
   const uniqueId = `dreamtime_${slug}_${childId.slice(0, 8)}`;
@@ -159,26 +167,45 @@ export async function initializeMqtt(): Promise<void> {
 
   client.on('connect', async () => {
     isConnected = true;
+    reconnectAttempts = 0;
     console.log('MQTT: Connected successfully');
 
     // Publish HA discovery configs for all children
-    await publishAllDiscoveryConfigs();
-
-    // Subscribe to command topics for all children
-    await subscribeToCommands();
+    try {
+      await publishAllDiscoveryConfigs();
+      await subscribeToCommands();
+    } catch (error) {
+      console.error('MQTT: Error during post-connect setup:', error);
+    }
   });
 
   client.on('error', (error) => {
-    console.error('MQTT: Connection error:', error.message);
+    // Only log errors periodically to avoid flooding logs during HA reboots
+    const now = Date.now();
+    if (now - lastErrorLog > ERROR_LOG_INTERVAL) {
+      console.warn(`MQTT: Connection error (will auto-retry): ${error.message}`);
+      lastErrorLog = now;
+    }
   });
 
   client.on('offline', () => {
     isConnected = false;
-    console.log('MQTT: Offline');
+    // Only log first time going offline, not every retry
+    if (reconnectAttempts === 0) {
+      console.log('MQTT: Offline - will auto-reconnect when broker is available');
+    }
   });
 
   client.on('reconnect', () => {
-    console.log('MQTT: Reconnecting...');
+    reconnectAttempts++;
+    // Only log reconnect attempts periodically
+    if (reconnectAttempts === 1 || reconnectAttempts % 12 === 0) {
+      console.log(`MQTT: Reconnecting... (attempt ${reconnectAttempts})`);
+    }
+  });
+
+  client.on('close', () => {
+    isConnected = false;
   });
 
   client.on('message', handleMessage);
@@ -405,7 +432,10 @@ async function processCommand(childId: string, command: string): Promise<void> {
 
 // Publish current state for a child
 export async function publishState(childId: string, childName?: string): Promise<void> {
-  if (!client || !isConnected) return;
+  if (!client || !isConnected) {
+    // Silently skip - broker is down, state will sync on reconnect
+    return;
+  }
 
   try {
     // Get the child name if not provided
@@ -452,9 +482,17 @@ export async function publishState(childId: string, childName?: string): Promise
 
 // Publish discovery config when a new child is created
 export async function publishChildDiscovery(childId: string, childName: string): Promise<void> {
-  if (!client || !isConnected) return;
-  await publishDiscoveryConfig(childId, childName);
-  await publishState(childId, childName);
+  if (!client || !isConnected) {
+    // Silently skip - will be published on next connect
+    return;
+  }
+  try {
+    await publishDiscoveryConfig(childId, childName);
+    await publishState(childId, childName);
+  } catch (error) {
+    // Don't throw - MQTT is optional, don't break child creation
+    console.warn('MQTT: Failed to publish child discovery (non-critical):', error);
+  }
 }
 
 // Disconnect MQTT client
