@@ -1,0 +1,124 @@
+# =============================================================================
+# DreamTime Lovelace Dashboard Card
+# =============================================================================
+# Add this to your Lovelace dashboard for a quick sleep tracking interface
+# Copy into a Manual Card or use the YAML editor
+# =============================================================================
+
+type: vertical-stack
+cards:
+  # Status Card
+  - type: entities
+    title: Baby Sleep Tracker
+    icon: mdi:baby-face-outline
+    entities:
+      - entity: sensor.dreamtime_baby_sleep_status
+        name: Current Status
+        icon: mdi:sleep
+      - entity: sensor.baby_time_asleep
+        name: Time Asleep
+        icon: mdi:timer
+      - entity: sensor.baby_time_in_crib
+        name: Time In Crib
+        icon: mdi:timer-outline
+
+  # Quick Action Buttons
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: In Crib
+        icon: mdi:bed
+        tap_action:
+          action: call-service
+          service: script.dreamtime_put_down
+        icon_height: 40px
+
+      - type: button
+        name: Asleep
+        icon: mdi:sleep
+        tap_action:
+          action: call-service
+          service: script.dreamtime_fell_asleep
+        icon_height: 40px
+
+  - type: horizontal-stack
+    cards:
+      - type: button
+        name: Woke Up
+        icon: mdi:alarm
+        tap_action:
+          action: call-service
+          service: script.dreamtime_woke_up
+        icon_height: 40px
+
+      - type: button
+        name: Out
+        icon: mdi:baby-carriage
+        tap_action:
+          action: call-service
+          service: script.dreamtime_out_of_crib
+        icon_height: 40px
+
+---
+# =============================================================================
+# Alternative: Mushroom Card Style (requires Mushroom cards HACS integration)
+# =============================================================================
+
+type: vertical-stack
+cards:
+  - type: custom:mushroom-title-card
+    title: Baby Sleep Tracker
+    subtitle: >
+      {% set state = states('sensor.dreamtime_baby_sleep_status') %}
+      {% set asleep_at = state_attr('sensor.dreamtime_baby_sleep_status', 'asleep_at') %}
+      {% if state == 'Asleep' and asleep_at %}
+        {% set duration = (now() - (asleep_at | as_datetime)).total_seconds() / 60 %}
+        Asleep for {{ duration | round(0) }} min
+      {% else %}
+        {{ state }}
+      {% endif %}
+
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: entity
+        entity: sensor.dreamtime_baby_sleep_status
+        icon: mdi:baby-face-outline
+      - type: entity
+        entity: sensor.baby_time_asleep
+        icon: mdi:timer
+
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-template-card
+        primary: In Crib
+        icon: mdi:bed
+        icon_color: blue
+        tap_action:
+          action: call-service
+          service: script.dreamtime_put_down
+
+      - type: custom:mushroom-template-card
+        primary: Asleep
+        icon: mdi:sleep
+        icon_color: purple
+        tap_action:
+          action: call-service
+          service: script.dreamtime_fell_asleep
+
+      - type: custom:mushroom-template-card
+        primary: Woke Up
+        icon: mdi:alarm
+        icon_color: yellow
+        tap_action:
+          action: call-service
+          service: script.dreamtime_woke_up
+
+      - type: custom:mushroom-template-card
+        primary: Out of Crib
+        icon: mdi:baby-carriage
+        icon_color: green
+        tap_action:
+          action: call-service
+          service: script.dreamtime_out_of_crib

@@ -1,0 +1,87 @@
+# =============================================================================
+# DreamTime Home Assistant Configuration
+# =============================================================================
+# Add this to your configuration.yaml or split into separate files
+# Replace CHILD_ID with your actual child ID from DreamTime
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Input Helpers for Voice Commands
+# -----------------------------------------------------------------------------
+# These allow Alexa to trigger sleep tracking actions
+# Create one set per child (duplicate and rename for multiple children)
+
+input_select:
+  # Template - duplicate for each child
+  baby_sleep_action:
+    name: "Baby Sleep Action"
+    options:
+      - "none"
+      - "put_down"
+      - "asleep"
+      - "woke_up"
+      - "out_of_crib"
+    initial: "none"
+    icon: mdi:baby-face-outline
+
+# -----------------------------------------------------------------------------
+# Template Sensors for Display
+# -----------------------------------------------------------------------------
+# These create friendly sensors from MQTT data
+
+template:
+  - sensor:
+      # Template - DreamTime auto-creates these via MQTT Discovery
+      # This is just for reference - you shouldn't need to manually define them
+      #
+      # - name: "Baby Sleep Status"
+      #   unique_id: dreamtime_baby_status
+      #   state: "{{ states('sensor.dreamtime_baby_CHILD_ID') }}"
+      #   attributes:
+      #     child_name: "{{ state_attr('sensor.dreamtime_baby_CHILD_ID', 'child_name') }}"
+      #     session_type: "{{ state_attr('sensor.dreamtime_baby_CHILD_ID', 'session_type') }}"
+      #     put_down_at: "{{ state_attr('sensor.dreamtime_baby_CHILD_ID', 'put_down_at') }}"
+      #     asleep_at: "{{ state_attr('sensor.dreamtime_baby_CHILD_ID', 'asleep_at') }}"
+      #     woke_up_at: "{{ state_attr('sensor.dreamtime_baby_CHILD_ID', 'woke_up_at') }}"
+
+      # Duration sensors (calculate from MQTT data)
+      - name: "Baby Time Asleep"
+        unique_id: baby_time_asleep
+        state: >
+          {% set asleep = state_attr('sensor.dreamtime_baby_sleep_status', 'asleep_at') %}
+          {% if asleep and states('sensor.dreamtime_baby_sleep_status') == 'Asleep' %}
+            {% set duration = (now() - (asleep | as_datetime)).total_seconds() / 60 %}
+            {{ duration | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "min"
+        icon: mdi:timer-outline
+
+      - name: "Baby Time In Crib"
+        unique_id: baby_time_in_crib
+        state: >
+          {% set put_down = state_attr('sensor.dreamtime_baby_sleep_status', 'put_down_at') %}
+          {% if put_down and states('sensor.dreamtime_baby_sleep_status') != 'Awake' %}
+            {% set duration = (now() - (put_down | as_datetime)).total_seconds() / 60 %}
+            {{ duration | round(0) }}
+          {% else %}
+            0
+          {% endif %}
+        unit_of_measurement: "min"
+        icon: mdi:timer-outline
+
+# -----------------------------------------------------------------------------
+# MQTT Configuration (if not using auto-discovery)
+# -----------------------------------------------------------------------------
+# DreamTime uses MQTT auto-discovery, so you typically don't need this
+# Uncomment only if auto-discovery isn't working
+
+# mqtt:
+#   sensor:
+#     - name: "Baby Sleep Status"
+#       unique_id: dreamtime_baby_manual
+#       state_topic: "dreamtime/CHILD_ID/state"
+#       value_template: "{{ value_json.state }}"
+#       json_attributes_topic: "dreamtime/CHILD_ID/state"
+#       icon: mdi:baby-face-outline

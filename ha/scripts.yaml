@@ -1,0 +1,135 @@
+# =============================================================================
+# DreamTime Home Assistant Scripts
+# =============================================================================
+# Add these to your scripts.yaml
+# These scripts can be called from automations, dashboards, or voice commands
+#
+# IMPORTANT: Replace CHILD_ID with your actual child ID from DreamTime
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Sleep Tracking Scripts
+# -----------------------------------------------------------------------------
+
+dreamtime_put_down:
+  alias: "DreamTime: Put Baby Down"
+  description: "Record that baby was put in crib"
+  sequence:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "put_down"
+  mode: single
+  icon: mdi:bed
+
+dreamtime_fell_asleep:
+  alias: "DreamTime: Baby Fell Asleep"
+  description: "Record that baby fell asleep"
+  sequence:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "asleep"
+  mode: single
+  icon: mdi:sleep
+
+dreamtime_woke_up:
+  alias: "DreamTime: Baby Woke Up"
+  description: "Record that baby woke up"
+  sequence:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "woke_up"
+  mode: single
+  icon: mdi:alarm
+
+dreamtime_out_of_crib:
+  alias: "DreamTime: Baby Out of Crib"
+  description: "Record that baby is out of crib"
+  sequence:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "out_of_crib"
+  mode: single
+  icon: mdi:baby-carriage
+
+# -----------------------------------------------------------------------------
+# Status Scripts
+# -----------------------------------------------------------------------------
+
+dreamtime_announce_status:
+  alias: "DreamTime: Announce Sleep Status"
+  description: "Announce baby's current sleep status on Alexa"
+  fields:
+    target_device:
+      description: "Echo device to announce on"
+      example: "media_player.living_room_echo"
+  sequence:
+    - service: notify.alexa_media
+      data:
+        target: "{{ target_device | default('media_player.your_echo_device') }}"
+        data:
+          type: tts
+        message: >
+          {% set state = states('sensor.dreamtime_baby_sleep_status') %}
+          {% set asleep_at = state_attr('sensor.dreamtime_baby_sleep_status', 'asleep_at') %}
+          {% if state == 'Asleep' and asleep_at %}
+            {% set duration = (now() - (asleep_at | as_datetime)).total_seconds() / 60 %}
+            Baby has been asleep for {{ duration | round(0) }} minutes.
+          {% elif state == 'In Crib' %}
+            Baby is in crib, still settling.
+          {% elif state == 'Awake in Crib' %}
+            Baby is awake in the crib.
+          {% else %}
+            Baby is awake and out of crib.
+          {% endif %}
+  mode: single
+  icon: mdi:bullhorn
+
+# -----------------------------------------------------------------------------
+# Quick Actions for Dashboard Buttons
+# -----------------------------------------------------------------------------
+
+dreamtime_start_nap:
+  alias: "DreamTime: Start Nap"
+  description: "Quick action to start a nap (put down + announce)"
+  sequence:
+    - service: script.dreamtime_put_down
+    - delay:
+        seconds: 1
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device
+        data:
+          type: tts
+        message: "Nap started. Good luck!"
+  mode: single
+  icon: mdi:bed-clock
+
+dreamtime_end_nap:
+  alias: "DreamTime: End Nap"
+  description: "Quick action to end a nap (out of crib + announce duration)"
+  sequence:
+    - service: script.dreamtime_out_of_crib
+    - delay:
+        seconds: 2
+    - service: script.dreamtime_announce_status
+  mode: single
+  icon: mdi:bed-empty
+
+# -----------------------------------------------------------------------------
+# Utility Scripts
+# -----------------------------------------------------------------------------
+
+dreamtime_refresh_status:
+  alias: "DreamTime: Refresh Status"
+  description: "Request status update from DreamTime"
+  sequence:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "status"
+  mode: single
+  icon: mdi:refresh

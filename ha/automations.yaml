@@ -1,0 +1,244 @@
+# =============================================================================
+# DreamTime Alexa Voice Command Automations
+# =============================================================================
+# Add these to your automations.yaml
+# These automations translate Alexa voice commands to MQTT messages
+#
+# IMPORTANT: Replace CHILD_ID with your actual child ID from DreamTime
+# You can find this in the DreamTime app or MQTT topics
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Put Down - "Alexa, baby is in crib"
+# -----------------------------------------------------------------------------
+- id: dreamtime_voice_put_down
+  alias: "DreamTime: Baby Put Down"
+  description: "Voice command to record baby put in crib"
+  trigger:
+    # Trigger from input_select change (set by Alexa routine)
+    - platform: state
+      entity_id: input_select.baby_sleep_action
+      to: "put_down"
+    # Direct conversation trigger
+    - platform: conversation
+      command:
+        - "baby is in crib"
+        - "baby in crib"
+        - "put baby down"
+        - "putting baby down"
+        - "baby is going down"
+        - "(the) baby is in (the) crib"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "put_down"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.baby_sleep_action
+      data:
+        option: "none"
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device  # Change to your Echo device
+        data:
+          type: tts
+        message: "Got it. Baby is in the crib."
+  mode: single
+
+# -----------------------------------------------------------------------------
+# Fell Asleep - "Alexa, baby fell asleep"
+# -----------------------------------------------------------------------------
+- id: dreamtime_voice_asleep
+  alias: "DreamTime: Baby Fell Asleep"
+  description: "Voice command to record baby fell asleep"
+  trigger:
+    - platform: state
+      entity_id: input_select.baby_sleep_action
+      to: "asleep"
+    - platform: conversation
+      command:
+        - "baby fell asleep"
+        - "baby is asleep"
+        - "baby sleeping"
+        - "baby is sleeping"
+        - "(the) baby fell asleep"
+        - "(the) baby is asleep"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "asleep"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.baby_sleep_action
+      data:
+        option: "none"
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device
+        data:
+          type: tts
+        message: "Sweet dreams. Recording sleep time."
+  mode: single
+
+# -----------------------------------------------------------------------------
+# Woke Up - "Alexa, baby woke up"
+# -----------------------------------------------------------------------------
+- id: dreamtime_voice_woke_up
+  alias: "DreamTime: Baby Woke Up"
+  description: "Voice command to record baby woke up"
+  trigger:
+    - platform: state
+      entity_id: input_select.baby_sleep_action
+      to: "woke_up"
+    - platform: conversation
+      command:
+        - "baby woke up"
+        - "baby is awake"
+        - "baby awake"
+        - "baby is up"
+        - "(the) baby woke up"
+        - "(the) baby is awake"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "woke_up"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.baby_sleep_action
+      data:
+        option: "none"
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device
+        data:
+          type: tts
+        message: "Baby is awake. Recording wake time."
+  mode: single
+
+# -----------------------------------------------------------------------------
+# Out of Crib - "Alexa, baby is out of crib"
+# -----------------------------------------------------------------------------
+- id: dreamtime_voice_out_of_crib
+  alias: "DreamTime: Baby Out of Crib"
+  description: "Voice command to record baby out of crib"
+  trigger:
+    - platform: state
+      entity_id: input_select.baby_sleep_action
+      to: "out_of_crib"
+    - platform: conversation
+      command:
+        - "baby is out of crib"
+        - "baby out of crib"
+        - "baby is up"
+        - "got the baby"
+        - "picked up baby"
+        - "(the) baby is out of (the) crib"
+  action:
+    - service: mqtt.publish
+      data:
+        topic: "dreamtime/{{ state_attr('sensor.dreamtime_baby_sleep_status', 'child_id') }}/command"
+        payload: "out_of_crib"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.baby_sleep_action
+      data:
+        option: "none"
+    # Calculate and announce sleep duration
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device
+        data:
+          type: tts
+        message: >
+          {% set asleep_at = state_attr('sensor.dreamtime_baby_sleep_status', 'asleep_at') %}
+          {% set woke_up_at = state_attr('sensor.dreamtime_baby_sleep_status', 'woke_up_at') %}
+          {% if asleep_at and woke_up_at %}
+            {% set duration = ((woke_up_at | as_datetime) - (asleep_at | as_datetime)).total_seconds() / 60 %}
+            Baby slept for {{ duration | round(0) }} minutes.
+          {% else %}
+            Sleep session complete.
+          {% endif %}
+  mode: single
+
+# -----------------------------------------------------------------------------
+# Status Check - "Alexa, what's baby's sleep status"
+# -----------------------------------------------------------------------------
+- id: dreamtime_voice_status
+  alias: "DreamTime: Baby Sleep Status"
+  description: "Voice command to check baby's current sleep status"
+  trigger:
+    - platform: conversation
+      command:
+        - "what's baby's sleep status"
+        - "baby sleep status"
+        - "is baby sleeping"
+        - "is the baby sleeping"
+        - "how long has baby been sleeping"
+        - "how long has baby been asleep"
+        - "check on baby"
+  action:
+    - service: notify.alexa_media
+      data:
+        target: media_player.your_echo_device
+        data:
+          type: tts
+        message: >
+          {% set state = states('sensor.dreamtime_baby_sleep_status') %}
+          {% set asleep_at = state_attr('sensor.dreamtime_baby_sleep_status', 'asleep_at') %}
+          {% set put_down = state_attr('sensor.dreamtime_baby_sleep_status', 'put_down_at') %}
+          {% if state == 'Asleep' and asleep_at %}
+            {% set duration = (now() - (asleep_at | as_datetime)).total_seconds() / 60 %}
+            Baby has been asleep for {{ duration | round(0) }} minutes.
+          {% elif state == 'In Crib' and put_down %}
+            {% set duration = (now() - (put_down | as_datetime)).total_seconds() / 60 %}
+            Baby has been in crib for {{ duration | round(0) }} minutes, still settling.
+          {% elif state == 'Awake in Crib' %}
+            Baby is awake in the crib.
+          {% else %}
+            Baby is awake and out of crib.
+          {% endif %}
+  mode: single
+
+# -----------------------------------------------------------------------------
+# Nap Time Reminders (Optional)
+# -----------------------------------------------------------------------------
+- id: dreamtime_nap_reminder
+  alias: "DreamTime: Nap Time Reminder"
+  description: "Remind when it's approaching nap time based on wake windows"
+  trigger:
+    # Trigger every 15 minutes
+    - platform: time_pattern
+      minutes: "/15"
+  condition:
+    # Only remind when baby is awake
+    - condition: state
+      entity_id: sensor.dreamtime_baby_sleep_status
+      state: "Awake"
+    # Only during daytime hours
+    - condition: time
+      after: "07:00:00"
+      before: "18:00:00"
+  action:
+    - choose:
+        # Check if approaching wake window limit
+        - conditions:
+            - condition: template
+              value_template: >
+                {% set woke_up = state_attr('sensor.dreamtime_baby_sleep_status', 'woke_up_at') %}
+                {% if woke_up %}
+                  {% set awake_minutes = (now() - (woke_up | as_datetime)).total_seconds() / 60 %}
+                  {{ awake_minutes >= 120 and awake_minutes < 135 }}
+                {% else %}
+                  false
+                {% endif %}
+          sequence:
+            - service: notify.alexa_media
+              data:
+                target: media_player.your_echo_device
+                data:
+                  type: tts
+                message: "Baby has been awake for 2 hours. Nap time is approaching."
+  mode: single
