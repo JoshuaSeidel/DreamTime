@@ -20,6 +20,12 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
   DATA_DIR: z.string().default('./data'),
+  // MQTT Configuration
+  MQTT_ENABLED: z.string().transform((v) => v === 'true').default('false'),
+  MQTT_BROKER_URL: z.string().default('mqtt://localhost:1883'),
+  MQTT_USERNAME: z.string().optional(),
+  MQTT_PASSWORD: z.string().optional(),
+  MQTT_TOPIC_PREFIX: z.string().default('dreamtime'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -72,4 +78,9 @@ export function logConfig(): void {
   console.log(`  DB_TYPE: ${env.DB_TYPE}`);
   console.log(`  DATABASE_URL: ${env.DB_TYPE === 'sqlite' ? env.DATABASE_URL : '[hidden]'}`);
   console.log(`  DATA_DIR: ${env.DATA_DIR}`);
+  console.log(`  MQTT_ENABLED: ${env.MQTT_ENABLED}`);
+  if (env.MQTT_ENABLED) {
+    console.log(`  MQTT_BROKER_URL: ${env.MQTT_BROKER_URL}`);
+    console.log(`  MQTT_TOPIC_PREFIX: ${env.MQTT_TOPIC_PREFIX}`);
+  }
 }

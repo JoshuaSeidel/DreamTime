@@ -8,6 +8,7 @@ import { registerSwagger } from './plugins/swagger.js';
 import { registerErrorHandler } from './plugins/errorHandler.js';
 import { registerRoutes } from './routes/index.js';
 import { startReminderScheduler, stopReminderScheduler } from './services/reminder.scheduler.service.js';
+import { initializeMqtt, disconnectMqtt } from './services/mqtt.service.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -53,12 +54,16 @@ async function start() {
   // Start the reminder scheduler for push notifications
   startReminderScheduler();
 
+  // Initialize MQTT for Home Assistant integration
+  await initializeMqtt();
+
   // Graceful shutdown
   const signals = ['SIGINT', 'SIGTERM'] as const;
   signals.forEach((signal) => {
     process.on(signal, async () => {
       console.log(`Received ${signal}, shutting down...`);
       stopReminderScheduler();
+      await disconnectMqtt();
       await app.close();
       await disconnectDatabase();
       process.exit(0);

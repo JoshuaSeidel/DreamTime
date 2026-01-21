@@ -88,6 +88,17 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-}
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-}
 
+      # -----------------------------------------------------------------------
+      # MQTT / HOME ASSISTANT INTEGRATION (optional)
+      # -----------------------------------------------------------------------
+      # Enable MQTT for Home Assistant voice control via Alexa
+      # Requires a Mosquitto MQTT broker (included below or external)
+      MQTT_ENABLED: ${MQTT_ENABLED:-false}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://mosquitto:1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TOPIC_PREFIX: ${MQTT_TOPIC_PREFIX:-dreamtime}
+
     # Folder mappings for Unraid compatibility (no named volumes)
     volumes:
       - ./data:/app/data

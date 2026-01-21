@@ -22,6 +22,7 @@ import {
   SessionServiceError,
 } from '../services/session.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
+import { publishState, isMqttEnabled } from '../services/mqtt.service.js';
 
 export async function sessionRoutes(app: FastifyInstance): Promise<void> {
   // List sessions with pagination and filtering
@@ -257,6 +258,13 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
 
         const session = await createSession(userId, childId, input);
 
+        // Publish state change to MQTT for Home Assistant
+        if (isMqttEnabled()) {
+          publishState(childId).catch((err) => {
+            request.log.error('Failed to publish MQTT state:', err);
+          });
+        }
+
         return reply.status(201).send(successResponse(session));
       } catch (error) {
         if (error instanceof SessionServiceError) {
@@ -311,6 +319,13 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
 
         const session = await updateSession(userId, childId, sessionId, input);
 
+        // Publish state change to MQTT for Home Assistant
+        if (isMqttEnabled()) {
+          publishState(childId).catch((err) => {
+            request.log.error('Failed to publish MQTT state:', err);
+          });
+        }
+
         return reply.send(successResponse(session));
       } catch (error) {
         if (error instanceof SessionServiceError) {
@@ -364,6 +379,13 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const input = createAdHocSessionSchema.parse(request.body);
 
         const session = await createAdHocSession(userId, childId, input);
+
+        // Publish state change to MQTT for Home Assistant
+        if (isMqttEnabled()) {
+          publishState(childId).catch((err) => {
+            request.log.error('Failed to publish MQTT state:', err);
+          });
+        }
 
         return reply.status(201).send(successResponse(session));
       } catch (error) {
@@ -445,6 +467,13 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const { childId, sessionId } = request.params;
 
         await deleteSession(userId, childId, sessionId);
+
+        // Publish state change to MQTT for Home Assistant
+        if (isMqttEnabled()) {
+          publishState(childId).catch((err) => {
+            request.log.error('Failed to publish MQTT state:', err);
+          });
+        }
 
         return reply.send(successResponse({ message: 'Session deleted successfully' }));
       } catch (error) {
