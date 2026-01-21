@@ -181,7 +181,7 @@ export async function initializeMqtt(): Promise<void> {
 
   // Parse broker URL to get host and port
   const urlMatch = MQTT_BROKER_URL.match(/mqtt:\/\/([^:]+):?(\d+)?/);
-  if (urlMatch) {
+  if (urlMatch && urlMatch[1]) {
     const host = urlMatch[1];
     const port = parseInt(urlMatch[2] || '1883', 10);
     console.log(`MQTT: Testing TCP connectivity to ${host}:${port}...`);
