@@ -1,0 +1,177 @@
+# =============================================================================
+# DreamTime - Unraid Docker Compose Configuration
+# =============================================================================
+# This configuration is optimized for Unraid with:
+# - macvlan networking for LAN access (MQTT, etc.)
+# - Pre-built images from GitHub Container Registry
+# - External network support for reverse proxies and databases
+#
+# PREREQUISITES:
+# 1. Create a macvlan network for LAN access (see instructions below)
+# 2. Create or identify external networks (swag, postgresql, etc.)
+# 3. Configure environment variables in .env file or Unraid template
+#
+# MACVLAN SETUP:
+# The macvlan network allows containers to have their own IP on your LAN.
+# This is required for MQTT connectivity to Home Assistant.
+#
+# Option 1: Let docker-compose create it (defined in networks section below)
+# Option 2: Create manually:
+#   docker network create -d macvlan \
+#     --subnet=192.168.6.0/24 \
+#     --ip-range=192.168.6.240/28 \
+#     --gateway=192.168.6.1 \
+#     -o parent=br0 \
+#     lan
+#
+# Adjust subnet, ip-range, and parent interface for your network.
+# Common parent interfaces on Unraid: br0, eth0, bond0
+# For VLANs: br0.2, eth0.10, etc.
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API Server
+  # ---------------------------------------------------------------------------
+  server:
+    image: ghcr.io/joshuaseidel/dreamtime/server:latest
+    container_name: dreamtime-server
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # -----------------------------------------------------------------------
+      # DATABASE CONFIGURATION
+      # -----------------------------------------------------------------------
+      # PostgreSQL is recommended for Unraid (use the official PostgreSQL container)
+      DB_TYPE: postgresql
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@postgresql:5432/dreamtime}
+
+      # -----------------------------------------------------------------------
+      # AUTHENTICATION
+      # -----------------------------------------------------------------------
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+
+      # -----------------------------------------------------------------------
+      # PUSH NOTIFICATIONS
+      # -----------------------------------------------------------------------
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
+
+      # -----------------------------------------------------------------------
+      # DATA STORAGE
+      # -----------------------------------------------------------------------
+      DATA_DIR: /app/data
+      SECRETS_DIR: /app/data/secrets
+
+      # -----------------------------------------------------------------------
+      # CLIENT URL (required for WebAuthn/Face ID)
+      # -----------------------------------------------------------------------
+      # Set to your reverse proxy URL or direct access URL
+      CLIENT_URL: ${CLIENT_URL:-https://dreamtime.example.com}
+
+      # -----------------------------------------------------------------------
+      # MQTT / HOME ASSISTANT INTEGRATION
+      # -----------------------------------------------------------------------
+      # Enable MQTT for Home Assistant voice control via Alexa
+      # The server needs LAN access to reach your MQTT broker
+      MQTT_ENABLED: ${MQTT_ENABLED:-false}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL:-mqtt://192.168.1.100:1883}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_TOPIC_PREFIX: ${MQTT_TOPIC_PREFIX:-dreamtime}
+
+    volumes:
+      # Map to your Unraid appdata location
+      - /mnt/user/appdata/dreamtime/data:/app/data
+
+    networks:
+      # Internal network for client communication
+      dreamtime-network:
+      # External PostgreSQL network (if using separate PostgreSQL container)
+      psql:
+      # macvlan for LAN access (MQTT, etc.)
+      # Assign a static IP within your ip-range
+      lan:
+        ipv4_address: ${SERVER_LAN_IP:-192.168.6.241}
+
+    # Optional: Expose port directly (not needed if using reverse proxy)
+    ports:
+      - "${SERVER_PORT:-3107}:3000"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Frontend Client
+  # ---------------------------------------------------------------------------
+  client:
+    image: ghcr.io/joshuaseidel/dreamtime/client:latest
+    container_name: dreamtime-client
+    pull_policy: always
+    restart: unless-stopped
+
+    networks:
+      # Internal network to reach server
+      - dreamtime-network
+      # Reverse proxy network (SWAG, Nginx Proxy Manager, etc.)
+      - swag
+
+    ports:
+      - "${CLIENT_PORT:-3106}:80"
+
+    depends_on:
+      server:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  # Internal network for server-client communication
+  dreamtime-network:
+    name: dreamtime-network
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
+
+  # macvlan network for LAN access
+  # Adjust these settings for your network:
+  # - subnet: Your LAN subnet (e.g., 192.168.1.0/24)
+  # - ip_range: Range of IPs for containers (pick unused range)
+  # - gateway: Your router IP
+  # - parent: Your network interface (br0, eth0, bond0, or VLAN like br0.2)
+  lan:
+    driver: macvlan
+    driver_opts:
+      parent: ${LAN_PARENT_INTERFACE:-br0}
+    ipam:
+      config:
+        - subnet: ${LAN_SUBNET:-192.168.6.0/24}
+          ip_range: ${LAN_IP_RANGE:-192.168.6.240/28}
+          gateway: ${LAN_GATEWAY:-192.168.6.1}
+
+  # External network for reverse proxy (SWAG, Nginx Proxy Manager, etc.)
+  # Create this network first or use your existing proxy network
+  swag:
+    external: true
+
+  # External network for PostgreSQL
+  # Create this network first or use your existing database network
+  psql:
+    external: true

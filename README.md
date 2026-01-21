@@ -145,6 +145,8 @@ See `docs/api-spec.yaml` for OpenAPI specification.
 
 ## Getting Started
 
+### Development Setup
+
 ```bash
 # Clone and install
 git clone <repo>
@@ -165,6 +167,45 @@ npm run dev
 # Run with Docker
 docker-compose up -d
 ```
+
+### Production Deployment (Unraid)
+
+For Unraid users, see the detailed guide: **[docs/unraid-setup.md](docs/unraid-setup.md)**
+
+Quick start:
+```bash
+# Create directory
+mkdir -p /mnt/user/appdata/dreamtime
+
+# Download Unraid-specific compose file
+cd /mnt/user/appdata/dreamtime
+wget https://raw.githubusercontent.com/JoshuaSeidel/DreamTime/main/docker-compose.unraid.yml
+wget https://raw.githubusercontent.com/JoshuaSeidel/DreamTime/main/.env.unraid.example -O .env
+
+# Configure .env with your settings, then:
+docker-compose -f docker-compose.unraid.yml up -d
+```
+
+Key Unraid features:
+- **macvlan networking** for LAN access (MQTT)
+- **Pre-built images** from GitHub Container Registry
+- **External networks** for PostgreSQL and reverse proxy
+
+## Home Assistant Integration
+
+DreamTime integrates with Home Assistant for Alexa voice control:
+
+```
+"Alexa, tell Home Assistant baby is in crib"
+"Alexa, tell Home Assistant baby fell asleep"
+"Alexa, tell Home Assistant baby woke up"
+"Alexa, tell Home Assistant baby is out of crib"
+```
+
+See **[ha/README.md](ha/README.md)** for setup instructions including:
+- MQTT configuration
+- Voice command automations
+- Dashboard cards
 
 ## Project Structure
 
