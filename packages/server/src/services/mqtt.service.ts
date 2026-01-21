@@ -142,11 +142,54 @@ async function publishAllDiscoveryConfigs(): Promise<void> {
   }
 }
 
+// Test TCP connectivity before MQTT connection
+async function testTcpConnection(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const socket = new net.Socket();
+
+    socket.setTimeout(5000);
+
+    socket.on('connect', () => {
+      console.log(`MQTT: TCP connection to ${host}:${port} successful`);
+      socket.destroy();
+      resolve(true);
+    });
+
+    socket.on('timeout', () => {
+      console.error(`MQTT: TCP connection to ${host}:${port} timed out`);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.on('error', (err: Error) => {
+      console.error(`MQTT: TCP connection to ${host}:${port} failed: ${err.message}`);
+      socket.destroy();
+      resolve(false);
+    });
+
+    socket.connect(port, host);
+  });
+}
+
 // Initialize MQTT connection
 export async function initializeMqtt(): Promise<void> {
   if (!MQTT_ENABLED) {
     console.log('MQTT: Disabled (set MQTT_ENABLED=true to enable)');
     return;
+  }
+
+  // Parse broker URL to get host and port
+  const urlMatch = MQTT_BROKER_URL.match(/mqtt:\/\/([^:]+):?(\d+)?/);
+  if (urlMatch) {
+    const host = urlMatch[1];
+    const port = parseInt(urlMatch[2] || '1883', 10);
+    console.log(`MQTT: Testing TCP connectivity to ${host}:${port}...`);
+    const tcpOk = await testTcpConnection(host, port);
+    if (!tcpOk) {
+      console.error('MQTT: Cannot reach broker. Check network connectivity.');
+      console.error('MQTT: Will continue trying in background...');
+    }
   }
 
   const options: IClientOptions = {
