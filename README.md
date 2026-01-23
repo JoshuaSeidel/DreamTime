@@ -1,199 +1,145 @@
-# Baby Sleep Tracker - DreamTime
+<img src="images/logo.svg" alt="DreamTime Logo" width="48" height="48" align="left" style="margin-right: 12px;">
 
-A Progressive Web App (PWA) for tracking baby sleep schedules, naps, and sleep training progress. Designed to help parents follow sleep consultant guidance and transition between sleep schedules.
+# DreamTime
 
-## Project Overview
+A Progressive Web App for tracking baby sleep schedules, designed to help parents follow sleep consultant guidance and manage nap transitions.
 
-DreamTime helps parents:
-- Track nap times, bedtimes, wake times with one-tap recording
-- Follow sleep training schedules (Cry It Out, Ferber, etc.)
-- Calculate optimal nap and bedtime based on wake time
-- Handle the 2-to-1 nap transition with guided progression
-- Share child profiles between multiple caregivers
-- Get notifications/reminders for upcoming sleep times
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="images/Home.jpg" alt="Home Screen" width="200">
+  <img src="images/History.jpg" alt="History" width="200">
+  <img src="images/Analytics.jpg" alt="Analytics" width="200">
+  <img src="images/Schedule.jpg" alt="Schedule" width="200">
+</p>
+
+## Features
+
+### Sleep Tracking
+- One-tap recording: Put Down, Fell Asleep, Woke Up, Out of Crib
+- Real-time status display showing current sleep state
+- Ad-hoc nap logging for car seats, strollers, and carriers
+- Timestamp editing for corrections
+- Session notes and history
+
+### Schedule Management
+- Configurable sleep schedules: 1-nap, 2-nap, 3-nap
+- Wake window calculations with min/max ranges
+- Day sleep caps and bedtime goals
+- Guided 2-to-1 nap transition over 4-6 weeks
+- Crib 90 rule enforcement during transitions
+
+### Analytics
+- Daily, weekly, and monthly sleep totals
+- Average nap length trends
+- Sleep pattern visualization
+- Comparative metrics with percentage changes
+
+### Multi-Caregiver Support
+- Share child profiles between caregivers
+- Role-based permissions: Admin, Caregiver, Viewer
+- Email invitations with secure acceptance flow
+- Activity tracking by caregiver
+
+### PWA Capabilities
+- Install to home screen on iOS and Android
+- Offline support with background sync
+- Push notifications for sleep reminders
+- Face ID and Touch ID authentication via WebAuthn
+
+### Home Assistant Integration
+- MQTT connectivity for voice control
+- Alexa commands via Home Assistant automations
+- Auto-discovery of entities per child
+- Real-time state synchronization
 
 ## Tech Stack
 
 ### Backend
-- **Runtime**: Node.js with TypeScript
-- **Framework**: Express.js or Fastify
-- **Database**: PostgreSQL (primary) with SQLite support for development
+- **Runtime**: Node.js 20+ with TypeScript
+- **Framework**: Fastify with Zod validation
+- **Database**: PostgreSQL (production) or SQLite (development)
 - **ORM**: Prisma
-- **Authentication**: JWT with refresh tokens
-- **API**: RESTful with OpenAPI/Swagger documentation
+- **Authentication**: JWT with refresh tokens, WebAuthn for biometrics
 
 ### Frontend
-- **Framework**: React 18+ with TypeScript
-- **State Management**: Zustand or React Query
-- **UI Components**: Tailwind CSS + shadcn/ui
-- **PWA**: Vite PWA plugin with service workers
-- **Time Handling**: date-fns or dayjs (timezone aware)
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite with PWA plugin
+- **UI Components**: Tailwind CSS with shadcn/ui
+- **State Management**: Zustand
+- **Charts**: Recharts
 
 ### Infrastructure
-- **Containerization**: Docker + Docker Compose
-- **Development**: Hot reload, seed data, test utilities
+- **Containerization**: Docker with multi-stage builds
+- **CI/CD**: GitHub Actions with GHCR publishing
+- **Reverse Proxy**: Nginx
 
-## Core Features
+## Installation
 
-### 1. User Management
-- Email/password registration and login
-- Password reset via email
-- User profiles with timezone settings
-- Session management (multiple devices)
-
-### 2. Child Management
-- Add/edit child profiles (name, birthdate, photo)
-- Share children between caregivers (invite via email/link)
-- Role-based permissions (admin, caregiver, view-only)
-- Multiple children support
-
-### 3. Sleep Schedule Configuration
-- Import schedule from sleep consultant plans
-- Configure nap schedule (1-nap, 2-nap, 3-nap)
-- Set wake windows, sleep caps, earliest/latest times
-- Bedtime range configuration
-- Track schedule transitions (2-to-1 nap transition)
-
-### 4. Sleep Tracking
-- One-tap buttons: "Put Down", "Fell Asleep", "Woke Up", "Out of Crib"
-- Track crying duration (for CIO method)
-- Notes field for each sleep session
-- Edit historical entries
-- Auto-calculate sleep duration
-
-### 5. Schedule Calculator
-- Based on wake time, calculate:
-  - Optimal nap 1 start time
-  - Optimal nap 2 start time (if applicable)
-  - Recommended bedtime
-- Account for sleep debt (poor naps = earlier bedtime)
-- Support crib hour/crib 90 rules
-- Handle transition schedules
-
-### 6. Analytics & Insights
-- Daily/weekly sleep totals
-- Average sleep duration trends
-- Nap length progression
-- Night waking frequency
-- Schedule adherence tracking
-
-### 7. PWA Features
-- Offline support (queue actions when offline)
-- Push notifications for sleep reminders
-- Install to home screen
-- Background sync
-
-## Database Schema
-
-See `prisma/schema.prisma` for complete schema.
-
-### Key Models:
-- **User**: Account information, timezone
-- **Child**: Baby profiles
-- **ChildCaregiver**: Many-to-many relationship with roles
-- **SleepSchedule**: Schedule configuration
-- **SleepSession**: Individual sleep tracking entries
-- **ScheduleTransition**: Track 2-to-1 nap transitions
-
-## API Endpoints
-
-See `docs/api-spec.yaml` for OpenAPI specification.
-
-### Auth
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password`
-
-### Users
-- `GET /api/users/me`
-- `PATCH /api/users/me`
-- `DELETE /api/users/me`
-
-### Children
-- `GET /api/children`
-- `POST /api/children`
-- `GET /api/children/:id`
-- `PATCH /api/children/:id`
-- `DELETE /api/children/:id`
-- `POST /api/children/:id/share`
-- `DELETE /api/children/:id/caregivers/:userId`
-
-### Sleep Schedules
-- `GET /api/children/:id/schedule`
-- `PUT /api/children/:id/schedule`
-- `POST /api/children/:id/schedule/transition` (start 2-to-1 transition)
-- `PATCH /api/children/:id/schedule/transition` (progress transition)
-
-### Sleep Sessions
-- `GET /api/children/:id/sessions`
-- `POST /api/children/:id/sessions`
-- `GET /api/children/:id/sessions/:sessionId`
-- `PATCH /api/children/:id/sessions/:sessionId`
-- `DELETE /api/children/:id/sessions/:sessionId`
-
-### Calculator
-- `GET /api/children/:id/calculate?wakeTime=HH:mm`
-- `GET /api/children/:id/bedtime?nap1End=HH:mm&nap2End=HH:mm`
-
-### Analytics
-- `GET /api/children/:id/analytics/daily?date=YYYY-MM-DD`
-- `GET /api/children/:id/analytics/weekly?week=YYYY-Www`
-- `GET /api/children/:id/analytics/trends?range=30d`
-
-## Getting Started
-
-### Development Setup
+### Development
 
 ```bash
-# Clone and install
-git clone <repo>
-cd baby-sleep-tracker
+# Clone repository
+git clone https://github.com/JoshuaSeidel/DreamTime.git
+cd DreamTime
+
+# Install dependencies
 npm install
 
 # Setup environment
 cp .env.example .env
-# Edit .env with your database URL and secrets
 
-# Setup database
-npx prisma migrate dev
-npx prisma db seed
+# Run database migrations
+npm run db:migrate
 
-# Run development server
+# Start development server
 npm run dev
+```
 
-# Run with Docker
+The app will be available at `http://localhost:5173` (client) and `http://localhost:3000` (API).
+
+### Docker (Standard)
+
+```bash
+# Using SQLite (default)
+docker-compose up -d
+
+# Using PostgreSQL
+DB_TYPE=postgresql \
+DATABASE_URL=postgresql://user:pass@host:5432/dreamtime \
 docker-compose up -d
 ```
 
-### Production Deployment (Unraid)
+### Unraid Deployment
 
-For Unraid users, see the detailed guide: **[docs/unraid-setup.md](docs/unraid-setup.md)**
+DreamTime includes optimized configuration for Unraid with macvlan networking for MQTT support.
 
-Quick start:
 ```bash
-# Create directory
 mkdir -p /mnt/user/appdata/dreamtime
-
-# Download Unraid-specific compose file
 cd /mnt/user/appdata/dreamtime
+
+# Download configuration
 wget https://raw.githubusercontent.com/JoshuaSeidel/DreamTime/main/docker-compose.unraid.yml
 wget https://raw.githubusercontent.com/JoshuaSeidel/DreamTime/main/.env.unraid.example -O .env
 
-# Configure .env with your settings, then:
+# Edit .env with your settings
+nano .env
+
+# Deploy
 docker-compose -f docker-compose.unraid.yml up -d
 ```
 
-Key Unraid features:
-- **macvlan networking** for LAN access (MQTT)
-- **Pre-built images** from GitHub Container Registry
-- **External networks** for PostgreSQL and reverse proxy
+See [docs/unraid-setup.md](docs/unraid-setup.md) for detailed instructions including:
+- macvlan network configuration for LAN access
+- PostgreSQL setup
+- Reverse proxy configuration (SWAG/NPM)
+- MQTT broker connectivity
 
-## Home Assistant Integration
+## Home Assistant Voice Control
 
-DreamTime integrates with Home Assistant for Alexa voice control:
+Control sleep tracking with Alexa through Home Assistant:
 
 ```
 "Alexa, tell Home Assistant baby is in crib"
@@ -202,78 +148,123 @@ DreamTime integrates with Home Assistant for Alexa voice control:
 "Alexa, tell Home Assistant baby is out of crib"
 ```
 
-See **[ha/README.md](ha/README.md)** for setup instructions including:
-- MQTT configuration
-- Voice command automations
-- Dashboard cards
+Configuration files are provided in the [ha/](ha/) folder:
+- `configuration.yaml` - Sensors and input helpers
+- `automations.yaml` - Voice command automations
+- `scripts.yaml` - Reusable scripts for dashboards
+- `lovelace-card.yaml` - Dashboard card examples
+
+Requirements:
+- Mosquitto MQTT broker in Home Assistant
+- Home Assistant Cloud (Nabu Casa) or manual Alexa skill
+- MQTT enabled in DreamTime configuration
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_TYPE` | Database type: `sqlite` or `postgresql` | `sqlite` |
+| `DATABASE_URL` | PostgreSQL connection string | - |
+| `CLIENT_URL` | Public URL for WebAuthn | `http://localhost` |
+| `JWT_EXPIRES_IN` | Access token expiration | `15m` |
+| `JWT_REFRESH_EXPIRES_IN` | Refresh token expiration | `7d` |
+| `MQTT_ENABLED` | Enable MQTT integration | `false` |
+| `MQTT_BROKER_URL` | MQTT broker address | `mqtt://localhost:1883` |
+| `MQTT_USERNAME` | MQTT authentication user | - |
+| `MQTT_PASSWORD` | MQTT authentication password | - |
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Create account
+- `POST /api/auth/login` - Email/password login
+- `POST /api/auth/refresh` - Refresh access token
+- `POST /api/auth/logout` - Invalidate tokens
+- `POST /api/auth/webauthn/*` - Face ID/Touch ID flows
+
+### Children
+- `GET /api/children` - List children
+- `POST /api/children` - Add child
+- `GET /api/children/:id` - Get child details
+- `PATCH /api/children/:id` - Update child
+- `POST /api/children/:id/share` - Invite caregiver
+
+### Sleep Sessions
+- `GET /api/children/:id/sessions` - List sessions
+- `POST /api/children/:id/sessions` - Start session
+- `PATCH /api/children/:id/sessions/:sessionId` - Update session
+- `DELETE /api/children/:id/sessions/:sessionId` - Delete session
+
+### Schedules
+- `GET /api/children/:id/schedule` - Get active schedule
+- `PUT /api/children/:id/schedule` - Create/update schedule
+- `POST /api/children/:id/transition` - Start nap transition
+- `PATCH /api/children/:id/transition` - Update transition progress
+
+### Analytics
+- `GET /api/children/:id/analytics` - Sleep statistics
+
+## Sleep Schedule Reference
+
+### 2-Nap Schedule (6-15 months)
+| Timing | Range |
+|--------|-------|
+| Wake | 6:30-7:30 AM |
+| Nap 1 | 8:30-9:00 AM start, end by 11:00 AM |
+| Nap 2 | 12:00-1:00 PM start, end by 3:00 PM |
+| Bedtime | 6:30-7:30 PM |
+| Day sleep cap | 3.5 hours |
+
+### 2-to-1 Transition (4-6 weeks)
+| Phase | Guidelines |
+|-------|------------|
+| Week 1-2 | Single nap no earlier than 11:30 AM |
+| Week 2+ | Push nap 15 minutes later every 3-7 days |
+| Goal | Nap at 12:30-1:00 PM |
+| Crib rule | Minimum 90 minutes in crib |
+| Bedtime | 4-5 hours after nap ends |
+
+### 1-Nap Schedule (15+ months)
+| Timing | Range |
+|--------|-------|
+| Wake | 6:30-8:00 AM |
+| Nap | 12:30-1:00 PM start, end by 3:00-3:30 PM |
+| Bedtime | 6:45-7:30 PM |
+| Day sleep cap | 2.5 hours |
 
 ## Project Structure
 
 ```
-baby-sleep-tracker/
-├── README.md
-├── CLAUDE.md                    # Claude Code instructions
-├── package.json
-├── docker-compose.yml
-├── .env.example
+DreamTime/
+├── packages/
+│   ├── server/           # Fastify API server
+│   │   ├── src/
+│   │   │   ├── routes/   # API endpoints
+│   │   │   ├── services/ # Business logic
+│   │   │   ├── schemas/  # Zod validation
+│   │   │   └── config/   # Database, env
+│   │   └── Dockerfile
+│   └── client/           # React PWA
+│       ├── src/
+│       │   ├── pages/    # Route components
+│       │   ├── components/
+│       │   ├── lib/      # API client, utilities
+│       │   └── store/    # Zustand stores
+│       └── Dockerfile
 ├── prisma/
-│   ├── schema.prisma
-│   ├── migrations/
-│   └── seed.ts
-├── src/
-│   ├── server/
-│   │   ├── index.ts
-│   │   ├── config/
-│   │   ├── middleware/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   └── types/
-│   └── client/
-│       ├── index.html
-│       ├── main.tsx
-│       ├── App.tsx
-│       ├── components/
-│       ├── pages/
-│       ├── hooks/
-│       ├── services/
-│       ├── store/
-│       └── utils/
-├── public/
-│   ├── manifest.json
-│   ├── sw.js
-│   └── icons/
-├── docs/
-│   ├── api-spec.yaml
-│   ├── sleep-schedules.md
-│   └── transitions.md
-└── tests/
-    ├── unit/
-    └── integration/
+│   └── schema.prisma     # Database schema
+├── ha/                   # Home Assistant configs
+├── docs/                 # Documentation
+├── docker-compose.yml    # Standard deployment
+└── docker-compose.unraid.yml  # Unraid deployment
 ```
 
-## Sleep Schedule Reference
+## Contributing
 
-### 2-Nap Schedule (12-14 months)
-- Wake: 6:30-7:30 AM
-- Nap 1: 8:30-9:00 AM (cap at 2 hours, end by 11:00 AM)
-- Nap 2: 12:00-1:00 PM (cap at 2 hours, end by 3:00 PM)
-- Bedtime: 5:30-7:30 PM
-- Total day sleep cap: 3.5 hours
-
-### 2-to-1 Nap Transition (4-6 weeks)
-- Week 1-2: Start single nap as early as 11:30 AM (5.5 hours after wake)
-- Every 3-7 days: Push nap 15 minutes later
-- Week 2+: No nap before 12:00 PM
-- Goal: Nap at 12:30-1:00 PM
-- Crib 90 rule: Stay in crib minimum 90 minutes
-- Bedtime: 4-5 hours after nap ends (goal: 6:45-7:30 PM)
-- Temporary: Allow sleep until 8:00 AM during transition
-
-### 1-Nap Schedule (14+ months)
-- Wake: 6:30-7:30 AM (up to 8:00 AM during transition)
-- Nap: 12:30-1:00 PM (cap at 2.5-3 hours, end by 3:00-3:30 PM)
-- Bedtime: 6:45-7:30 PM (4-4.5 hours after nap)
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Submit a pull request
 
 ## License
 
