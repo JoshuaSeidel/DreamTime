@@ -324,18 +324,24 @@ async function processChildReminders(
     return;
   }
 
-  // Get actual nap durations and end times from completed naps today
-  const completedNapSessions = sessions.filter(
-    s => s.sessionType === 'NAP' && s.state === 'COMPLETED' && s.asleepAt && s.wokeUpAt
+  // Separate scheduled naps from ad-hoc naps (same logic as calculator.routes.ts today-summary)
+  const napSessions = sessions.filter(s => s.sessionType === 'NAP');
+  const scheduledNaps = napSessions.filter(s => !s.isAdHoc);
+  const adHocNaps = napSessions.filter(s => s.isAdHoc && s.state === 'COMPLETED');
+
+  // Get completed scheduled naps
+  const completedScheduledNaps = scheduledNaps.filter(
+    s => s.state === 'COMPLETED' && s.asleepAt && s.wokeUpAt
   );
-  const actualNapDurations: number[] = completedNapSessions.map(s => {
-    if (s.asleepAt && s.wokeUpAt) {
-      return differenceInMinutes(s.wokeUpAt, s.asleepAt);
-    }
-    return 0;
-  });
+
+  // Use qualifiedRestMinutes instead of raw sleepMinutes (matches dashboard logic)
+  // Qualified Rest = (Awake Crib Time ÷ 2) + Actual Sleep Time
+  const scheduledNapDurations = completedScheduledNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+  const adHocNapDurations = adHocNaps.map(s => s.qualifiedRestMinutes ?? 0);
+  const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
+
   // Get actual nap end times (wokeUpAt) for precise timing calculations
-  const actualNapEndTimes: Date[] = completedNapSessions
+  const actualNapEndTimes: Date[] = completedScheduledNaps
     .map(s => s.wokeUpAt)
     .filter((t): t is Date => t !== null);
 
@@ -345,9 +351,19 @@ async function processChildReminders(
     schedule as any, // Type coercion for schedule response
     timezone,
     transition, // Pass transition data for correct nap time calculation
-    actualNapDurations.length > 0 ? actualNapDurations : undefined,
+    napDurations.length > 0 ? napDurations : undefined,
     actualNapEndTimes.length > 0 ? actualNapEndTimes : undefined
   );
+
+  // Apply ad-hoc bedtime bump (15 min if any ad-hoc nap >= 30 min) - same as dashboard
+  const hasSignificantAdHocNap = adHocNaps.some(s => (s.sleepMinutes ?? 0) >= 30);
+  if (hasSignificantAdHocNap) {
+    const bump = 15 * 60000; // 15 minutes in ms
+    daySchedule.bedtime.putDownWindow.earliest = new Date(daySchedule.bedtime.putDownWindow.earliest.getTime() + bump);
+    daySchedule.bedtime.putDownWindow.latest = new Date(daySchedule.bedtime.putDownWindow.latest.getTime() + bump);
+    daySchedule.bedtime.putDownWindow.recommended = new Date(daySchedule.bedtime.putDownWindow.recommended.getTime() + bump);
+    daySchedule.bedtime.notes.push('+15 min bump for ad-hoc nap (30+ min)');
+  }
 
   // Log schedule calculation for debugging
   const scheduleType = schedule.type as ScheduleType;
@@ -407,7 +423,7 @@ async function processChildReminders(
 
   // Debug logging for bedtime calculation
   if (minutesUntilBedtime <= 60 && minutesUntilBedtime > 0) {
-    console.log(`[ReminderScheduler] ${childName}: Bedtime ${bedtimeStr}, ${minutesUntilBedtime} min away, nap durations: [${actualNapDurations.join(', ')}]`);
+    console.log(`[ReminderScheduler] ${childName}: Bedtime ${bedtimeStr}, ${minutesUntilBedtime} min away, qualified rest: [${napDurations.join(', ')}]${hasSignificantAdHocNap ? ' (+15m ad-hoc bump)' : ''}`);
   }
 
   // Send 30-minute bedtime reminder (get ready for routine)
