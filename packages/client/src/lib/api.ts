@@ -18,9 +18,14 @@ async function fetchWithAuth<T>(
   retryOnUnauthorized = true
 ): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   };
+
+  // Only set Content-Type for requests with a body
+  // DELETE requests without a body shouldn't have Content-Type: application/json
+  if (options.body || (options.method && !['GET', 'HEAD', 'DELETE'].includes(options.method.toUpperCase()))) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
