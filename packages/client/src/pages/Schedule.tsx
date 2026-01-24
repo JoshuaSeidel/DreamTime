@@ -8,6 +8,7 @@ import {
   Loader2,
   ArrowRight,
   Bell,
+  RotateCcw,
 } from 'lucide-react';
 import { HelpIcon } from '../components/HelpIcon';
 import { HELP_CONTENT } from '@/lib/helpContent';
@@ -810,10 +811,30 @@ export default function Schedule() {
                           </p>
                           <p className="text-xs text-muted-foreground">First wake window</p>
                         </div>
-                        <span className="text-sm font-semibold text-primary">
-                          {formatMinutesToHours(scheduleConfig.wakeWindow1Min || 0)}-
-                          {formatMinutesToHours(scheduleConfig.wakeWindow1Max || 0)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {formatMinutesToHours(scheduleConfig.wakeWindow1Min || 0)}-
+                            {formatMinutesToHours(scheduleConfig.wakeWindow1Max || 0)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeWindow1Min: defaults.wakeWindow1Min,
+                                  wakeWindow1Max: defaults.wakeWindow1Max,
+                                }));
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -857,10 +878,30 @@ export default function Schedule() {
                             <p className="font-medium">Nap 1 to Nap 2</p>
                             <p className="text-xs text-muted-foreground">Second wake window</p>
                           </div>
-                          <span className="text-sm font-semibold text-primary">
-                            {formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-
-                            {formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-primary">
+                              {formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-
+                              {formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              title="Reset to default"
+                              onClick={() => {
+                                const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                                if (defaults) {
+                                  setScheduleConfig(prev => ({
+                                    ...prev,
+                                    wakeWindow2Min: defaults.wakeWindow2Min,
+                                    wakeWindow2Max: defaults.wakeWindow2Max,
+                                  }));
+                                }
+                              }}
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <div>
@@ -906,12 +947,40 @@ export default function Schedule() {
                           </p>
                           <p className="text-xs text-muted-foreground">Final wake window</p>
                         </div>
-                        <span className="text-sm font-semibold text-primary">
-                          {selectedType === 'ONE_NAP'
-                            ? `${formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}`
-                            : `${formatMinutesToHours(scheduleConfig.wakeWindow3Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow3Max || 0)}`
-                          }
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {selectedType === 'ONE_NAP'
+                              ? `${formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}`
+                              : `${formatMinutesToHours(scheduleConfig.wakeWindow3Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow3Max || 0)}`
+                            }
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                if (selectedType === 'ONE_NAP') {
+                                  setScheduleConfig(prev => ({
+                                    ...prev,
+                                    wakeWindow2Min: defaults.wakeWindow2Min,
+                                    wakeWindow2Max: defaults.wakeWindow2Max,
+                                  }));
+                                } else {
+                                  setScheduleConfig(prev => ({
+                                    ...prev,
+                                    wakeWindow3Min: defaults.wakeWindow3Min,
+                                    wakeWindow3Max: defaults.wakeWindow3Max,
+                                  }));
+                                }
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         {selectedType === 'ONE_NAP' ? (
