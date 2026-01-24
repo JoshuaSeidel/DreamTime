@@ -235,6 +235,7 @@ model ScheduleTransition {
   toType         String
   startedAt      DateTime @default(now())
   currentWeek    Int      @default(1)
+  targetWeeks    Int      @default(6) // Total weeks for transition (2-6, default 6)
   currentNapTime String   // HH:mm - current target single nap time
   completedAt    DateTime?
   notes          String?
