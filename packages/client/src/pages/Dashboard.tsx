@@ -430,6 +430,8 @@ export default function Dashboard() {
                 session={activeSession}
                 minimumCribMinutes={schedule?.minimumCribMinutes ?? 60}
                 napCapMinutes={schedule?.napCapMinutes ?? 120}
+                daySleepCap={schedule?.daySleepCap ?? 210}
+                sleepUsedToday={todaySummary.totalMinutes}
                 childName={selectedChildName}
               />
             )}

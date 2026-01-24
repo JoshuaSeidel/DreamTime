@@ -1,5 +1,5 @@
 import { prisma } from '../config/database.js';
-import { sendBedtimeReminder, sendNapReminder, sendWakeDeadlineAlert, sendNapCapExceededAlert } from './notification.service.js';
+import { sendBedtimeReminder, sendNapReminder, sendWakeDeadlineAlert, sendNapCapExceededAlert, sendDaySleepCapWarningAlert, sendDaySleepCapExceededAlert } from './notification.service.js';
 import { calculateDaySchedule } from './schedule.calculator.service.js';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { startOfDay, format, differenceInMinutes, addMinutes, isAfter, isBefore, parse } from 'date-fns';
@@ -33,7 +33,7 @@ const DEFAULT_WAKE_DEADLINE_REMINDER_MINUTES = 15;
 let isRunning = false;
 let intervalId: ReturnType<typeof setInterval> | null = null;
 
-type ReminderType = 'nap1_30' | 'nap1_15' | 'nap2_30' | 'nap2_15' | 'bedtime_30' | 'bedtime_15' | 'wake_deadline_30' | 'wake_deadline_15' | 'nap_cap';
+type ReminderType = 'nap1_30' | 'nap1_15' | 'nap2_30' | 'nap2_15' | 'bedtime_30' | 'bedtime_15' | 'wake_deadline_30' | 'wake_deadline_15' | 'nap_cap' | 'day_sleep_cap_warning' | 'day_sleep_cap_exceeded';
 
 /**
  * Check if we should send a reminder for a specific event
@@ -216,6 +216,56 @@ async function processChildReminders(
         }
         markOneTimeAlertSent(childId, 'nap_cap', napKey);
         console.log(`[ReminderScheduler] Sent nap cap exceeded alert for ${childName} (${napDurationMinutes}min)`);
+      }
+    }
+  }
+
+  // Check day sleep cap - if child is currently napping, check total sleep budget
+  if (currentNapSession?.asleepAt && schedule.daySleepCap) {
+    const currentNapMinutes = differenceInMinutes(now, currentNapSession.asleepAt);
+
+    // Get completed nap sleep from today (before current nap)
+    const completedNapSleepToday = sessions
+      .filter(s => s.sessionType === 'NAP' && s.state === 'COMPLETED' && s.sleepMinutes)
+      .reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
+
+    const totalSleepToday = completedNapSleepToday + currentNapMinutes;
+    const remainingBudget = schedule.daySleepCap - totalSleepToday;
+
+    // Send 5-minute warning
+    if (remainingBudget <= 5 && remainingBudget > 0) {
+      const warningKey = `${currentNapSession.id}-5min`;
+      if (shouldSendOneTimeAlert(childId, 'day_sleep_cap_warning', warningKey)) {
+        for (const caregiver of caregivers) {
+          await sendDaySleepCapWarningAlert(
+            caregiver.userId,
+            childName,
+            remainingBudget,
+            totalSleepToday,
+            schedule.daySleepCap,
+            childId
+          );
+        }
+        markOneTimeAlertSent(childId, 'day_sleep_cap_warning', warningKey);
+        console.log(`[ReminderScheduler] Sent day sleep cap 5-min warning for ${childName} (${remainingBudget}min remaining)`);
+      }
+    }
+
+    // Send exceeded alert
+    if (remainingBudget <= 0) {
+      const exceededKey = `${currentNapSession.id}-exceeded`;
+      if (shouldSendOneTimeAlert(childId, 'day_sleep_cap_exceeded', exceededKey)) {
+        for (const caregiver of caregivers) {
+          await sendDaySleepCapExceededAlert(
+            caregiver.userId,
+            childName,
+            totalSleepToday,
+            schedule.daySleepCap,
+            childId
+          );
+        }
+        markOneTimeAlertSent(childId, 'day_sleep_cap_exceeded', exceededKey);
+        console.log(`[ReminderScheduler] Sent day sleep cap exceeded alert for ${childName} (${totalSleepToday}min total, cap: ${schedule.daySleepCap}min)`);
       }
     }
   }

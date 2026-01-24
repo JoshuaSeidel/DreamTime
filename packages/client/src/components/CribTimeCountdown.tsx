@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, CheckCircle, Moon } from 'lucide-react';
+import { Clock, AlertTriangle, CheckCircle, Moon, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SleepSession } from '@/lib/api';
 
@@ -7,6 +7,8 @@ interface CribTimeCountdownProps {
   session: SleepSession;
   minimumCribMinutes?: number;
   napCapMinutes?: number;
+  daySleepCap?: number; // Total day sleep cap in minutes (e.g., 210 = 3.5 hours)
+  sleepUsedToday?: number; // Sleep already used today in minutes
   childName?: string;
 }
 
@@ -14,11 +16,14 @@ export default function CribTimeCountdown({
   session,
   minimumCribMinutes = 60, // Default 60 minute crib rule
   napCapMinutes = 120, // Default 2 hour nap cap
+  daySleepCap = 210, // Default 3.5 hours total day sleep
+  sleepUsedToday = 0, // Sleep already used before this nap
   childName = 'Baby',
 }: CribTimeCountdownProps) {
   const [elapsedMinutes, setElapsedMinutes] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [sleepElapsedMinutes, setSleepElapsedMinutes] = useState(0);
+  const [sleepElapsedSeconds, setSleepElapsedSeconds] = useState(0);
 
   useEffect(() => {
     if (!session.putDownAt) return;
@@ -31,11 +36,13 @@ export default function CribTimeCountdown({
       setElapsedMinutes(Math.floor(totalSeconds / 60));
       setElapsedSeconds(totalSeconds % 60);
 
-      // Track sleep elapsed time if baby is asleep
+      // Track sleep elapsed time if baby is asleep (with seconds for precise countdown)
       if (session.asleepAt) {
         const asleepTime = new Date(session.asleepAt).getTime();
         const sleepElapsedMs = now - asleepTime;
-        setSleepElapsedMinutes(Math.floor(sleepElapsedMs / 60000));
+        const sleepTotalSeconds = Math.floor(sleepElapsedMs / 1000);
+        setSleepElapsedMinutes(Math.floor(sleepTotalSeconds / 60));
+        setSleepElapsedSeconds(sleepTotalSeconds % 60);
       }
     };
 
@@ -61,6 +68,17 @@ export default function CribTimeCountdown({
   const isNapCapExceeded = session.state === 'ASLEEP' && sleepElapsedMinutes >= napCapMinutes;
   const napCapOverageMinutes = Math.max(0, sleepElapsedMinutes - napCapMinutes);
   const napCapProgress = session.state === 'ASLEEP' ? Math.min(100, (sleepElapsedMinutes / napCapMinutes) * 100) : 0;
+
+  // Day sleep cap deadline calculation
+  // Remaining budget = daySleepCap - sleepUsedToday (before this nap)
+  const remainingSleepBudget = Math.max(0, daySleepCap - sleepUsedToday);
+  const sleepTotalElapsedSeconds = sleepElapsedMinutes * 60 + sleepElapsedSeconds;
+  const budgetRemainingSeconds = Math.max(0, remainingSleepBudget * 60 - sleepTotalElapsedSeconds);
+  const budgetRemainingMinutes = Math.floor(budgetRemainingSeconds / 60);
+  const budgetRemainingSecs = budgetRemainingSeconds % 60;
+  const isBudgetExceeded = session.state === 'ASLEEP' && budgetRemainingSeconds === 0;
+  const isWithin5Minutes = session.state === 'ASLEEP' && budgetRemainingMinutes < 5 && !isBudgetExceeded;
+  const budgetProgress = session.state === 'ASLEEP' ? Math.min(100, (sleepElapsedMinutes / remainingSleepBudget) * 100) : 0;
 
   // Only show when session is active (not completed)
   if (session.state === 'COMPLETED') {
@@ -220,6 +238,89 @@ export default function CribTimeCountdown({
           {isNapCapExceeded && (
             <p className="text-xs text-red-700 dark:text-red-300 mt-2 text-center font-medium">
               Over by {napCapOverageMinutes} minutes - consider waking {childName}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Day Sleep Cap Alert - 5 minute countdown warning */}
+      {session.sessionType === 'NAP' && session.state === 'ASLEEP' && remainingSleepBudget > 0 && (
+        <div className={cn(
+          'mt-4 p-3 rounded-lg border',
+          isBudgetExceeded
+            ? 'bg-red-100 border-red-400 dark:bg-red-950 dark:border-red-600 animate-pulse'
+            : isWithin5Minutes
+            ? 'bg-red-50 border-red-300 dark:bg-red-950/50 dark:border-red-700 animate-pulse'
+            : budgetProgress >= 75
+            ? 'bg-orange-50 border-orange-300 dark:bg-orange-950 dark:border-orange-700'
+            : 'bg-blue-50 border-blue-300 dark:bg-blue-950 dark:border-blue-700'
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              {(isBudgetExceeded || isWithin5Minutes) && (
+                <Bell className="w-4 h-4 text-red-600 dark:text-red-400 animate-bounce" />
+              )}
+              <span className={cn(
+                'font-medium text-sm',
+                isBudgetExceeded
+                  ? 'text-red-800 dark:text-red-200'
+                  : isWithin5Minutes
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-blue-800 dark:text-blue-200'
+              )}>
+                {isBudgetExceeded
+                  ? `Get ${childName} NOW!`
+                  : isWithin5Minutes
+                  ? `Get ${childName} soon!`
+                  : 'Day Sleep Budget'}
+              </span>
+            </div>
+            <span className={cn(
+              'text-sm font-mono font-bold',
+              isBudgetExceeded || isWithin5Minutes
+                ? 'text-red-700 dark:text-red-300'
+                : 'text-blue-700 dark:text-blue-300'
+            )}>
+              {sleepElapsedMinutes}m / {remainingSleepBudget}m
+            </span>
+          </div>
+
+          {/* Budget progress bar */}
+          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full transition-all duration-1000 rounded-full',
+                isBudgetExceeded
+                  ? 'bg-red-600 dark:bg-red-500'
+                  : isWithin5Minutes
+                  ? 'bg-red-500 dark:bg-red-400'
+                  : budgetProgress >= 75
+                  ? 'bg-orange-500 dark:bg-orange-400'
+                  : 'bg-blue-500 dark:bg-blue-400'
+              )}
+              style={{ width: `${Math.min(100, budgetProgress)}%` }}
+            />
+          </div>
+
+          {/* Countdown display when within 5 minutes */}
+          {isWithin5Minutes && (
+            <div className="mt-3 text-center">
+              <p className="text-xs text-red-600 dark:text-red-400 mb-1">Time until must wake:</p>
+              <p className="text-2xl font-bold font-mono text-red-700 dark:text-red-300">
+                {budgetRemainingMinutes}:{budgetRemainingSecs.toString().padStart(2, '0')}
+              </p>
+            </div>
+          )}
+
+          {isBudgetExceeded && (
+            <p className="text-xs text-red-700 dark:text-red-300 mt-2 text-center font-bold">
+              Day sleep cap reached - wake {childName} to protect bedtime!
+            </p>
+          )}
+
+          {!isBudgetExceeded && !isWithin5Minutes && (
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 text-center">
+              {budgetRemainingMinutes}m remaining of {daySleepCap}m daily cap (used {sleepUsedToday}m before this nap)
             </p>
           )}
         </div>

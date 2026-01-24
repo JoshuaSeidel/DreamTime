@@ -9,8 +9,9 @@ export interface NotificationPayload {
   icon?: string;
   badge?: string;
   tag?: string;
+  requireInteraction?: boolean; // Keep notification visible until user interacts
   data?: {
-    type: 'bedtime_reminder' | 'nap_reminder' | 'wake_window_alert' | 'session_update' | 'wake_deadline' | 'nap_cap_exceeded';
+    type: 'bedtime_reminder' | 'nap_reminder' | 'wake_window_alert' | 'session_update' | 'wake_deadline' | 'nap_cap_exceeded' | 'day_sleep_cap_warning' | 'day_sleep_cap_exceeded';
     childId?: string;
     childName?: string;
     url?: string;
@@ -289,6 +290,60 @@ export async function sendNapCapExceededAlert(
     tag: `nap-cap-${childId}`,
     data: {
       type: 'nap_cap_exceeded',
+      childId,
+      childName,
+      url: '/',
+    },
+  });
+}
+
+/**
+ * Send day sleep cap warning (5 minutes before deadline)
+ */
+export async function sendDaySleepCapWarningAlert(
+  userId: string,
+  childName: string,
+  minutesRemaining: number,
+  totalSleepToday: number,
+  daySleepCap: number,
+  childId: string
+): Promise<void> {
+  await sendNotificationToUser(userId, {
+    title: `Wake ${childName} Soon!`,
+    body: `${minutesRemaining} min until day sleep cap (${daySleepCap} min). Total sleep today: ${totalSleepToday} min.`,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: `day-sleep-cap-warning-${childId}`,
+    requireInteraction: true,
+    data: {
+      type: 'day_sleep_cap_warning',
+      childId,
+      childName,
+      url: '/',
+    },
+  });
+}
+
+/**
+ * Send day sleep cap exceeded alert
+ */
+export async function sendDaySleepCapExceededAlert(
+  userId: string,
+  childName: string,
+  totalSleepToday: number,
+  daySleepCap: number,
+  childId: string
+): Promise<void> {
+  const overMinutes = totalSleepToday - daySleepCap;
+  await sendNotificationToUser(userId, {
+    title: `Get ${childName} NOW!`,
+    body: `Day sleep cap exceeded by ${overMinutes} min! Total: ${totalSleepToday} min (cap: ${daySleepCap} min). Wake now to protect bedtime!`,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: `day-sleep-cap-exceeded-${childId}`,
+    requireInteraction: true,
+    data: {
+      type: 'day_sleep_cap_exceeded',
       childId,
       childName,
       url: '/',
