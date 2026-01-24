@@ -395,6 +395,7 @@ export interface ScheduleTransition {
   toType: string;
   startedAt: string;
   currentWeek: number;
+  targetWeeks: number;
   currentNapTime: string;
   completedAt: string | null;
   notes: string | null;
@@ -473,7 +474,7 @@ export async function getTransition(
 export async function startTransition(
   accessToken: string,
   childId: string,
-  data: { fromType: 'TWO_NAP'; toType: 'ONE_NAP'; startNapTime: string }
+  data: { fromType: 'TWO_NAP'; toType: 'ONE_NAP'; startNapTime: string; targetWeeks?: number }
 ): Promise<ApiResponse<ScheduleTransition>> {
   return fetchWithAuth<ScheduleTransition>(
     `/children/${childId}/transition`,

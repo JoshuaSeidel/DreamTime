@@ -116,6 +116,7 @@ function formatTransition(
     toType: string;
     startedAt: Date;
     currentWeek: number;
+    targetWeeks: number;
     currentNapTime: string;
     completedAt: Date | null;
     notes: string | null;
@@ -275,6 +276,7 @@ export async function startTransition(
       toType: input.toType,
       currentNapTime: input.startNapTime,
       currentWeek: 1,
+      targetWeeks: input.targetWeeks ?? 6,
     },
   });
 

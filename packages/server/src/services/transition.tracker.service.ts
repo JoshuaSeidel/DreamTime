@@ -17,6 +17,13 @@ export interface TransitionConfig {
     pushIntervalDays: { min: number; max: number }; // 3-7 days before pushing later
     pushAmount: number;      // 15 minutes later each push
   };
+  // Fast-track rules (for accelerated transitions)
+  fastTrack: {
+    skipTo12pm: boolean;           // If baby handles morning well, can skip to 12pm
+    fastTrackStartTime: string;    // "12:00" - start time for fast-track
+    fastPushIntervalDays: number;  // 2-3 days between pushes when fast-tracking
+    temperamentCheckTime: string;  // "11:30" - time to assess if baby can make it to 12pm
+  };
   // Goal configuration
   goal: {
     targetNapStart: string;  // "12:30" or "13:00"
@@ -41,6 +48,12 @@ const DEFAULT_TRANSITION_CONFIG: TransitionConfig = {
     minNapEarliest: '12:00',
     pushIntervalDays: { min: 3, max: 7 },
     pushAmount: 15,
+  },
+  fastTrack: {
+    skipTo12pm: true,              // Can skip directly to 12pm if baby shows readiness
+    fastTrackStartTime: '12:00',   // Start at 12pm instead of 11:30
+    fastPushIntervalDays: 2,       // Can push every 2-3 days when fast-tracking
+    temperamentCheckTime: '11:30', // Check temperament at 11:30 to see if baby can make it to 12pm
   },
   goal: {
     targetNapStart: '12:30',
@@ -135,6 +148,8 @@ export async function getTransitionProgress(
   const daysSinceStart = differenceInDays(new Date(), transition.startedAt);
   const currentWeek = Math.ceil(daysSinceStart / 7) || 1;
   const recommendations: string[] = [];
+  const targetWeeks = transition.targetWeeks ?? 6;
+  const isFastTracked = targetWeeks <= 4; // Fast-track if 4 weeks or less
 
   // Determine current phase
   let currentPhase: 'week1_2' | 'week2_plus' | 'final';
@@ -143,11 +158,23 @@ export async function getTransitionProgress(
 
   if (currentWeek <= 2) {
     currentPhase = 'week1_2';
-    minNapEarliest = config.week1_2.minNapEarliest;
     cribRule = config.week1_2.cribRule;
-    recommendations.push('Keep nap no earlier than 11:30am');
-    recommendations.push('Enforce the crib 90 rule - minimum 90 minutes in crib');
-    recommendations.push('Expect some adjustment difficulties this week');
+
+    if (isFastTracked) {
+      // Fast-track: Can potentially skip to 12pm if baby shows readiness
+      minNapEarliest = config.fastTrack.fastTrackStartTime;
+      recommendations.push('Fast-track mode: If temperament is good at 11:30am, try pushing to 12pm');
+      recommendations.push('If baby can make it to 12/12:15pm comfortably, you can fast-track the process');
+      recommendations.push('Enforce the crib 90 rule - minimum 90 minutes in crib');
+      recommendations.push('Some morning rest/nap can help baby stay well-rested even during transition');
+    } else {
+      // Standard pace: Start at 11:30am
+      minNapEarliest = config.week1_2.minNapEarliest;
+      recommendations.push('Keep nap no earlier than 11:30am');
+      recommendations.push('Enforce the crib 90 rule - minimum 90 minutes in crib');
+      recommendations.push('Expect some adjustment difficulties this week - this is normal');
+      recommendations.push('Morning rest/nap can help baby stay more well-rested');
+    }
   } else {
     const targetMinutes = parseTimeToMinutes(config.goal.targetNapStart);
     const currentMinutes = parseTimeToMinutes(transition.currentNapTime);
@@ -163,8 +190,18 @@ export async function getTransitionProgress(
       currentPhase = 'week2_plus';
       minNapEarliest = config.week2_plus.minNapEarliest;
       cribRule = config.week1_2.cribRule;
-      recommendations.push('Can push nap later every 3-7 days');
-      recommendations.push('Watch for signs baby is ready: waking happy, good nap length');
+
+      if (isFastTracked) {
+        // Fast-track: Can push more frequently
+        const pushDays = config.fastTrack.fastPushIntervalDays;
+        recommendations.push(`Fast-track: Can push nap later every ${pushDays}-3 days if baby adapts well`);
+        recommendations.push('If doing well at 12/12:15pm for a few days, start bumping to 12:30pm');
+        recommendations.push('Watch for signs baby is ready: good temperament, waking happy');
+      } else {
+        // Standard pace
+        recommendations.push('Can push nap later every 3-7 days');
+        recommendations.push('Watch for signs baby is ready: waking happy, good nap length');
+      }
     }
   }
 
@@ -208,6 +245,7 @@ export async function getTransitionProgress(
       toType: transition.toType,
       startedAt: transition.startedAt,
       currentWeek: transition.currentWeek,
+      targetWeeks: transition.targetWeeks ?? 6,
       currentNapTime: transition.currentNapTime,
       completedAt: transition.completedAt,
       notes: transition.notes,
@@ -217,7 +255,7 @@ export async function getTransitionProgress(
     currentPhase,
     progress: {
       weeksCompleted: currentWeek - 1,
-      totalExpectedWeeks: { min: 4, max: 6 },
+      totalExpectedWeeks: { min: 2, max: transition.targetWeeks ?? 6 },
       percentComplete: Math.round(percentComplete),
     },
     currentRules: {
@@ -300,28 +338,60 @@ export async function analyzeNapPushReadiness(
 
   // Determine if we should push
   const currentWeek = Math.ceil(differenceInDays(new Date(), transition.startedAt) / 7) || 1;
+  const targetWeeks = transition.targetWeeks ?? 6;
+  const isFastTracked = targetWeeks <= 4;
+  const minPushInterval = isFastTracked
+    ? config.fastTrack.fastPushIntervalDays
+    : config.week2_plus.pushIntervalDays.min;
 
   let shouldPush = false;
   let reason = '';
   let suggestedNewTime: string | null = null;
 
-  if (currentWeek <= 2) {
+  if (currentWeek <= 2 && !isFastTracked) {
     shouldPush = false;
     reason = 'Still in first 2 weeks of transition - maintain current schedule';
+  } else if (currentWeek <= 2 && isFastTracked) {
+    // Fast-track mode: Can potentially push earlier if baby shows readiness
+    const fastTrackMinutes = parseTimeToMinutes(config.fastTrack.fastTrackStartTime);
+    if (currentMinutes < fastTrackMinutes && goodNapCount >= 2) {
+      shouldPush = true;
+      suggestedNewTime = config.fastTrack.fastTrackStartTime;
+      reason = 'Fast-track: Baby showing good temperament - can try pushing to 12pm';
+      readinessIndicators.push('Fast-track mode enabled');
+    } else if (currentMinutes >= fastTrackMinutes) {
+      // Already at 12pm, check if ready to push to 12:15/12:30
+      if (daysSinceLastPush >= minPushInterval && goodNapCount >= 2) {
+        shouldPush = true;
+        const newMinutes = Math.min(currentMinutes + config.week2_plus.pushAmount, goalMinutes);
+        suggestedNewTime = minutesToTimeString(newMinutes);
+        reason = 'Fast-track: Doing well at current time, ready to push later';
+      } else {
+        shouldPush = false;
+        reason = `Fast-track: Wait ${minPushInterval} days at current time before pushing (${daysSinceLastPush} days so far)`;
+      }
+    } else {
+      shouldPush = false;
+      reason = 'Check baby\'s temperament at 11:30am - if good, can try pushing to 12pm';
+    }
   } else if (currentMinutes >= goalMinutes) {
     shouldPush = false;
     reason = 'Nap time has reached goal - consider completing transition';
-  } else if (daysSinceLastPush < config.week2_plus.pushIntervalDays.min) {
+  } else if (daysSinceLastPush < minPushInterval) {
     shouldPush = false;
-    reason = `Wait at least ${config.week2_plus.pushIntervalDays.min} days between pushes (${daysSinceLastPush} days so far)`;
+    reason = `Wait at least ${minPushInterval} days between pushes (${daysSinceLastPush} days so far)`;
   } else if (goodNapCount < 3 || totalNaps < 5) {
     shouldPush = false;
-    reason = 'Wait for more consistent good naps before pushing later';
+    reason = isFastTracked
+      ? 'Wait for a few more good naps before pushing - some adjustment is normal'
+      : 'Wait for more consistent good naps before pushing later';
   } else {
     shouldPush = true;
     const newMinutes = Math.min(currentMinutes + config.week2_plus.pushAmount, goalMinutes);
     suggestedNewTime = minutesToTimeString(newMinutes);
-    reason = 'Baby showing good signs of readiness';
+    reason = isFastTracked
+      ? 'Fast-track: Baby adapting well - ready to push nap time later'
+      : 'Baby showing good signs of readiness';
   }
 
   return {

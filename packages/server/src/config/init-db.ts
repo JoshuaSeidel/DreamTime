@@ -128,15 +128,17 @@ async function createPostgresDatabase(adminUrl: string, dbName: string): Promise
 }
 
 async function runMigrations(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL ?? '';
   const schemaPath = getPrismaSchemaPath();
   const schemaArg = `--schema="${schemaPath}"`;
   const isDev = process.env.NODE_ENV === 'development';
+  const isSqlite = databaseUrl.startsWith('file:');
 
   if (isDev) {
     // In development, skip automatic migrations to avoid watch loop issues
-    // Developers should run `npx prisma migrate dev` manually when schema changes
+    // Developers should run `npx prisma migrate dev` or `npx prisma db push` manually
     console.log('Development mode: Skipping automatic migrations');
-    console.log('Run "npx prisma migrate dev" manually to apply schema changes');
+    console.log('Run "npx prisma db push" to apply schema changes');
 
     // Just verify the connection works
     try {
@@ -147,19 +149,32 @@ async function runMigrations(): Promise<void> {
       console.log('Database connection verified successfully');
     } catch (error) {
       console.error('Database connection failed. Run migrations first:');
-      console.error('  npx prisma migrate dev');
+      console.error('  npx prisma db push');
       throw error;
     }
   } else {
-    // In production, run migrate deploy
+    // In production, use appropriate migration strategy based on database type
     console.log('Running database migrations...');
 
     try {
-      execSync(`npx prisma migrate deploy ${schemaArg}`, {
-        stdio: 'inherit',
-        env: { ...process.env },
-        cwd: getAppRoot(),
-      });
+      if (isSqlite) {
+        // For SQLite, use db push which directly syncs schema
+        // This is simpler and avoids migration file compatibility issues
+        console.log('Using prisma db push for SQLite...');
+        execSync(`npx prisma db push --accept-data-loss ${schemaArg}`, {
+          stdio: 'inherit',
+          env: { ...process.env },
+          cwd: getAppRoot(),
+        });
+      } else {
+        // For PostgreSQL, use migrate deploy for proper migration tracking
+        console.log('Using prisma migrate deploy for PostgreSQL...');
+        execSync(`npx prisma migrate deploy ${schemaArg}`, {
+          stdio: 'inherit',
+          env: { ...process.env },
+          cwd: getAppRoot(),
+        });
+      }
       console.log('Database migrations completed successfully');
     } catch (error) {
       console.error('Migration failed:', error);

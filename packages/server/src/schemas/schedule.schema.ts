@@ -69,6 +69,7 @@ export const startTransitionSchema = z.object({
   fromType: z.enum([ScheduleType.TWO_NAP] as const),
   toType: z.enum([ScheduleType.ONE_NAP] as const),
   startNapTime: timeSchema, // Initial target single nap time
+  targetWeeks: z.number().int().min(2).max(6).default(6), // Transition duration (2-6 weeks)
 });
 
 export type StartTransitionInput = z.infer<typeof startTransitionSchema>;
@@ -137,6 +138,7 @@ export interface TransitionResponse {
   toType: string;
   startedAt: Date;
   currentWeek: number;
+  targetWeeks: number;
   currentNapTime: string;
   completedAt: Date | null;
   notes: string | null;

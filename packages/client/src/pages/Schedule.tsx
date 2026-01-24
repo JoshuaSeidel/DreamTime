@@ -164,6 +164,7 @@ export default function Schedule() {
   const [showTransitionWarning, setShowTransitionWarning] = useState(false);
   const [showTransitionSetup, setShowTransitionSetup] = useState(false);
   const [transitionNapTime, setTransitionNapTime] = useState('11:30');
+  const [transitionWeeks, setTransitionWeeks] = useState(6);
 
   // Load current schedule and transition
   const loadData = useCallback(async () => {
@@ -294,6 +295,7 @@ export default function Schedule() {
         fromType: 'TWO_NAP',
         toType: 'ONE_NAP',
         startNapTime: transitionNapTime,
+        targetWeeks: transitionWeeks,
       });
       if (result.success) {
         toast.success('Transition started', 'Your 2-to-1 nap transition has begun');
@@ -429,11 +431,14 @@ export default function Schedule() {
 
   // Show active transition UI
   if (currentTransition && !currentTransition.completedAt) {
+    const targetWeeks = currentTransition.targetWeeks || 6;
+    const progressPercent = Math.min(100, (currentTransition.currentWeek / targetWeeks) * 100);
+
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-0">
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
           <h1 className="text-xl font-bold">2-to-1 Nap Transition</h1>
-          <p className="text-sm text-muted-foreground">Week {currentTransition.currentWeek} of transition</p>
+          <p className="text-sm text-muted-foreground">Week {currentTransition.currentWeek} of {targetWeeks}</p>
         </header>
 
         <main className="px-4 py-6 space-y-6">
@@ -448,7 +453,7 @@ export default function Schedule() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Current Week</span>
-                <span className="font-bold text-2xl text-primary">{currentTransition.currentWeek}</span>
+                <span className="font-bold text-2xl text-primary">{currentTransition.currentWeek} / {targetWeeks}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Target Nap Time</span>
@@ -457,11 +462,11 @@ export default function Schedule() {
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all"
-                  style={{ width: `${Math.min(100, (currentTransition.currentWeek / 6) * 100)}%` }}
+                  style={{ width: `${progressPercent}%` }}
                 />
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                Goal: Nap at 12:30 - 1:00 PM by week 6
+                Goal: Nap at 12:30 - 1:00 PM by week {targetWeeks}
               </p>
             </CardContent>
           </Card>
@@ -578,10 +583,43 @@ export default function Schedule() {
             <CardHeader>
               <CardTitle className="text-base">Start 2-to-1 Transition</CardTitle>
               <CardDescription>
-                This will guide you through a 4-6 week gradual transition
+                Gradually transition from 2 naps to 1 nap over {transitionWeeks} weeks
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Transition Duration (weeks)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={2}
+                    max={6}
+                    value={transitionWeeks}
+                    onChange={(e) => setTransitionWeeks(parseInt(e.target.value))}
+                    className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                  <span className="w-12 text-center font-bold text-lg">{transitionWeeks}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {transitionWeeks === 6 && 'Standard pace - recommended for most babies'}
+                  {transitionWeeks === 5 && 'Slightly accelerated pace'}
+                  {transitionWeeks === 4 && 'Accelerated pace - for babies showing strong readiness'}
+                  {transitionWeeks === 3 && 'Fast pace - for babies adapting quickly'}
+                  {transitionWeeks === 2 && 'Fastest pace - only if baby is fully ready'}
+                </p>
+                {transitionWeeks <= 4 && (
+                  <div className="mt-2 p-2 bg-primary/10 rounded text-xs">
+                    <strong>Fast-track tips:</strong>
+                    <ul className="list-disc list-inside mt-1 space-y-1">
+                      <li>Check temperament at 11:30am - if good, try pushing to 12pm</li>
+                      <li>If baby does well at 12/12:15pm for a few days, bump to 12:30pm</li>
+                      <li>Some morning rest can help baby stay well-rested during transition</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">
                   Initial Single Nap Time
@@ -593,7 +631,9 @@ export default function Schedule() {
                   className="w-full"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Recommended: 11:30 AM for week 1-2
+                  {transitionWeeks <= 4
+                    ? 'Fast-track: Start at 12:00pm if baby shows readiness, or 11:30am to ease in'
+                    : 'Recommended: 11:30 AM for week 1-2'}
                 </p>
               </div>
               <div className="flex gap-2">
