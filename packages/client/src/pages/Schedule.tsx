@@ -1082,13 +1082,13 @@ export default function Schedule() {
                   <div className="space-y-4">
                     {/* Day Sleep Cap - Editable */}
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Day Sleep Cap</p>
-                          <p className="text-xs text-muted-foreground">Total nap sleep allowed per day</p>
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">Day Sleep Cap</p>
+                          <p className="text-xs text-muted-foreground">Total nap sleep per day</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-primary">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-primary whitespace-nowrap">
                             {formatMinutesToHours(scheduleConfig.daySleepCap || 0)}
                           </span>
                           <Button
@@ -1111,7 +1111,7 @@ export default function Schedule() {
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Minutes</label>
+                        <label className="text-xs text-muted-foreground block mb-1">Minutes</label>
                         <Input
                           type="number"
                           min={60}
@@ -1122,20 +1122,20 @@ export default function Schedule() {
                             ...prev,
                             daySleepCap: parseInt(e.target.value) || 210
                           }))}
-                          className="h-8"
+                          className="h-8 w-full"
                         />
                       </div>
                     </div>
 
                     {/* Target Bedtime - Editable */}
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Target Bedtime</p>
-                          <p className="text-xs text-muted-foreground">Goal bedtime start</p>
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">Target Bedtime</p>
+                          <p className="text-xs text-muted-foreground">Goal bedtime range</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-primary">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-primary whitespace-nowrap">
                             {formatTimeString(scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest)}
                           </span>
                           <Button
@@ -1158,9 +1158,9 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground">Goal Start</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">Start</label>
                           <Input
                             type="time"
                             value={scheduleConfig.bedtimeGoalStart || '19:00'}
@@ -1168,11 +1168,11 @@ export default function Schedule() {
                               ...prev,
                               bedtimeGoalStart: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Goal End</label>
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">End</label>
                           <Input
                             type="time"
                             value={scheduleConfig.bedtimeGoalEnd || '19:30'}
@@ -1180,7 +1180,7 @@ export default function Schedule() {
                               ...prev,
                               bedtimeGoalEnd: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
                       </div>
@@ -1188,13 +1188,13 @@ export default function Schedule() {
 
                     {/* Bedtime Range - Editable */}
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Bedtime Range</p>
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">Bedtime Range</p>
                           <p className="text-xs text-muted-foreground">Allowed bedtime window</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-primary">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-primary whitespace-nowrap">
                             {formatTimeRange(scheduleConfig.bedtimeEarliest, scheduleConfig.bedtimeLatest)}
                           </span>
                           <Button
@@ -1217,9 +1217,9 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground">Earliest</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">Earliest</label>
                           <Input
                             type="time"
                             value={scheduleConfig.bedtimeEarliest || '17:30'}
@@ -1227,11 +1227,11 @@ export default function Schedule() {
                               ...prev,
                               bedtimeEarliest: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Latest</label>
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">Latest</label>
                           <Input
                             type="time"
                             value={scheduleConfig.bedtimeLatest || '19:30'}
@@ -1239,7 +1239,7 @@ export default function Schedule() {
                               ...prev,
                               bedtimeLatest: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
                       </div>
@@ -1247,13 +1247,13 @@ export default function Schedule() {
 
                     {/* Wake Time Range - Editable */}
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Wake Time Range</p>
-                          <p className="text-xs text-muted-foreground">Expected morning wake window</p>
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm">Wake Time Range</p>
+                          <p className="text-xs text-muted-foreground">Expected morning wake</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold text-primary">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-primary whitespace-nowrap">
                             {formatTimeRange(scheduleConfig.wakeTimeEarliest, scheduleConfig.wakeTimeLatest)}
                           </span>
                           <Button
@@ -1276,9 +1276,9 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-xs text-muted-foreground">Earliest</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">Earliest</label>
                           <Input
                             type="time"
                             value={scheduleConfig.wakeTimeEarliest || '06:30'}
@@ -1286,11 +1286,11 @@ export default function Schedule() {
                               ...prev,
                               wakeTimeEarliest: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Latest</label>
+                        <div className="min-w-0">
+                          <label className="text-xs text-muted-foreground block mb-1">Latest</label>
                           <Input
                             type="time"
                             value={scheduleConfig.wakeTimeLatest || '07:30'}
@@ -1298,7 +1298,7 @@ export default function Schedule() {
                               ...prev,
                               wakeTimeLatest: e.target.value
                             }))}
-                            className="h-8"
+                            className="h-8 w-full"
                           />
                         </div>
                       </div>
