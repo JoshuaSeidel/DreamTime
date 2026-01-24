@@ -6,6 +6,7 @@ interface User {
   email: string;
   name: string;
   timezone: string;
+  onboardingCompleted: boolean;
 }
 
 interface AuthState {
@@ -16,6 +17,7 @@ interface AuthState {
   isLoading: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setAccessToken: (token: string) => void;
+  setOnboardingCompleted: () => void;
   refreshAccessToken: () => Promise<boolean>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
@@ -47,6 +49,13 @@ export const useAuthStore = create<AuthState>()(
 
       setAccessToken: (accessToken) =>
         set({ accessToken }),
+
+      setOnboardingCompleted: () => {
+        const { user } = get();
+        if (user) {
+          set({ user: { ...user, onboardingCompleted: true } });
+        }
+      },
 
       refreshAccessToken: async () => {
         // If already refreshing, wait for that to complete

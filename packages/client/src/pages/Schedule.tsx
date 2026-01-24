@@ -9,6 +9,8 @@ import {
   ArrowRight,
   Bell,
 } from 'lucide-react';
+import { HelpIcon } from '../components/HelpIcon';
+import { HELP_CONTENT } from '@/lib/helpContent';
 import {
   Card,
   CardContent,
@@ -474,6 +476,7 @@ export default function Schedule() {
               <CardTitle className="text-base flex items-center gap-2">
                 <ArrowRight className="w-4 h-4" />
                 Transition Progress
+                <HelpIcon {...HELP_CONTENT.transitionProgress} />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -500,7 +503,10 @@ export default function Schedule() {
           {/* Instructions */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">This Week's Plan</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                This Week's Plan
+                <HelpIcon {...HELP_CONTENT.transitionWeeklyPlan} />
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm">
@@ -518,7 +524,10 @@ export default function Schedule() {
           {/* Adjust Transition Duration */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Adjust Transition Pace</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Adjust Transition Pace
+                <HelpIcon {...HELP_CONTENT.transitionPace} />
+              </CardTitle>
               <CardDescription>
                 {targetWeeks <= 4 ? 'Fast-track mode enabled' : 'Standard pace'}
               </CardDescription>
@@ -731,6 +740,7 @@ export default function Schedule() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
                   Schedule Type
+                  <HelpIcon {...HELP_CONTENT.scheduleType} />
                 </CardTitle>
                 <CardDescription>
                   Select the sleep schedule that matches your baby's age and needs
@@ -780,6 +790,7 @@ export default function Schedule() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   Wake Windows
+                  <HelpIcon {...HELP_CONTENT.wakeWindows} />
                 </CardTitle>
                 <CardDescription>
                   {selectedType
@@ -847,6 +858,7 @@ export default function Schedule() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Moon className="w-4 h-4" />
                   Sleep Caps & Times
+                  <HelpIcon {...HELP_CONTENT.sleepCaps} />
                 </CardTitle>
                 <CardDescription>
                   {selectedType
@@ -902,6 +914,7 @@ export default function Schedule() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   Nap Settings
+                  <HelpIcon {...HELP_CONTENT.minimumCribTime} />
                 </CardTitle>
                 <CardDescription>
                   {selectedType
@@ -948,6 +961,7 @@ export default function Schedule() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Bell className="w-4 h-4" />
                   Notification Reminders
+                  <HelpIcon {...HELP_CONTENT.notifications} />
                 </CardTitle>
                 <CardDescription>
                   {selectedType

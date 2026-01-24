@@ -128,7 +128,7 @@ export async function authenticateWithPasskey(
 ): Promise<{
   success: boolean;
   data?: {
-    user: { id: string; email: string; name: string; timezone: string };
+    user: { id: string; email: string; name: string; timezone: string; onboardingCompleted: boolean };
     accessToken: string;
     refreshToken: string;
   };

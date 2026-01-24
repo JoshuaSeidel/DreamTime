@@ -10,6 +10,7 @@ import {
   deleteUser,
   changePassword,
   searchUsers,
+  completeOnboarding,
   UserServiceError,
 } from '../services/user.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -51,6 +52,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
                   email: { type: 'string' },
                   name: { type: 'string' },
                   timezone: { type: 'string' },
+                  onboardingCompleted: { type: 'boolean' },
                   createdAt: { type: 'string' },
                   updatedAt: { type: 'string' },
                 },
@@ -116,6 +118,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
                   email: { type: 'string' },
                   name: { type: 'string' },
                   timezone: { type: 'string' },
+                  onboardingCompleted: { type: 'boolean' },
                   createdAt: { type: 'string' },
                   updatedAt: { type: 'string' },
                 },
@@ -234,6 +237,49 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       const users = await searchUsers(userId, q, limit ? parseInt(limit, 10) : 10);
 
       return reply.send(successResponse(users));
+    }
+  );
+
+  // Complete onboarding
+  app.post(
+    '/me/onboarding-complete',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Mark onboarding as completed',
+        tags: ['Users'],
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              data: {
+                type: 'object',
+                properties: {
+                  onboardingCompleted: { type: 'boolean' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { userId } = request.user;
+
+        await completeOnboarding(userId);
+
+        return reply.send(successResponse({ onboardingCompleted: true }));
+      } catch (error) {
+        if (error instanceof UserServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
     }
   );
 

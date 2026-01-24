@@ -8,6 +8,9 @@ import CribTimeCountdown from '../components/CribTimeCountdown';
 import WakeDeadlineCountdown from '../components/WakeDeadlineCountdown';
 import AddChildDialog from '../components/AddChildDialog';
 import TodaySummaryCard from '../components/TodaySummaryCard';
+import { HelpIcon } from '../components/HelpIcon';
+import { OnboardingWizard } from '../components/OnboardingWizard';
+import { HELP_CONTENT } from '@/lib/helpContent';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -32,7 +35,7 @@ type SleepState = 'awake' | 'pending' | 'asleep';
 const SELECTED_CHILD_KEY = 'selectedChildId';
 
 export default function Dashboard() {
-  const { accessToken } = useAuthStore();
+  const { accessToken, user } = useAuthStore();
   const toast = useToast();
   const [currentState, setCurrentState] = useState<SleepState>('awake');
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => {
@@ -48,6 +51,16 @@ export default function Dashboard() {
   const [hasSchedule, setHasSchedule] = useState(false);
   const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
   const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
+
+  // Onboarding wizard state - show automatically for new users
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Show onboarding wizard for new users who haven't completed it
+  useEffect(() => {
+    if (user && user.onboardingCompleted === false) {
+      setShowOnboarding(true);
+    }
+  }, [user]);
 
   // Save selected child to localStorage
   useEffect(() => {
@@ -384,7 +397,10 @@ export default function Dashboard() {
             {/* Current State Card */}
             <Card>
               <CardContent className="pt-6 text-center">
-                <p className="text-sm text-muted-foreground mb-2">Current Status</p>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <p className="text-sm text-muted-foreground">Current Status</p>
+                  <HelpIcon {...HELP_CONTENT.currentStatus} />
+                </div>
                 <div className="flex items-center justify-center gap-3">
                   <span
                     className={cn(
@@ -428,13 +444,19 @@ export default function Dashboard() {
             )}
 
             {/* Quick Actions */}
-            <QuickActionButtons
-              currentState={currentState}
-              onAction={handleAction}
-              disabled={isActionLoading}
-              hasActiveSession={activeSession !== null}
-              childName={selectedChildName}
-            />
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-medium text-muted-foreground">Quick Actions</h2>
+                <HelpIcon {...HELP_CONTENT.quickActions} />
+              </div>
+              <QuickActionButtons
+                currentState={currentState}
+                onAction={handleAction}
+                disabled={isActionLoading}
+                hasActiveSession={activeSession !== null}
+                childName={selectedChildName}
+              />
+            </div>
 
             {/* Ad-Hoc Nap Button */}
             <AdHocNapDialog
@@ -456,6 +478,7 @@ export default function Dashboard() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Clock className="w-4 h-4" />
                   Today's Summary
+                  <HelpIcon {...HELP_CONTENT.todaySummary} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -510,15 +533,16 @@ export default function Dashboard() {
                     )} />
                   </div>
                   <div className="flex-1">
-                    <h3 className={cn(
-                      "font-semibold",
-                      nextAction?.action === 'NAP' && "text-blue-600 dark:text-blue-400",
-                      nextAction?.action === 'BEDTIME' && "text-violet-600 dark:text-violet-400",
-                      nextAction?.action === 'WAIT' && "text-primary",
-                      nextAction?.action === 'WAKE' && "text-red-600 dark:text-red-400",
-                      !hasSchedule && "text-muted-foreground"
-                    )}>
-                      {hasSchedule && nextAction ? (
+                    <div className="flex items-center gap-2">
+                      <h3 className={cn(
+                        "font-semibold",
+                        nextAction?.action === 'NAP' && "text-blue-600 dark:text-blue-400",
+                        nextAction?.action === 'BEDTIME' && "text-violet-600 dark:text-violet-400",
+                        nextAction?.action === 'WAIT' && "text-primary",
+                        nextAction?.action === 'WAKE' && "text-red-600 dark:text-red-400",
+                        !hasSchedule && "text-muted-foreground"
+                      )}>
+                        {hasSchedule && nextAction ? (
                         nextAction.action === 'NAP' ? `Nap ${nextAction.napNumber}` :
                         nextAction.action === 'BEDTIME' ? 'Bedtime' :
                         nextAction.action === 'WAKE' ? 'Wake Now!' :
@@ -526,7 +550,9 @@ export default function Dashboard() {
                       ) : (
                         'Next Recommendation'
                       )}
-                    </h3>
+                      </h3>
+                      <HelpIcon {...HELP_CONTENT.nextRecommendation} />
+                    </div>
                     <p className="text-sm text-muted-foreground mt-1">
                       {hasSchedule && nextAction ? (
                         <>
@@ -566,6 +592,12 @@ export default function Dashboard() {
         onOpenChange={setShowSleepTypeDialog}
         onSelect={handleSleepTypeSelect}
         currentNapCount={todaySummary.napCount}
+      />
+
+      {/* Onboarding Wizard - shows automatically for new users */}
+      <OnboardingWizard
+        open={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
       />
     </div>
   );

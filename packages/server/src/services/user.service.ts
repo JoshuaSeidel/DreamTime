@@ -17,6 +17,7 @@ function userToProfile(user: {
   email: string;
   name: string;
   timezone: string;
+  onboardingCompleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }): UserProfile {
@@ -25,6 +26,7 @@ function userToProfile(user: {
     email: user.email,
     name: user.name,
     timezone: user.timezone,
+    onboardingCompleted: user.onboardingCompleted,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -38,6 +40,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
       email: true,
       name: true,
       timezone: true,
+      onboardingCompleted: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -83,12 +86,30 @@ export async function updateUserProfile(
       email: true,
       name: true,
       timezone: true,
+      onboardingCompleted: true,
       createdAt: true,
       updatedAt: true,
     },
   });
 
   return userToProfile(updatedUser);
+}
+
+export async function completeOnboarding(userId: string): Promise<void> {
+  // Verify user exists
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!existingUser) {
+    throw new UserServiceError('User not found', 'USER_NOT_FOUND', 404);
+  }
+
+  // Mark onboarding as completed
+  await prisma.user.update({
+    where: { id: userId },
+    data: { onboardingCompleted: true },
+  });
 }
 
 export async function deleteUser(userId: string): Promise<void> {

@@ -22,6 +22,7 @@ export interface UserProfile {
   email: string;
   name: string;
   timezone: string;
+  onboardingCompleted: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

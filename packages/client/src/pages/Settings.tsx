@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyRound, Trash2, Loader2 } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyRound, Trash2, Loader2, HelpCircle, BookOpen } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
 import EditChildDialog from '../components/EditChildDialog';
 import CaregiverManager from '../components/CaregiverManager';
+import { OnboardingWizard } from '../components/OnboardingWizard';
 import { useToast } from '@/components/ui/toaster';
 import {
   Card,
@@ -53,6 +54,9 @@ export default function Settings() {
   const [children, setChildren] = useState<Child[]>([]);
   const [isLoadingChildren, setIsLoadingChildren] = useState(false);
   const [deletingChildId, setDeletingChildId] = useState<string | null>(null);
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Load children
   const loadChildren = useCallback(async () => {
@@ -542,6 +546,35 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* Help & Support */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <HelpCircle className="w-4 h-4" />
+              Help & Support
+            </CardTitle>
+            <CardDescription>
+              Learn how to use DreamTime effectively
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-3"
+              onClick={() => setShowOnboarding(true)}
+            >
+              <BookOpen className="w-4 h-4" />
+              <div className="text-left flex-1">
+                <p className="font-medium">Getting Started Guide</p>
+                <p className="text-sm text-muted-foreground">
+                  Review the app tutorial
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Logout */}
         <Button
           onClick={handleLogout}
@@ -558,6 +591,12 @@ export default function Settings() {
           DreamTime v0.1.0
         </p>
       </main>
+
+      {/* Onboarding Wizard */}
+      <OnboardingWizard
+        open={showOnboarding}
+        onComplete={() => setShowOnboarding(false)}
+      />
     </div>
   );
 }

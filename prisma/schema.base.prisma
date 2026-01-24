@@ -22,6 +22,8 @@ model User {
   password      String
   name          String
   timezone      String               @default("America/New_York")
+  // Onboarding status - false for new users, set to true after completing wizard
+  onboardingCompleted Boolean        @default(false)
   children      ChildCaregiver[]
   refreshTokens RefreshToken[]
   webAuthnCredentials WebAuthnCredential[]

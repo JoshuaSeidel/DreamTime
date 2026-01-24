@@ -594,3 +594,14 @@ export async function getTodaySummary(
     accessToken
   );
 }
+
+// User onboarding API
+export async function completeOnboarding(
+  accessToken: string
+): Promise<ApiResponse<{ onboardingCompleted: boolean }>> {
+  return fetchWithAuth<{ onboardingCompleted: boolean }>(
+    '/users/me/onboarding-complete',
+    { method: 'POST' },
+    accessToken
+  );
+}
