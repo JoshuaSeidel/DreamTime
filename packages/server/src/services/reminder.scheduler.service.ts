@@ -3,6 +3,8 @@ import { sendBedtimeReminder, sendNapReminder, sendWakeDeadlineAlert, sendNapCap
 import { calculateDaySchedule } from './schedule.calculator.service.js';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { startOfDay, format, differenceInMinutes, addMinutes, isAfter, isBefore, parse } from 'date-fns';
+import type { TransitionResponse } from '../schemas/schedule.schema.js';
+import { ScheduleType } from '../types/enums.js';
 
 // Track which reminders have been sent to avoid duplicates
 // Key format: `${childId}-${type}-${date}` where type is 'nap1', 'nap2', 'bedtime', 'wake_deadline', 'nap_cap'
@@ -106,6 +108,36 @@ async function processChildReminders(
 
   if (!schedule) {
     return; // No active schedule
+  }
+
+  // Get active transition if schedule is TRANSITION type
+  let transition: TransitionResponse | null = null;
+  if (schedule.type === ScheduleType.TRANSITION || schedule.type === ScheduleType.ONE_NAP) {
+    const activeTransition = await prisma.scheduleTransition.findFirst({
+      where: {
+        childId,
+        completedAt: null,
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (activeTransition) {
+      transition = {
+        id: activeTransition.id,
+        childId: activeTransition.childId,
+        fromType: activeTransition.fromType,
+        toType: activeTransition.toType,
+        startedAt: activeTransition.startedAt,
+        currentWeek: activeTransition.currentWeek,
+        targetWeeks: activeTransition.targetWeeks ?? 6,
+        currentNapTime: activeTransition.currentNapTime,
+        completedAt: activeTransition.completedAt,
+        notes: activeTransition.notes,
+        createdAt: activeTransition.createdAt,
+        updatedAt: activeTransition.updatedAt,
+      };
+      console.log(`[ReminderScheduler] ${childName}: Active transition found, targeting nap at ${transition.currentNapTime}`);
+    }
   }
 
   // Get today's sessions to determine wake time and completed naps
@@ -253,21 +285,33 @@ async function processChildReminders(
     return 0;
   });
 
-  // Calculate day schedule with actual nap data
+  // Calculate day schedule with actual nap data and transition info
   const daySchedule = calculateDaySchedule(
     wakeTime,
     schedule as any, // Type coercion for schedule response
     timezone,
-    null, // transition
+    transition, // Pass transition data for correct nap time calculation
     actualNapDurations.length > 0 ? actualNapDurations : undefined
   );
+
+  // Log schedule calculation for debugging
+  const scheduleType = schedule.type as ScheduleType;
+  const isTransitionOrOneNap = scheduleType === ScheduleType.TRANSITION || scheduleType === ScheduleType.ONE_NAP;
+  if (isTransitionOrOneNap && daySchedule.naps.length > 0) {
+    const nap1Time = format(toZonedTime(daySchedule.naps[0]!.putDownWindow.recommended, timezone), 'h:mm a');
+    console.log(`[ReminderScheduler] ${childName}: ${scheduleType} schedule - Nap 1 calculated at ${nap1Time}${transition ? ` (transition target: ${transition.currentNapTime})` : ''}`);
+  }
 
   // Get reminder lead times from schedule (with defaults for backwards compatibility)
   const napReminderMinutes = schedule.napReminderMinutes ?? DEFAULT_NAP_REMINDER_MINUTES;
   const bedtimeReminderMinutes = schedule.bedtimeReminderMinutes ?? DEFAULT_BEDTIME_REMINDER_MINUTES;
 
   // Check each nap - send reminders at 30 and 15 minutes before (for 5-10 min routine)
-  for (const nap of daySchedule.naps) {
+  // For TRANSITION and ONE_NAP schedules, only process nap 1 (single nap)
+  const maxNapsToProcess = isTransitionOrOneNap ? 1 : daySchedule.naps.length;
+
+  for (let i = 0; i < maxNapsToProcess && i < daySchedule.naps.length; i++) {
+    const nap = daySchedule.naps[i]!;
     if (nap.napNumber <= completedNaps) {
       continue; // Already completed
     }
