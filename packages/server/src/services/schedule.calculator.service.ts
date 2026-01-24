@@ -187,66 +187,54 @@ function calculateNap2TwoNap(
 ): NapRecommendation {
   const notes: string[] = [];
 
-  // Calculate based on wake window 2
+  // Calculate based on wake window 2 - ALWAYS respect user's configured wake windows
   const ww2Min = schedule.wakeWindow2Min ?? 150; // Default 2.5 hours
   const ww2Max = schedule.wakeWindow2Max ?? 210; // Default 3.5 hours
 
-  let earliestByWakeWindow = addMinutes(nap1EndTime, ww2Min);
-  let latestByWakeWindow = addMinutes(nap1EndTime, ww2Max);
+  // These are the hard limits based on actual nap end time + wake window
+  const earliestByWakeWindow = addMinutes(nap1EndTime, ww2Min);
+  const latestByWakeWindow = addMinutes(nap1EndTime, ww2Max);
 
-  // Apply consultant's nap timing rules based on nap 1 outcome
+  // Calculate recommended time based on wake windows
   let recommended: Date;
   if (nap1Duration !== undefined) {
     if (nap1Duration === 0) {
-      // Nap 1 skipped/protested: next nap 12:15/12:30pm
-      recommended = parseTimeString('12:22', baseDate, timezone); // 12:22pm (middle)
-      notes.push('Nap 1 skipped - earlier nap 2 timing');
+      // Nap 1 skipped - recommend closer to minimum wake window
+      recommended = earliestByWakeWindow;
+      notes.push('Nap 1 skipped - using minimum wake window');
     } else if (nap1Duration < 60) {
-      // Nap 1 was 30-45 mins: next nap 12:30/12:45pm
-      recommended = parseTimeString('12:37', baseDate, timezone); // 12:37pm (middle)
-      notes.push(`Short nap 1 (${nap1Duration}m) - slightly earlier nap 2`);
+      // Short nap 1 - recommend closer to minimum wake window
+      recommended = earliestByWakeWindow;
+      notes.push(`Short nap 1 (${nap1Duration}m) - using minimum wake window`);
     } else {
-      // Nap 1 was 1 hr+: next nap 12:45/1pm
-      recommended = parseTimeString('12:52', baseDate, timezone); // 12:52pm (middle)
-      notes.push('Good nap 1 - standard nap 2 timing');
-    }
-
-    // Adjust earliest/latest based on consultant guidance
-    if (nap1Duration === 0) {
-      earliestByWakeWindow = parseTimeString('12:15', baseDate, timezone);
-      latestByWakeWindow = parseTimeString('12:30', baseDate, timezone);
-    } else if (nap1Duration < 60) {
-      earliestByWakeWindow = parseTimeString('12:30', baseDate, timezone);
-      latestByWakeWindow = parseTimeString('12:45', baseDate, timezone);
-    } else {
-      earliestByWakeWindow = parseTimeString('12:45', baseDate, timezone);
-      latestByWakeWindow = parseTimeString('13:00', baseDate, timezone);
+      // Good nap 1 - recommend middle of wake window
+      recommended = averageTime(earliestByWakeWindow, latestByWakeWindow);
+      notes.push('Good nap 1 - standard timing');
     }
   } else {
-    // No nap 1 data yet - use standard wake window calculation
+    // No nap 1 data yet - use middle of wake window
     recommended = averageTime(earliestByWakeWindow, latestByWakeWindow);
   }
 
-  // Apply schedule constraints with consultant defaults:
-  // - Starts no earlier than 12:00 PM
-  // - Starts no later than 1:00 PM
-  const nap2EarliestTime = schedule.nap2Earliest
-    ? parseTimeString(schedule.nap2Earliest, baseDate, timezone)
-    : parseTimeString('12:00', baseDate, timezone);
-  const nap2LatestTime = schedule.nap2LatestStart
-    ? parseTimeString(schedule.nap2LatestStart, baseDate, timezone)
-    : parseTimeString('13:00', baseDate, timezone);
-
+  // Start with wake window based times
   let earliest = earliestByWakeWindow;
   let latest = latestByWakeWindow;
 
-  if (isAfter(nap2EarliestTime, earliest)) {
-    earliest = nap2EarliestTime;
-    notes.push(`Nap 2 held until 12:00pm per schedule`);
+  // Apply schedule constraints (nap2Earliest, nap2LatestStart) if configured
+  // These are optional floor/ceiling constraints, but wake window is primary
+  if (schedule.nap2Earliest) {
+    const nap2EarliestTime = parseTimeString(schedule.nap2Earliest, baseDate, timezone);
+    if (isAfter(nap2EarliestTime, earliest)) {
+      earliest = nap2EarliestTime;
+      notes.push(`Nap 2 held until ${schedule.nap2Earliest} per schedule`);
+    }
   }
 
-  if (isBefore(nap2LatestTime, latest)) {
-    latest = nap2LatestTime;
+  if (schedule.nap2LatestStart) {
+    const nap2LatestTime = parseTimeString(schedule.nap2LatestStart, baseDate, timezone);
+    if (isBefore(nap2LatestTime, latest)) {
+      latest = nap2LatestTime;
+    }
   }
 
   // Ensure earliest is not after latest
