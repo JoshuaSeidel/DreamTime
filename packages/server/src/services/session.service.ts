@@ -24,6 +24,16 @@ export class SessionServiceError extends Error {
   }
 }
 
+// Sleep cycle interface for responses
+interface SleepCycleResponse {
+  id: string;
+  cycleNumber: number;
+  asleepAt: Date;
+  wokeUpAt: Date | null;
+  sleepMinutes: number | null;
+  awakeMinutes: number | null;
+}
+
 // Verify user has access to child and check role
 async function verifyChildAccess(
   userId: string,
@@ -78,6 +88,14 @@ interface SessionWithUserInfo {
   lastUpdatedByUserId: string | null;
   createdByUser?: { id: string; name: string; email: string } | null;
   lastUpdatedByUser?: { id: string; name: string; email: string } | null;
+  sleepCycles?: Array<{
+    id: string;
+    cycleNumber: number;
+    asleepAt: Date;
+    wokeUpAt: Date | null;
+    sleepMinutes: number | null;
+    awakeMinutes: number | null;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -87,11 +105,37 @@ function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
   lastUpdatedByUserId?: string | null;
   createdByName?: string | null;
   lastUpdatedByName?: string | null;
+  sleepCycles?: SleepCycleResponse[];
+  wakeUpCount?: number;
+  totalCycleSleepMinutes?: number;
+  totalAwakeMinutes?: number;
 } {
+  // Calculate totals from sleep cycles if present
+  let wakeUpCount = 0;
+  let totalCycleSleepMinutes = 0;
+  let totalAwakeMinutes = 0;
+
+  if (session.sleepCycles && session.sleepCycles.length > 0) {
+    wakeUpCount = session.sleepCycles.filter(c => c.wokeUpAt !== null).length;
+    totalCycleSleepMinutes = session.sleepCycles.reduce((sum, c) => sum + (c.sleepMinutes ?? 0), 0);
+    totalAwakeMinutes = session.sleepCycles.reduce((sum, c) => sum + (c.awakeMinutes ?? 0), 0);
+  }
+
   return {
     ...session,
     createdByName: session.createdByUser?.name ?? null,
     lastUpdatedByName: session.lastUpdatedByUser?.name ?? null,
+    sleepCycles: session.sleepCycles?.map(c => ({
+      id: c.id,
+      cycleNumber: c.cycleNumber,
+      asleepAt: c.asleepAt,
+      wokeUpAt: c.wokeUpAt,
+      sleepMinutes: c.sleepMinutes,
+      awakeMinutes: c.awakeMinutes,
+    })),
+    wakeUpCount: session.sleepCycles ? wakeUpCount : undefined,
+    totalCycleSleepMinutes: session.sleepCycles ? totalCycleSleepMinutes : undefined,
+    totalAwakeMinutes: session.sleepCycles ? totalAwakeMinutes : undefined,
   };
 }
 
@@ -230,6 +274,7 @@ export async function listSessions(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -259,6 +304,7 @@ export async function getSession(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -292,6 +338,7 @@ export async function createSession(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -306,17 +353,22 @@ export async function updateSession(
 ): Promise<SleepSessionResponse> {
   await verifyChildAccess(userId, childId, true);
 
-  // Find the session
+  // Find the session with existing sleep cycles
   const session = await prisma.sleepSession.findFirst({
     where: {
       id: sessionId,
       childId,
+    },
+    include: {
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
   if (!session) {
     throw new SessionServiceError('Session not found', 'SESSION_NOT_FOUND', 404);
   }
+
+  const isNightSleep = session.sessionType === 'NIGHT_SLEEP';
 
   // Build update data - always track who made the update
   const updateData: {
@@ -355,18 +407,56 @@ export async function updateSession(
           );
         }
         updateData.state = newState;
-        // Brief wake handling: If coming from AWAKE state (baby fell back asleep),
-        // don't overwrite the original asleepAt - preserve it for accurate sleep duration
-        if (currentState !== SessionState.AWAKE) {
-          updateData.asleepAt = input.asleepAt ? new Date(input.asleepAt) : now;
+
+        const asleepTime = input.asleepAt ? new Date(input.asleepAt) : now;
+
+        if (isNightSleep) {
+          // For night sleep, create a new sleep cycle
+          const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
+
+          if (currentState === SessionState.AWAKE && lastCycle && lastCycle.wokeUpAt) {
+            // Baby fell back asleep after waking - update last cycle's awake time and create new cycle
+            const awakeMinutes = Math.max(0, Math.round((asleepTime.getTime() - lastCycle.wokeUpAt.getTime()) / 60000));
+
+            await prisma.sleepCycle.update({
+              where: { id: lastCycle.id },
+              data: { awakeMinutes },
+            });
+
+            // Create a new cycle for this sleep period
+            const newCycleNumber = lastCycle.cycleNumber + 1;
+            await prisma.sleepCycle.create({
+              data: {
+                sessionId: session.id,
+                cycleNumber: newCycleNumber,
+                asleepAt: asleepTime,
+              },
+            });
+          } else if (currentState === SessionState.PENDING) {
+            // First time falling asleep - create first cycle
+            await prisma.sleepCycle.create({
+              data: {
+                sessionId: session.id,
+                cycleNumber: 1,
+                asleepAt: asleepTime,
+              },
+            });
+            updateData.asleepAt = asleepTime;
+          }
+        } else {
+          // For naps, keep the simple approach
+          if (currentState !== SessionState.AWAKE) {
+            updateData.asleepAt = asleepTime;
+          }
+          // Clear wokeUpAt since baby is asleep again
+          updateData.wokeUpAt = null as unknown as Date;
         }
-        // Clear wokeUpAt since baby is asleep again (brief wake is excluded)
-        updateData.wokeUpAt = null as unknown as Date;
         break;
 
       case 'woke_up':
-        // For ad-hoc naps (car, stroller, etc.), woke_up goes directly to COMPLETED
-        // since there's no "awake in crib" phase - baby is just done sleeping
+        const wokeUpTime = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
+
+        // For ad-hoc naps, woke_up goes directly to COMPLETED
         if (session.isAdHoc) {
           newState = SessionState.COMPLETED;
           if (!isValidStateTransition(currentState, newState)) {
@@ -377,11 +467,10 @@ export async function updateSession(
             );
           }
           updateData.state = newState;
-          const wokeUpTime = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
           updateData.wokeUpAt = wokeUpTime;
-          updateData.outOfCribAt = wokeUpTime; // For ad-hoc, outOfCrib = wokeUp
+          updateData.outOfCribAt = wokeUpTime;
         } else {
-          // Regular crib nap - go to AWAKE state (baby still in crib)
+          // Regular crib nap/night sleep - go to AWAKE state
           newState = SessionState.AWAKE;
           if (!isValidStateTransition(currentState, newState)) {
             throw new SessionServiceError(
@@ -391,7 +480,23 @@ export async function updateSession(
             );
           }
           updateData.state = newState;
-          updateData.wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
+          updateData.wokeUpAt = wokeUpTime;
+
+          if (isNightSleep) {
+            // Update the current cycle with woke up time and calculate sleep duration
+            const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
+            if (lastCycle && !lastCycle.wokeUpAt) {
+              const sleepMinutes = Math.max(0, Math.round((wokeUpTime.getTime() - lastCycle.asleepAt.getTime()) / 60000));
+
+              await prisma.sleepCycle.update({
+                where: { id: lastCycle.id },
+                data: {
+                  wokeUpAt: wokeUpTime,
+                  sleepMinutes,
+                },
+              });
+            }
+          }
         }
         break;
 
@@ -406,6 +511,23 @@ export async function updateSession(
         }
         updateData.state = newState;
         updateData.outOfCribAt = input.outOfCribAt ? new Date(input.outOfCribAt) : now;
+
+        // For night sleep, finalize any open cycle
+        if (isNightSleep) {
+          const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
+          if (lastCycle && !lastCycle.wokeUpAt && updateData.outOfCribAt) {
+            // Baby was still asleep when taken out - record final wake
+            const sleepMinutes = Math.max(0, Math.round((updateData.outOfCribAt.getTime() - lastCycle.asleepAt.getTime()) / 60000));
+
+            await prisma.sleepCycle.update({
+              where: { id: lastCycle.id },
+              data: {
+                wokeUpAt: updateData.outOfCribAt,
+                sleepMinutes,
+              },
+            });
+          }
+        }
         break;
     }
   }
@@ -435,42 +557,86 @@ export async function updateSession(
     updateData.notes = input.notes;
   }
 
-  // Calculate durations if we have enough data
+  // Calculate durations
+  // For night sleep with cycles, calculate from cycles
+  // For naps, use the simple calculation
   const finalPutDownAt = updateData.putDownAt ?? session.putDownAt;
   const finalAsleepAt = updateData.asleepAt ?? session.asleepAt;
   const finalWokeUpAt = updateData.wokeUpAt ?? session.wokeUpAt;
   const finalOutOfCribAt = updateData.outOfCribAt ?? session.outOfCribAt;
 
-  const durations = calculateDurations(
-    finalPutDownAt,
-    finalAsleepAt,
-    finalWokeUpAt,
-    finalOutOfCribAt,
-    session.isAdHoc // Pass ad-hoc flag for different calculation
-  );
+  if (isNightSleep && session.sleepCycles.length > 0) {
+    // Fetch updated cycles
+    const cycles = await prisma.sleepCycle.findMany({
+      where: { sessionId: session.id },
+      orderBy: { cycleNumber: 'asc' },
+    });
 
-  if (durations.totalMinutes !== null) {
-    updateData.totalMinutes = durations.totalMinutes;
-  }
+    // Calculate total sleep from all cycles
+    let totalSleepMinutes = 0;
+    let totalAwakeMinutes = 0;
 
-  if (durations.sleepMinutes !== null) {
-    updateData.sleepMinutes = durations.sleepMinutes;
-  }
+    for (const cycle of cycles) {
+      totalSleepMinutes += cycle.sleepMinutes ?? 0;
+      totalAwakeMinutes += cycle.awakeMinutes ?? 0;
+    }
 
-  if (durations.settlingMinutes !== null) {
-    updateData.settlingMinutes = durations.settlingMinutes;
-  }
+    updateData.sleepMinutes = totalSleepMinutes;
+    updateData.awakeCribMinutes = totalAwakeMinutes;
 
-  if (durations.postWakeMinutes !== null) {
-    updateData.postWakeMinutes = durations.postWakeMinutes;
-  }
+    // Total time in crib
+    if (finalPutDownAt && finalOutOfCribAt) {
+      updateData.totalMinutes = Math.max(0, Math.round((finalOutOfCribAt.getTime() - finalPutDownAt.getTime()) / 60000));
+    }
 
-  if (durations.awakeCribMinutes !== null) {
-    updateData.awakeCribMinutes = durations.awakeCribMinutes;
-  }
+    // Settling time (first put down to first asleep)
+    if (finalPutDownAt && cycles[0]) {
+      updateData.settlingMinutes = Math.max(0, Math.round((cycles[0].asleepAt.getTime() - finalPutDownAt.getTime()) / 60000));
+    }
 
-  if (durations.qualifiedRestMinutes !== null) {
-    updateData.qualifiedRestMinutes = durations.qualifiedRestMinutes;
+    // Post wake time (last cycle woke up to out of crib)
+    const lastCycle = cycles[cycles.length - 1];
+    if (lastCycle?.wokeUpAt && finalOutOfCribAt) {
+      updateData.postWakeMinutes = Math.max(0, Math.round((finalOutOfCribAt.getTime() - lastCycle.wokeUpAt.getTime()) / 60000));
+    }
+
+    // Qualified rest for night sleep
+    const awakeCrib = (updateData.settlingMinutes ?? 0) + (updateData.postWakeMinutes ?? 0) + totalAwakeMinutes;
+    updateData.awakeCribMinutes = awakeCrib;
+    updateData.qualifiedRestMinutes = Math.round((awakeCrib / 2) + totalSleepMinutes);
+  } else {
+    // For naps, use the simple calculation
+    const durations = calculateDurations(
+      finalPutDownAt,
+      finalAsleepAt,
+      finalWokeUpAt,
+      finalOutOfCribAt,
+      session.isAdHoc
+    );
+
+    if (durations.totalMinutes !== null) {
+      updateData.totalMinutes = durations.totalMinutes;
+    }
+
+    if (durations.sleepMinutes !== null) {
+      updateData.sleepMinutes = durations.sleepMinutes;
+    }
+
+    if (durations.settlingMinutes !== null) {
+      updateData.settlingMinutes = durations.settlingMinutes;
+    }
+
+    if (durations.postWakeMinutes !== null) {
+      updateData.postWakeMinutes = durations.postWakeMinutes;
+    }
+
+    if (durations.awakeCribMinutes !== null) {
+      updateData.awakeCribMinutes = durations.awakeCribMinutes;
+    }
+
+    if (durations.qualifiedRestMinutes !== null) {
+      updateData.qualifiedRestMinutes = durations.qualifiedRestMinutes;
+    }
   }
 
   // Update the session
@@ -480,6 +646,7 @@ export async function updateSession(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -528,6 +695,7 @@ export async function getActiveSession(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -594,6 +762,7 @@ export async function createAdHocSession(
       include: {
         createdByUser: { select: { id: true, name: true, email: true } },
         lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+        sleepCycles: { orderBy: { cycleNumber: 'asc' } },
       },
     });
 
@@ -618,6 +787,7 @@ export async function createAdHocSession(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
@@ -694,6 +864,8 @@ export async function getDailySummary(
   totalSleepMinutes: number;
   napCount: number;
   nightSleepMinutes: number;
+  nightWakeCount: number;
+  totalAwakeMinutes: number;
   sessions: SleepSessionResponse[];
 }> {
   await verifyChildAccess(userId, childId);
@@ -716,12 +888,15 @@ export async function getDailySummary(
     include: {
       createdByUser: { select: { id: true, name: true, email: true } },
       lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+      sleepCycles: { orderBy: { cycleNumber: 'asc' } },
     },
   });
 
   let totalSleepMinutes = 0;
   let napCount = 0;
   let nightSleepMinutes = 0;
+  let nightWakeCount = 0;
+  let totalAwakeMinutes = 0;
 
   for (const session of sessions) {
     if (session.sleepMinutes) {
@@ -731,6 +906,16 @@ export async function getDailySummary(
         napCount++;
       } else if (session.sessionType === 'NIGHT_SLEEP') {
         nightSleepMinutes += session.sleepMinutes;
+        // Count wake-ups from sleep cycles (excluding the final wake)
+        if (session.sleepCycles && session.sleepCycles.length > 1) {
+          nightWakeCount += session.sleepCycles.length - 1;
+        }
+        // Sum up awake time during night
+        if (session.sleepCycles) {
+          for (const cycle of session.sleepCycles) {
+            totalAwakeMinutes += cycle.awakeMinutes ?? 0;
+          }
+        }
       }
     }
   }
@@ -740,6 +925,8 @@ export async function getDailySummary(
     totalSleepMinutes,
     napCount,
     nightSleepMinutes,
+    nightWakeCount,
+    totalAwakeMinutes,
     sessions: sessions.map(formatSession),
   };
 }

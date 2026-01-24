@@ -300,6 +300,30 @@ model SleepSession {
   @@index([childId, createdAt])
   @@index([childId, sessionType])
   @@index([createdByUserId])
+
+  // Relation to sleep cycles (for tracking multiple wake-ups in night sleep)
+  sleepCycles SleepCycle[]
+}
+
+// Sleep Cycle - tracks individual asleep/awake cycles within a session
+// Used primarily for night sleep where baby may wake multiple times
+model SleepCycle {
+  id          String   @id @default(uuid())
+  sessionId   String
+  cycleNumber Int      // 1, 2, 3, etc. - order of the cycle
+  asleepAt    DateTime // When baby fell asleep in this cycle
+  wokeUpAt    DateTime? // When baby woke up from this cycle
+
+  // Calculated duration for this cycle
+  sleepMinutes Int?    // Time asleep in this cycle
+  awakeMinutes Int?    // Time awake before falling back asleep (null for last cycle)
+
+  session     SleepSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([sessionId, cycleNumber])
 }
 
 // SessionType values: NAP, NIGHT_SLEEP
