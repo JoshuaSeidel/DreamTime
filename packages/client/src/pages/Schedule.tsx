@@ -836,7 +836,7 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
                           <label className="text-xs text-muted-foreground">Min (minutes)</label>
                           <Input
@@ -903,7 +903,7 @@ export default function Schedule() {
                             </Button>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
                             <label className="text-xs text-muted-foreground">Min (minutes)</label>
                             <Input
@@ -982,7 +982,7 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {selectedType === 'ONE_NAP' ? (
                           <>
                             <div>
@@ -1158,7 +1158,7 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="min-w-0">
                           <label className="text-xs text-muted-foreground block mb-1">Start</label>
                           <Input
@@ -1217,7 +1217,7 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="min-w-0">
                           <label className="text-xs text-muted-foreground block mb-1">Earliest</label>
                           <Input
@@ -1276,7 +1276,7 @@ export default function Schedule() {
                           </Button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="min-w-0">
                           <label className="text-xs text-muted-foreground block mb-1">Earliest</label>
                           <Input
