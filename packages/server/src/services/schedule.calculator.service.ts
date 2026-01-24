@@ -550,7 +550,8 @@ export function calculateDaySchedule(
   schedule: SleepScheduleResponse,
   timezone: string,
   transition?: TransitionResponse | null,
-  actualNapDurations?: number[] // Actual nap durations if naps already happened
+  actualNapDurations?: number[], // Actual nap durations if naps already happened
+  actualNapEndTimes?: Date[] // Actual nap end times (wokeUpAt) for precise timing
 ): DayScheduleRecommendation {
   const baseDate = wakeTime;
   const warnings: string[] = [];
@@ -563,14 +564,14 @@ export function calculateDaySchedule(
     const nap1 = calculateNap1TwoNap(wakeTime, schedule, timezone, baseDate);
     naps.push(nap1);
 
-    // Estimate nap 1 end time (use actual if provided, otherwise max duration)
+    // Use ACTUAL nap end time if available, otherwise estimate from recommended put-down + duration
     const nap1Duration = actualNapDurations?.[0] ?? nap1.maxDuration;
-    const nap1EndEstimate = addMinutes(nap1.putDownWindow.recommended, nap1Duration);
+    const nap1EndTime = actualNapEndTimes?.[0] ?? addMinutes(nap1.putDownWindow.recommended, nap1Duration);
     const nap1WasShort = nap1Duration < 60;
 
-    // Pass nap1Duration to get consultant's timing recommendations
+    // Pass actual nap1 end time for correct wake window calculation
     const nap2 = calculateNap2TwoNap(
-      nap1EndEstimate,
+      nap1EndTime,
       schedule,
       timezone,
       baseDate,
@@ -579,9 +580,9 @@ export function calculateDaySchedule(
     );
     naps.push(nap2);
 
-    // Estimate nap 2 end time
+    // Use ACTUAL nap 2 end time if available, otherwise estimate
     const nap2Duration = actualNapDurations?.[1] ?? nap2.maxDuration;
-    const nap2EndEstimate = addMinutes(nap2.putDownWindow.recommended, nap2Duration);
+    const nap2EndTime = actualNapEndTimes?.[1] ?? addMinutes(nap2.putDownWindow.recommended, nap2Duration);
 
     // Check day sleep cap
     const totalExpectedNap = nap1Duration + nap2Duration;
@@ -593,7 +594,7 @@ export function calculateDaySchedule(
     const expectedNapMinutes = schedule.daySleepCap;
     const actualNapMinutes = (actualNapDurations?.[0] ?? 0) + (actualNapDurations?.[1] ?? 0);
     const bedtime = calculateBedtime(
-      nap2EndEstimate,
+      nap2EndTime,
       schedule,
       timezone,
       baseDate,
@@ -617,15 +618,15 @@ export function calculateDaySchedule(
     const nap1 = calculateSingleNap(wakeTime, schedule, timezone, baseDate, transition);
     naps.push(nap1);
 
-    // Estimate nap end time
+    // Use ACTUAL nap end time if available, otherwise estimate
     const napDuration = actualNapDurations?.[0] ?? nap1.maxDuration;
-    const napEndEstimate = addMinutes(nap1.putDownWindow.recommended, napDuration);
+    const napEndTime = actualNapEndTimes?.[0] ?? addMinutes(nap1.putDownWindow.recommended, napDuration);
 
     // Calculate bedtime with consultant's logic
     const expectedNapMinutes = schedule.daySleepCap;
     const actualNapMinutes = actualNapDurations?.[0] ?? 0;
     const bedtime = calculateBedtime(
-      napEndEstimate,
+      napEndTime,
       schedule,
       timezone,
       baseDate,

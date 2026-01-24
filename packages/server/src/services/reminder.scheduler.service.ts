@@ -274,7 +274,7 @@ async function processChildReminders(
     return;
   }
 
-  // Get actual nap durations from completed naps today
+  // Get actual nap durations and end times from completed naps today
   const completedNapSessions = sessions.filter(
     s => s.sessionType === 'NAP' && s.state === 'COMPLETED' && s.asleepAt && s.wokeUpAt
   );
@@ -284,6 +284,10 @@ async function processChildReminders(
     }
     return 0;
   });
+  // Get actual nap end times (wokeUpAt) for precise timing calculations
+  const actualNapEndTimes: Date[] = completedNapSessions
+    .map(s => s.wokeUpAt)
+    .filter((t): t is Date => t !== null);
 
   // Calculate day schedule with actual nap data and transition info
   const daySchedule = calculateDaySchedule(
@@ -291,7 +295,8 @@ async function processChildReminders(
     schedule as any, // Type coercion for schedule response
     timezone,
     transition, // Pass transition data for correct nap time calculation
-    actualNapDurations.length > 0 ? actualNapDurations : undefined
+    actualNapDurations.length > 0 ? actualNapDurations : undefined,
+    actualNapEndTimes.length > 0 ? actualNapEndTimes : undefined
   );
 
   // Log schedule calculation for debugging

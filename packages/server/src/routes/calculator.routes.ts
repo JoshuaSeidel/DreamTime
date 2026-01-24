@@ -212,6 +212,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         // IMPORTANT: Must match today-summary logic exactly - include all completed naps
         const completedScheduledNaps = scheduledNaps.filter(s => s.state === SessionState.COMPLETED);
         const scheduledNapDurations = completedScheduledNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+        // Get actual nap end times (wokeUpAt) for precise timing calculations
+        const scheduledNapEndTimes = completedScheduledNaps
+          .map(s => s.wokeUpAt)
+          .filter((t): t is Date => t !== null);
         const adHocNapDurations = adHocNaps.map(s => s.qualifiedRestMinutes ?? 0);
         // Combine for total rest credit (same as today-summary)
         const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
@@ -221,7 +225,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           schedule,
           timezone,
           transition,
-          napDurations.length > 0 ? napDurations : undefined
+          napDurations.length > 0 ? napDurations : undefined,
+          scheduledNapEndTimes.length > 0 ? scheduledNapEndTimes : undefined
         );
 
         // Calculate ad-hoc bedtime bump (15 min if any ad-hoc nap >= 30 min)
@@ -341,6 +346,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         // Qualified Rest = (Awake Crib Time ÷ 2) + Actual Sleep Time
         // This gives credit for rest even when baby doesn't sleep
         const scheduledNapDurations = completedNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+        // Get actual nap end times (wokeUpAt) for precise timing calculations
+        const scheduledNapEndTimes = completedNaps
+          .map(s => s.wokeUpAt)
+          .filter((t): t is Date => t !== null);
         const adHocNapDurations = adHocNaps.map(s => s.qualifiedRestMinutes ?? 0);
         const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
         const totalQualifiedRestMinutes = napDurations.reduce((sum, d) => sum + d, 0);
@@ -380,7 +389,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           schedule,
           timezone,
           transition,
-          napDurations.length > 0 ? napDurations : undefined
+          napDurations.length > 0 ? napDurations : undefined,
+          scheduledNapEndTimes.length > 0 ? scheduledNapEndTimes : undefined
         );
 
         // Determine if bedtime is finalized
