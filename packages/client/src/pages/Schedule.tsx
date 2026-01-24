@@ -1080,32 +1080,227 @@ export default function Schedule() {
               <CardContent>
                 {selectedType ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 rounded-lg bg-muted/50 text-center">
-                        <p className="text-2xl font-bold text-primary">
-                          {formatMinutesToHours(scheduleConfig.daySleepCap || 0)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Day Sleep Cap</p>
+                    {/* Day Sleep Cap - Editable */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Day Sleep Cap</p>
+                          <p className="text-xs text-muted-foreground">Total nap sleep allowed per day</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {formatMinutesToHours(scheduleConfig.daySleepCap || 0)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                setScheduleConfig(prev => ({
+                                  ...prev,
+                                  daySleepCap: defaults.daySleepCap,
+                                }));
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="p-3 rounded-lg bg-muted/50 text-center">
-                        <p className="text-2xl font-bold text-primary">
-                          {formatTimeString(scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Target Bedtime</p>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Minutes</label>
+                        <Input
+                          type="number"
+                          min={60}
+                          max={480}
+                          step={15}
+                          value={scheduleConfig.daySleepCap || 210}
+                          onChange={(e) => setScheduleConfig(prev => ({
+                            ...prev,
+                            daySleepCap: parseInt(e.target.value) || 210
+                          }))}
+                          className="h-8"
+                        />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-3 rounded-lg bg-muted/50 text-center">
-                        <p className="text-lg font-semibold">
-                          {formatTimeRange(scheduleConfig.wakeTimeEarliest, scheduleConfig.wakeTimeLatest)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Wake Window</p>
+
+                    {/* Target Bedtime - Editable */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Target Bedtime</p>
+                          <p className="text-xs text-muted-foreground">Goal bedtime start</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {formatTimeString(scheduleConfig.bedtimeGoalStart || scheduleConfig.bedtimeEarliest)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                setScheduleConfig(prev => ({
+                                  ...prev,
+                                  bedtimeGoalStart: defaults.bedtimeGoalStart,
+                                  bedtimeGoalEnd: defaults.bedtimeGoalEnd,
+                                }));
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="p-3 rounded-lg bg-muted/50 text-center">
-                        <p className="text-lg font-semibold">
-                          {formatTimeRange(scheduleConfig.bedtimeEarliest, scheduleConfig.bedtimeLatest)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Bedtime Range</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Goal Start</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.bedtimeGoalStart || '19:00'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeGoalStart: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Goal End</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.bedtimeGoalEnd || '19:30'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeGoalEnd: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bedtime Range - Editable */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Bedtime Range</p>
+                          <p className="text-xs text-muted-foreground">Allowed bedtime window</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {formatTimeRange(scheduleConfig.bedtimeEarliest, scheduleConfig.bedtimeLatest)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                setScheduleConfig(prev => ({
+                                  ...prev,
+                                  bedtimeEarliest: defaults.bedtimeEarliest,
+                                  bedtimeLatest: defaults.bedtimeLatest,
+                                }));
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Earliest</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.bedtimeEarliest || '17:30'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeEarliest: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Latest</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.bedtimeLatest || '19:30'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeLatest: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Wake Time Range - Editable */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">Wake Time Range</p>
+                          <p className="text-xs text-muted-foreground">Expected morning wake window</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-primary">
+                            {formatTimeRange(scheduleConfig.wakeTimeEarliest, scheduleConfig.wakeTimeLatest)}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            title="Reset to default"
+                            onClick={() => {
+                              const defaults = DEFAULT_SCHEDULES[selectedType as keyof typeof DEFAULT_SCHEDULES];
+                              if (defaults) {
+                                setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeTimeEarliest: defaults.wakeTimeEarliest,
+                                  wakeTimeLatest: defaults.wakeTimeLatest,
+                                }));
+                              }
+                            }}
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Earliest</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.wakeTimeEarliest || '06:30'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              wakeTimeEarliest: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Latest</label>
+                          <Input
+                            type="time"
+                            value={scheduleConfig.wakeTimeLatest || '07:30'}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              wakeTimeLatest: e.target.value
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
