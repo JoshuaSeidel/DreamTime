@@ -77,6 +77,7 @@ export type StartTransitionInput = z.infer<typeof startTransitionSchema>;
 export const progressTransitionSchema = z.object({
   newNapTime: timeSchema.optional(), // Push nap time later
   currentWeek: z.number().int().min(1).max(12).optional(),
+  targetWeeks: z.number().int().min(2).max(6).optional(), // Update transition duration
   notes: z.string().max(500).optional(),
   complete: z.boolean().optional(),
 });

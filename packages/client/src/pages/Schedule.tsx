@@ -388,6 +388,32 @@ export default function Schedule() {
     }
   };
 
+  const handleUpdateTargetWeeks = async (newTargetWeeks: number) => {
+    if (!accessToken || !selectedChildId || !currentTransition) return;
+
+    setIsSaving(true);
+    try {
+      const result = await updateTransition(accessToken, selectedChildId, {
+        targetWeeks: newTargetWeeks,
+      });
+      if (result.success) {
+        const isFastTrack = newTargetWeeks <= 4;
+        toast.success(
+          'Transition updated',
+          isFastTrack ? `Fast-track mode: ${newTargetWeeks} weeks` : `Standard pace: ${newTargetWeeks} weeks`
+        );
+        setCurrentTransition(result.data!);
+      } else {
+        toast.error('Failed to update', result.error?.message || 'Could not update transition');
+      }
+    } catch (err) {
+      console.error('[Schedule] Update target weeks error:', err);
+      toast.error('Error', 'An unexpected error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const formatMinutesToHours = (minutes: number) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -486,6 +512,47 @@ export default function Schedule() {
                 <li>Expect earlier bedtime (6:00-7:00 PM) during transition</li>
                 <li>It's okay if some days need a rescue nap</li>
               </ul>
+            </CardContent>
+          </Card>
+
+          {/* Adjust Transition Duration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Adjust Transition Pace</CardTitle>
+              <CardDescription>
+                {targetWeeks <= 4 ? 'Fast-track mode enabled' : 'Standard pace'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={2}
+                  max={6}
+                  value={targetWeeks}
+                  onChange={(e) => handleUpdateTargetWeeks(parseInt(e.target.value))}
+                  className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                  disabled={isSaving}
+                />
+                <span className="w-16 text-center font-bold text-lg">{targetWeeks} wks</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {targetWeeks === 6 && 'Standard pace - recommended for most babies'}
+                {targetWeeks === 5 && 'Slightly accelerated pace'}
+                {targetWeeks === 4 && 'Accelerated pace - for babies showing strong readiness'}
+                {targetWeeks === 3 && 'Fast pace - for babies adapting quickly'}
+                {targetWeeks === 2 && 'Fastest pace - only if baby is fully ready'}
+              </p>
+              {targetWeeks <= 4 && (
+                <div className="mt-2 p-2 bg-primary/10 rounded text-xs">
+                  <strong>Fast-track tips:</strong>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Check temperament at 11:30am - if good, try pushing to 12pm</li>
+                    <li>Can push nap time every 2-3 days if baby adapts well</li>
+                    <li>Morning rest can help baby stay well-rested</li>
+                  </ul>
+                </div>
+              )}
             </CardContent>
           </Card>
 

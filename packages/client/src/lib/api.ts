@@ -489,7 +489,7 @@ export async function startTransition(
 export async function updateTransition(
   accessToken: string,
   childId: string,
-  data: { newNapTime?: string; currentWeek?: number; notes?: string; complete?: boolean }
+  data: { newNapTime?: string; currentWeek?: number; targetWeeks?: number; notes?: string; complete?: boolean }
 ): Promise<ApiResponse<ScheduleTransition>> {
   return fetchWithAuth<ScheduleTransition>(
     `/children/${childId}/transition`,

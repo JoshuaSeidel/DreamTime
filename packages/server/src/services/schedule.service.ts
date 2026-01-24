@@ -116,7 +116,7 @@ function formatTransition(
     toType: string;
     startedAt: Date;
     currentWeek: number;
-    targetWeeks: number;
+    targetWeeks?: number | null;
     currentNapTime: string;
     completedAt: Date | null;
     notes: string | null;
@@ -124,7 +124,10 @@ function formatTransition(
     updatedAt: Date;
   }
 ): TransitionResponse {
-  return transition;
+  return {
+    ...transition,
+    targetWeeks: transition.targetWeeks ?? 6, // Default to 6 if not set
+  };
 }
 
 export async function getActiveSchedule(
@@ -321,6 +324,7 @@ export async function progressTransition(
   const updateData: {
     currentNapTime?: string;
     currentWeek?: number;
+    targetWeeks?: number;
     notes?: string;
     completedAt?: Date;
   } = {};
@@ -331,6 +335,10 @@ export async function progressTransition(
 
   if (input.currentWeek) {
     updateData.currentWeek = input.currentWeek;
+  }
+
+  if (input.targetWeeks) {
+    updateData.targetWeeks = input.targetWeeks;
   }
 
   if (input.notes !== undefined) {
