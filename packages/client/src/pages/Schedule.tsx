@@ -794,52 +794,194 @@ export default function Schedule() {
                 </CardTitle>
                 <CardDescription>
                   {selectedType
-                    ? 'Time between sleep periods'
+                    ? 'Adjust time between sleep periods (in minutes)'
                     : 'Select a schedule type first'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {selectedType ? (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <p className="font-medium">
-                          {selectedType === 'ONE_NAP' ? 'Wake to Nap' : 'Wake to Nap 1'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">First wake window</p>
-                      </div>
-                      <span className="font-semibold">
-                        {formatMinutesToHours(scheduleConfig.wakeWindow1Min || 0)}-
-                        {formatMinutesToHours(scheduleConfig.wakeWindow1Max || 0)}
-                      </span>
-                    </div>
-                    {selectedType !== 'ONE_NAP' && scheduleConfig.wakeWindow2Min && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                    {/* Wake Window 1: Wake to First Nap */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">
-                            {selectedType === 'THREE_NAP' ? 'Nap 1 to Nap 2' : 'Nap 1 to Nap 2'}
+                            {selectedType === 'ONE_NAP' ? 'Wake to Nap' : 'Wake to Nap 1'}
                           </p>
-                          <p className="text-sm text-muted-foreground">Second wake window</p>
+                          <p className="text-xs text-muted-foreground">First wake window</p>
                         </div>
-                        <span className="font-semibold">
-                          {formatMinutesToHours(scheduleConfig.wakeWindow2Min)}-
-                          {formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}
+                        <span className="text-sm font-semibold text-primary">
+                          {formatMinutesToHours(scheduleConfig.wakeWindow1Min || 0)}-
+                          {formatMinutesToHours(scheduleConfig.wakeWindow1Max || 0)}
                         </span>
                       </div>
-                    )}
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <div>
-                        <p className="font-medium">
-                          {selectedType === 'ONE_NAP' ? 'Nap to Bedtime' : 'Last Nap to Bedtime'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">Final wake window</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Min (minutes)</label>
+                          <Input
+                            type="number"
+                            min={30}
+                            max={480}
+                            step={15}
+                            value={scheduleConfig.wakeWindow1Min || 120}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              wakeWindow1Min: parseInt(e.target.value) || 120
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Max (minutes)</label>
+                          <Input
+                            type="number"
+                            min={30}
+                            max={480}
+                            step={15}
+                            value={scheduleConfig.wakeWindow1Max || 150}
+                            onChange={(e) => setScheduleConfig(prev => ({
+                              ...prev,
+                              wakeWindow1Max: parseInt(e.target.value) || 150
+                            }))}
+                            className="h-8"
+                          />
+                        </div>
                       </div>
-                      <span className="font-semibold">
-                        {selectedType === 'ONE_NAP'
-                          ? `${formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}`
-                          : `${formatMinutesToHours(scheduleConfig.wakeWindow3Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow3Max || 0)}`
-                        }
-                      </span>
+                    </div>
+
+                    {/* Wake Window 2: Between Naps (for 2-nap/3-nap) OR Nap to Bedtime (for 1-nap) */}
+                    {selectedType !== 'ONE_NAP' ? (
+                      <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">Nap 1 to Nap 2</p>
+                            <p className="text-xs text-muted-foreground">Second wake window</p>
+                          </div>
+                          <span className="text-sm font-semibold text-primary">
+                            {formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-
+                            {formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-muted-foreground">Min (minutes)</label>
+                            <Input
+                              type="number"
+                              min={30}
+                              max={480}
+                              step={15}
+                              value={scheduleConfig.wakeWindow2Min || 150}
+                              onChange={(e) => setScheduleConfig(prev => ({
+                                ...prev,
+                                wakeWindow2Min: parseInt(e.target.value) || 150
+                              }))}
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">Max (minutes)</label>
+                            <Input
+                              type="number"
+                              min={30}
+                              max={480}
+                              step={15}
+                              value={scheduleConfig.wakeWindow2Max || 210}
+                              onChange={(e) => setScheduleConfig(prev => ({
+                                ...prev,
+                                wakeWindow2Max: parseInt(e.target.value) || 210
+                              }))}
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Wake Window 3: Last Nap to Bedtime (for 2-nap/3-nap) OR use WW2 for 1-nap */}
+                    <div className="p-3 rounded-lg bg-muted/50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">
+                            {selectedType === 'ONE_NAP' ? 'Nap to Bedtime' : 'Last Nap to Bedtime'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Final wake window</p>
+                        </div>
+                        <span className="text-sm font-semibold text-primary">
+                          {selectedType === 'ONE_NAP'
+                            ? `${formatMinutesToHours(scheduleConfig.wakeWindow2Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow2Max || 0)}`
+                            : `${formatMinutesToHours(scheduleConfig.wakeWindow3Min || 0)}-${formatMinutesToHours(scheduleConfig.wakeWindow3Max || 0)}`
+                          }
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedType === 'ONE_NAP' ? (
+                          <>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Min (minutes)</label>
+                              <Input
+                                type="number"
+                                min={30}
+                                max={480}
+                                step={15}
+                                value={scheduleConfig.wakeWindow2Min || 240}
+                                onChange={(e) => setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeWindow2Min: parseInt(e.target.value) || 240
+                                }))}
+                                className="h-8"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Max (minutes)</label>
+                              <Input
+                                type="number"
+                                min={30}
+                                max={480}
+                                step={15}
+                                value={scheduleConfig.wakeWindow2Max || 300}
+                                onChange={(e) => setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeWindow2Max: parseInt(e.target.value) || 300
+                                }))}
+                                className="h-8"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Min (minutes)</label>
+                              <Input
+                                type="number"
+                                min={30}
+                                max={480}
+                                step={15}
+                                value={scheduleConfig.wakeWindow3Min || 210}
+                                onChange={(e) => setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeWindow3Min: parseInt(e.target.value) || 210
+                                }))}
+                                className="h-8"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Max (minutes)</label>
+                              <Input
+                                type="number"
+                                min={30}
+                                max={480}
+                                step={15}
+                                value={scheduleConfig.wakeWindow3Max || 270}
+                                onChange={(e) => setScheduleConfig(prev => ({
+                                  ...prev,
+                                  wakeWindow3Max: parseInt(e.target.value) || 270
+                                }))}
+                                className="h-8"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
