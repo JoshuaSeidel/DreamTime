@@ -242,11 +242,24 @@ async function processChildReminders(
     return;
   }
 
-  // Calculate day schedule
+  // Get actual nap durations from completed naps today
+  const completedNapSessions = sessions.filter(
+    s => s.sessionType === 'NAP' && s.state === 'COMPLETED' && s.asleepAt && s.wokeUpAt
+  );
+  const actualNapDurations: number[] = completedNapSessions.map(s => {
+    if (s.asleepAt && s.wokeUpAt) {
+      return differenceInMinutes(s.wokeUpAt, s.asleepAt);
+    }
+    return 0;
+  });
+
+  // Calculate day schedule with actual nap data
   const daySchedule = calculateDaySchedule(
     wakeTime,
     schedule as any, // Type coercion for schedule response
-    timezone
+    timezone,
+    null, // transition
+    actualNapDurations.length > 0 ? actualNapDurations : undefined
   );
 
   // Get reminder lead times from schedule (with defaults for backwards compatibility)
@@ -292,6 +305,11 @@ async function processChildReminders(
   const bedtime = daySchedule.bedtime.putDownWindow.recommended;
   const minutesUntilBedtime = differenceInMinutes(bedtime, now);
   const bedtimeStr = format(toZonedTime(bedtime, timezone), 'h:mm a');
+
+  // Debug logging for bedtime calculation
+  if (minutesUntilBedtime <= 60 && minutesUntilBedtime > 0) {
+    console.log(`[ReminderScheduler] ${childName}: Bedtime ${bedtimeStr}, ${minutesUntilBedtime} min away, nap durations: [${actualNapDurations.join(', ')}]`);
+  }
 
   // Send 30-minute bedtime reminder (get ready for routine)
   if (minutesUntilBedtime <= 30 && minutesUntilBedtime > 15) {
