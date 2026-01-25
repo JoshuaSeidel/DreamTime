@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import {
   calculateDaySchedule,
   calculateNextAction,
@@ -181,14 +182,19 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         });
 
         // Find wake time from night sleep or use schedule default
-        let wakeTime = new Date();
-        wakeTime.setHours(7, 0, 0, 0); // Default
+        let wakeTime: Date;
 
         const nightSession = todaySessions.find(
           s => s.sessionType === SessionType.NIGHT_SLEEP && s.wokeUpAt
         );
         if (nightSession?.wokeUpAt) {
           wakeTime = nightSession.wokeUpAt;
+        } else {
+          // Default to schedule's wakeTimeEarliest in user's timezone
+          const [hours, minutes] = (schedule.wakeTimeEarliest || '07:00').split(':').map(Number);
+          const todayInUserTz = toZonedTime(new Date(), timezone);
+          todayInUserTz.setHours(hours ?? 7, minutes ?? 0, 0, 0);
+          wakeTime = fromZonedTime(todayInUserTz, timezone);
         }
 
         // Separate scheduled naps from ad-hoc naps (same logic as today-summary)
@@ -390,9 +396,16 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         }
 
         // Calculate recommended bedtime using actual nap data
-        const defaultWakeTime = new Date();
-        defaultWakeTime.setHours(7, 0, 0, 0);
-        const effectiveWakeTime = wakeTime || defaultWakeTime;
+        let effectiveWakeTime: Date;
+        if (wakeTime) {
+          effectiveWakeTime = wakeTime;
+        } else {
+          // Default to schedule's wakeTimeEarliest in user's timezone
+          const [hours, minutes] = (schedule.wakeTimeEarliest || '07:00').split(':').map(Number);
+          const todayInUserTz = toZonedTime(new Date(), timezone);
+          todayInUserTz.setHours(hours ?? 7, minutes ?? 0, 0, 0);
+          effectiveWakeTime = fromZonedTime(todayInUserTz, timezone);
+        }
 
         const daySchedule = calculateDaySchedule(
           effectiveWakeTime,
