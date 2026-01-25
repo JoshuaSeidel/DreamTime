@@ -107,50 +107,43 @@ function calculateNap1TwoNap(
 ): NapRecommendation {
   const notes: string[] = [];
 
-  // Get wake time in local timezone for comparison
-  const wakeHour = wakeTime.getHours();
-  const wakeMinute = wakeTime.getMinutes();
-  const wakeTimeMinutes = wakeHour * 60 + wakeMinute; // Minutes since midnight
+  // Use user's configured wake windows for nap 1 timing
+  const ww1Min = schedule.wakeWindow1Min ?? 120; // Default 2 hours
+  const ww1Max = schedule.wakeWindow1Max ?? 150; // Default 2.5 hours
 
-  // Consultant's wake-time-based nap 1 timing rules:
-  // - Wake before 6:30 AM → crib at 8:30 AM
-  // - Wake 6:30-6:59 AM → crib at 8:45 AM
-  // - Wake 7:00-7:30 AM → crib at 9:00 AM
-  let recommended: Date;
-  let earliest: Date;
-  let latest: Date;
+  // Calculate nap 1 times based on wake windows from actual wake time
+  const earliestByWakeWindow = addMinutes(wakeTime, ww1Min);
+  const latestByWakeWindow = addMinutes(wakeTime, ww1Max);
 
-  const nap1EarliestTime = schedule.nap1Earliest
-    ? parseTimeString(schedule.nap1Earliest, baseDate, timezone)
-    : parseTimeString('08:30', baseDate, timezone);
-  const nap1LatestTime = schedule.nap1LatestStart
-    ? parseTimeString(schedule.nap1LatestStart, baseDate, timezone)
-    : parseTimeString('09:00', baseDate, timezone);
+  // Start with wake window based times
+  let earliest = earliestByWakeWindow;
+  let latest = latestByWakeWindow;
 
-  if (wakeTimeMinutes < 390) { // Before 6:30 AM (6.5 * 60 = 390)
-    // Wake before 6:30 AM → crib at 8:30 AM
-    recommended = parseTimeString('08:30', baseDate, timezone);
-    earliest = nap1EarliestTime;
-    latest = recommended;
-    notes.push('Early wake - nap 1 at 8:30am');
-  } else if (wakeTimeMinutes < 420) { // 6:30-6:59 AM (7 * 60 = 420)
-    // Wake 6:30-6:59 AM → crib at 8:45 AM
-    recommended = parseTimeString('08:45', baseDate, timezone);
-    earliest = nap1EarliestTime;
-    latest = recommended;
-    notes.push('Wake 6:30-7am - nap 1 at 8:45am');
-  } else { // 7:00 AM or later
-    // Wake 7:00-7:30 AM → crib at 9:00 AM
-    recommended = parseTimeString('09:00', baseDate, timezone);
-    earliest = parseTimeString('08:45', baseDate, timezone);
-    latest = nap1LatestTime;
-    notes.push('Standard wake - nap 1 at 9:00am');
+  // Apply optional schedule constraints (nap1Earliest, nap1LatestStart) if configured
+  // These act as floor/ceiling constraints but wake window is primary
+  if (schedule.nap1Earliest) {
+    const nap1EarliestTime = parseTimeString(schedule.nap1Earliest, baseDate, timezone);
+    if (isAfter(nap1EarliestTime, earliest)) {
+      earliest = nap1EarliestTime;
+      notes.push(`Nap 1 held until ${schedule.nap1Earliest} per schedule`);
+    }
+  }
+
+  if (schedule.nap1LatestStart) {
+    const nap1LatestTime = parseTimeString(schedule.nap1LatestStart, baseDate, timezone);
+    if (isBefore(nap1LatestTime, latest)) {
+      latest = nap1LatestTime;
+    }
   }
 
   // Ensure earliest is not after latest
   if (isAfter(earliest, latest)) {
     latest = earliest;
+    notes.push('Wake window extended - nap timing compressed');
   }
+
+  // Recommended is the average of the window
+  const recommended = averageTime(earliest, latest);
 
   // Calculate end by time (default 11:00 AM to protect nap 2 timing)
   let endBy: Date | null = null;
