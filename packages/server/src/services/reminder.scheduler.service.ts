@@ -151,12 +151,12 @@ async function processChildReminders(
     orderBy: { createdAt: 'asc' },
   });
 
-  // Find morning wake time (either from night sleep end or use schedule default)
+  // Find morning wake time (use wokeUpAt, not outOfCribAt - wake time is when baby woke, not left crib)
   let wakeTime: Date;
-  const nightSession = sessions.find(s => s.sessionType === 'NIGHT_SLEEP' && s.outOfCribAt);
+  const nightSession = sessions.find(s => s.sessionType === 'NIGHT_SLEEP' && s.wokeUpAt);
 
-  if (nightSession?.outOfCribAt) {
-    wakeTime = nightSession.outOfCribAt;
+  if (nightSession?.wokeUpAt) {
+    wakeTime = nightSession.wokeUpAt;
   } else {
     // Use schedule's earliest wake time as default
     const [hours, minutes] = schedule.wakeTimeEarliest.split(':').map(Number);

@@ -107,7 +107,28 @@ function calculateNap1TwoNap(
 ): NapRecommendation {
   const notes: string[] = [];
 
-  // Use user's configured wake windows for nap 1 timing
+  // Get wake time in local timezone for comparison
+  const zonedWakeTime = toZonedTime(wakeTime, timezone);
+  const wakeHour = zonedWakeTime.getHours();
+  const wakeMinute = zonedWakeTime.getMinutes();
+  const wakeTimeMinutes = wakeHour * 60 + wakeMinute; // Minutes since midnight
+
+  // Consultant's wake-time-based nap 1 timing rules:
+  // - Wake before 6:30 AM → crib at 8:30 AM
+  // - Wake 6:30-6:59 AM → crib at 8:45 AM
+  // - Wake 7:00-7:30 AM → crib at 9:00 AM
+  let recommended: Date;
+  let earliest: Date;
+  let latest: Date;
+
+  const nap1EarliestTime = schedule.nap1Earliest
+    ? parseTimeString(schedule.nap1Earliest, baseDate, timezone)
+    : parseTimeString('08:30', baseDate, timezone);
+  const nap1LatestTime = schedule.nap1LatestStart
+    ? parseTimeString(schedule.nap1LatestStart, baseDate, timezone)
+    : parseTimeString('09:00', baseDate, timezone);
+
+  // Use user's configured wake windows to calculate based on actual wake time
   const ww1Min = schedule.wakeWindow1Min ?? 120; // Default 2 hours
   const ww1Max = schedule.wakeWindow1Max ?? 150; // Default 2.5 hours
 
@@ -115,35 +136,22 @@ function calculateNap1TwoNap(
   const earliestByWakeWindow = addMinutes(wakeTime, ww1Min);
   const latestByWakeWindow = addMinutes(wakeTime, ww1Max);
 
-  // Start with wake window based times
-  let earliest = earliestByWakeWindow;
-  let latest = latestByWakeWindow;
+  // Use wake window calculations as primary
+  earliest = earliestByWakeWindow;
+  latest = latestByWakeWindow;
+  recommended = averageTime(earliest, latest);
 
-  // Apply optional schedule constraints (nap1Earliest, nap1LatestStart) if configured
-  // These act as floor/ceiling constraints but wake window is primary
-  if (schedule.nap1Earliest) {
-    const nap1EarliestTime = parseTimeString(schedule.nap1Earliest, baseDate, timezone);
-    if (isAfter(nap1EarliestTime, earliest)) {
-      earliest = nap1EarliestTime;
-      notes.push(`Nap 1 held until ${schedule.nap1Earliest} per schedule`);
-    }
-  }
-
-  if (schedule.nap1LatestStart) {
-    const nap1LatestTime = parseTimeString(schedule.nap1LatestStart, baseDate, timezone);
-    if (isBefore(nap1LatestTime, latest)) {
-      latest = nap1LatestTime;
-    }
-  }
+  // Add note about wake window calculation
+  const ww1MinHours = Math.floor(ww1Min / 60);
+  const ww1MinMins = ww1Min % 60;
+  const ww1MaxHours = Math.floor(ww1Max / 60);
+  const ww1MaxMins = ww1Max % 60;
+  notes.push(`Wake window: ${ww1MinHours}h${ww1MinMins > 0 ? ww1MinMins + 'm' : ''}-${ww1MaxHours}h${ww1MaxMins > 0 ? ww1MaxMins + 'm' : ''} from wake`);
 
   // Ensure earliest is not after latest
   if (isAfter(earliest, latest)) {
     latest = earliest;
-    notes.push('Wake window extended - nap timing compressed');
   }
-
-  // Recommended is the average of the window
-  const recommended = averageTime(earliest, latest);
 
   // Calculate end by time (default 11:00 AM to protect nap 2 timing)
   let endBy: Date | null = null;
