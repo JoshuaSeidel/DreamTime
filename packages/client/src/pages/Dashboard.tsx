@@ -154,6 +154,20 @@ export default function Dashboard() {
     return () => clearInterval(refreshInterval);
   }, [accessToken, selectedChildId, loadSessionData]);
 
+  // Refresh data when page becomes visible (user returns from another tab/page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && accessToken && selectedChildId) {
+        // Silently refresh when user comes back to this page
+        loadSessionData(false);
+        setSummaryRefreshTrigger(prev => prev + 1);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [accessToken, selectedChildId, loadSessionData]);
+
   // Track pending put_down custom time for the sleep type dialog
   const [pendingPutDownTime, setPendingPutDownTime] = useState<string | null>(null);
 

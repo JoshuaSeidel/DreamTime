@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Calendar,
   Clock,
@@ -169,6 +169,11 @@ export default function Schedule() {
   const [transitionNapTime, setTransitionNapTime] = useState('11:30');
   const [transitionWeeks, setTransitionWeeks] = useState(6);
 
+  // Track if we have unsaved changes and debounce auto-save
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
+
   // Load current schedule and transition
   const loadData = useCallback(async () => {
     if (!accessToken || !selectedChildId) {
@@ -240,6 +245,60 @@ export default function Schedule() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Auto-save schedule changes after a short debounce delay
+  useEffect(() => {
+    // Don't auto-save during initial load or if no schedule type selected
+    if (!initialLoadDoneRef.current || !selectedType || !accessToken || !selectedChildId) {
+      return;
+    }
+
+    // Mark that we have unsaved changes
+    setHasUnsavedChanges(true);
+
+    // Clear any existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set up debounced auto-save (1 second delay)
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const fullConfig: CreateScheduleInput = {
+          ...DEFAULT_SCHEDULES[selectedType],
+          ...scheduleConfig,
+          type: selectedType,
+        } as CreateScheduleInput;
+
+        const result = await saveSchedule(accessToken, selectedChildId, fullConfig);
+        if (result.success) {
+          setCurrentSchedule(result.data!);
+          setHasUnsavedChanges(false);
+          // Show a subtle toast for auto-save
+          toast.success('Schedule updated', 'Changes saved automatically');
+        }
+      } catch (err) {
+        console.error('[Schedule] Auto-save error:', err);
+      }
+    }, 1000);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [scheduleConfig, selectedType, accessToken, selectedChildId]);
+
+  // Mark initial load as done after data loads
+  useEffect(() => {
+    if (!isLoading && currentSchedule) {
+      // Delay setting this to avoid triggering auto-save on initial load
+      const timer = setTimeout(() => {
+        initialLoadDoneRef.current = true;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading, currentSchedule]);
 
   const handleSelectType = (type: Exclude<ScheduleType, 'TRANSITION'>) => {
     // If switching from 2-nap to 1-nap, show transition warning
@@ -1447,21 +1506,31 @@ export default function Schedule() {
             </Card>
 
             {selectedType && (
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleSaveSchedule}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Schedule'
+              <div className="space-y-2">
+                {hasUnsavedChanges && (
+                  <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Auto-saving...</span>
+                  </div>
                 )}
-              </Button>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={handleSaveSchedule}
+                  disabled={isSaving || hasUnsavedChanges}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : hasUnsavedChanges ? (
+                    'Auto-saving...'
+                  ) : (
+                    'Save Schedule'
+                  )}
+                </Button>
+              </div>
             )}
           </>
         )}
