@@ -220,6 +220,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         // Combine for total rest credit (same as today-summary)
         const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
 
+        // Debug logging to diagnose nap time calculation issues
+        console.log(`[NextAction] Wake time: ${wakeTime.toISOString()}, timezone: ${timezone}`);
+        console.log(`[NextAction] Schedule wake windows: ww1Min=${schedule.wakeWindow1Min}, ww1Max=${schedule.wakeWindow1Max}`);
+
         const daySchedule = calculateDaySchedule(
           wakeTime,
           schedule,
@@ -228,6 +232,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           napDurations.length > 0 ? napDurations : undefined,
           scheduledNapEndTimes.length > 0 ? scheduledNapEndTimes : undefined
         );
+
+        // Debug logging for calculated nap times
+        if (daySchedule.naps.length > 0) {
+          const nap1 = daySchedule.naps[0];
+          console.log(`[NextAction] Nap 1 calculated: earliest=${nap1?.putDownWindow.earliest.toISOString()}, recommended=${nap1?.putDownWindow.recommended.toISOString()}`);
+        }
 
         // Calculate ad-hoc bedtime bump (15 min if any ad-hoc nap >= 30 min)
         const hasSignificantAdHocNap = adHocNaps.some(s => (s.sleepMinutes ?? 0) >= 30);

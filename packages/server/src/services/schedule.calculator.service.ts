@@ -107,39 +107,23 @@ function calculateNap1TwoNap(
 ): NapRecommendation {
   const notes: string[] = [];
 
-  // Get wake time in local timezone for comparison
-  const zonedWakeTime = toZonedTime(wakeTime, timezone);
-  const wakeHour = zonedWakeTime.getHours();
-  const wakeMinute = zonedWakeTime.getMinutes();
-  const wakeTimeMinutes = wakeHour * 60 + wakeMinute; // Minutes since midnight
-
-  // Consultant's wake-time-based nap 1 timing rules:
-  // - Wake before 6:30 AM → crib at 8:30 AM
-  // - Wake 6:30-6:59 AM → crib at 8:45 AM
-  // - Wake 7:00-7:30 AM → crib at 9:00 AM
-  let recommended: Date;
-  let earliest: Date;
-  let latest: Date;
-
-  const nap1EarliestTime = schedule.nap1Earliest
-    ? parseTimeString(schedule.nap1Earliest, baseDate, timezone)
-    : parseTimeString('08:30', baseDate, timezone);
-  const nap1LatestTime = schedule.nap1LatestStart
-    ? parseTimeString(schedule.nap1LatestStart, baseDate, timezone)
-    : parseTimeString('09:00', baseDate, timezone);
-
   // Use user's configured wake windows to calculate based on actual wake time
   const ww1Min = schedule.wakeWindow1Min ?? 120; // Default 2 hours
   const ww1Max = schedule.wakeWindow1Max ?? 150; // Default 2.5 hours
+
+  // Debug logging to diagnose calculation issues
+  console.log(`[calculateNap1TwoNap] wakeTime: ${wakeTime.toISOString()}, ww1Min: ${ww1Min}, ww1Max: ${ww1Max}`);
 
   // Calculate nap 1 times based on wake windows from actual wake time
   const earliestByWakeWindow = addMinutes(wakeTime, ww1Min);
   const latestByWakeWindow = addMinutes(wakeTime, ww1Max);
 
+  console.log(`[calculateNap1TwoNap] earliest: ${earliestByWakeWindow.toISOString()}, latest: ${latestByWakeWindow.toISOString()}`);
+
   // Use wake window calculations as primary
-  earliest = earliestByWakeWindow;
-  latest = latestByWakeWindow;
-  recommended = averageTime(earliest, latest);
+  let earliest = earliestByWakeWindow;
+  let latest = latestByWakeWindow;
+  let recommended = averageTime(earliest, latest);
 
   // Add note about wake window calculation
   const ww1MinHours = Math.floor(ww1Min / 60);
