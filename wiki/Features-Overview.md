@@ -23,13 +23,18 @@ Complete list of DreamTime's capabilities.
 | **Time Windows** | Displays earliest, recommended, and latest times |
 | **Sleep Debt Calculation** | Adjusts recommendations based on actual vs. expected sleep |
 | **Qualified Rest** | Credits partial crib time toward rest totals |
+| **Day Sleep Budget** | Real-time tracker showing progress toward daily cap |
+| **5-Minute Warning** | Countdown timer when approaching day sleep cap |
+| **Auto-Refresh** | Dashboard updates when returning from other pages/tabs |
 
 ### Schedule Management
 
 | Feature | Description |
 |---------|-------------|
 | **Schedule Types** | 3-nap, 2-nap, 1-nap, and transition schedules |
-| **Wake Windows** | Configure optimal awake times between sleep periods |
+| **Wake Windows** | Configure optimal awake times between sleep periods - directly controls nap timing |
+| **Auto-Save** | Changes save automatically after 1 second |
+| **Reset to Defaults** | One-click restore of age-appropriate wake windows |
 | **Nap Constraints** | Set earliest start, latest start, max duration, end-by times |
 | **Bedtime Goals** | Define target bedtime range |
 | **Day Sleep Cap** | Limit total daytime sleep to protect night sleep |

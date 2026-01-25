@@ -239,17 +239,49 @@ The day sleep cap is the maximum total nap sleep to protect nighttime sleep.
 
 ### DreamTime Cap Tracking
 
+The Day Sleep Budget tracker appears on the Dashboard when baby is asleep during a nap:
+
 ```
 ┌─────────────────────────────────────┐
-│  Day Sleep: 2h 15m / 3h 30m cap     │
-│  █████████████░░░░░  1h 15m left    │
+│  Day Sleep Budget                   │
+│  ████████████░░░░░░  150m / 210m    │
+│  60m remaining of 210m daily cap    │
 └─────────────────────────────────────┘
 ```
 
-When approaching the cap:
-- Shows "Nap Cap Warning" notification
-- Recommends waking baby
-- Protects remaining cap for next nap (if applicable)
+### Cap Warning States
+
+| State | Threshold | Display |
+|-------|-----------|---------|
+| **Normal** | Below 75% | Blue progress bar |
+| **Approaching** | 75%+ used | Orange progress bar |
+| **5-Minute Warning** | 5 min to cap | Red pulsing, countdown timer |
+| **Exceeded** | Cap reached | Red pulsing, "Get baby NOW!" |
+
+### 5-Minute Countdown Warning
+
+When only 5 minutes remain until the daily cap is reached, DreamTime shows:
+
+```
+┌─────────────────────────────────────┐
+│  ⚠️ Day Sleep Budget                │
+│  █████████████████░  205m / 210m    │
+│                                     │
+│  ⏱️ 4:32 until cap reached          │
+│  Get baby soon!                     │
+└─────────────────────────────────────┘
+```
+
+Features:
+- Real-time countdown timer showing minutes:seconds
+- Pulsing red visual alert
+- "Get baby soon!" message
+- Helps you wake baby at precisely the right moment to protect bedtime
+
+When the cap is exceeded:
+- Message changes to "Get baby NOW!"
+- Wake recommendation appears immediately
+- Remaining budget shows as negative or zero
 
 ---
 

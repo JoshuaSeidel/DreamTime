@@ -7,7 +7,7 @@ Configure your child's sleep schedule to get accurate recommendations.
 1. Open DreamTime
 2. Select your child from the dropdown
 3. Tap the **Schedule** tab in the bottom navigation
-4. Make changes and tap **Save Schedule**
+4. Make changes — they save automatically after 1 second
 
 ---
 
@@ -85,6 +85,24 @@ Wake windows are the time your baby should be awake between sleep periods.
 - **Before minimum**: App shows "Wait" recommendation
 - **At minimum**: Nap window opens, app shows "Ready for nap"
 - **At maximum**: App shows urgent "Put down now" warning
+
+### Wake Windows Control Nap Timing
+
+Wake windows are the primary factor in calculating nap recommendations. The app uses your configured wake windows to determine when baby is ready for sleep:
+
+**Nap 1 Calculation:**
+- **Earliest nap time** = Wake time + Wake Window 1 Minimum
+- **Latest nap time** = Wake time + Wake Window 1 Maximum
+
+**Example**: If baby wakes at 6:30 AM with a 2h-2.5h wake window:
+- Earliest Nap 1: 8:30 AM (6:30 + 2h)
+- Latest Nap 1: 9:00 AM (6:30 + 2.5h)
+
+When you adjust wake window settings, nap recommendations shift accordingly. The app also respects your configured earliest/latest time constraints as a safety net.
+
+### Reset to Defaults
+
+Each wake window section includes a **Reset to Default** button that restores age-appropriate values for your selected schedule type.
 
 ### Tips
 
@@ -391,11 +409,27 @@ DreamTime includes pre-configured templates.
 
 ## Saving and Syncing
 
-### Save Behavior
+### Auto-Save Behavior
 
-- Changes are saved when you tap **Save Schedule**
-- Unsaved changes show a warning if you navigate away
-- Settings sync across all devices instantly
+Schedule changes are saved automatically:
+
+| Action | What Happens |
+|--------|--------------|
+| **Change any setting** | Auto-save triggers after 1 second |
+| **Success** | "Schedule updated - Changes saved automatically" toast appears |
+| **Error** | Error message shown, changes preserved locally |
+
+This means you can:
+- Adjust multiple settings quickly without clicking save
+- See changes reflected in Dashboard recommendations immediately
+- Return to Dashboard and see updated nap/bedtime times
+
+### Dashboard Updates
+
+When you return to the Dashboard after changing schedule settings:
+- Recommendations refresh automatically
+- New wake windows are used for calculations
+- Bedtime adjusts based on updated settings
 
 ### Per-Child Settings
 
@@ -414,12 +448,20 @@ DreamTime includes pre-configured templates.
 3. Try refreshing the page
 4. Check if another caregiver made changes
 
+### Recommendations Not Updating After Schedule Change
+
+1. Return to Dashboard — it auto-refreshes when you navigate back
+2. If still stale, pull down to refresh or switch tabs
+3. Verify the change actually saved (check for success toast)
+4. Try switching to another child and back
+
 ### Recommendations Seem Wrong
 
-1. Verify wake windows match your baby's needs
-2. Check that nap times were logged correctly
+1. Verify wake windows match your baby's needs — these directly control nap timing
+2. Check that nap times were logged correctly (use actual wake time, not out-of-crib time)
 3. Ensure schedule type matches your child's age
 4. Review the day sleep cap setting
+5. Check that morning wake time was tracked (affects all subsequent recommendations)
 
 ### Notifications Not Working
 

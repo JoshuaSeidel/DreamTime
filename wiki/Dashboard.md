@@ -66,6 +66,27 @@ Appears when baby is in crib for a **nap** (not bedtime).
 - **Yellow**: Approaching nap cap (last 15 minutes)
 - **Red**: Nap cap exceeded
 
+### Day Sleep Budget Tracker
+
+When baby is asleep during a nap, an additional tracker shows progress toward the daily sleep cap:
+
+```
+┌─────────────────────────────────────┐
+│  Day Sleep Budget                   │
+│  ████████░░░░░░░░  45m / 210m       │
+│  165m remaining of 210m daily cap   │
+└─────────────────────────────────────┘
+```
+
+| State | Color | Behavior |
+|-------|-------|----------|
+| Normal | Blue | Shows minutes used vs. remaining budget |
+| Approaching (75%+) | Orange | Warning that cap is getting close |
+| 5-minute warning | Red (pulsing) | Countdown timer with "Get baby soon!" alert |
+| Exceeded | Red (pulsing) | "Get baby NOW!" with wake recommendation |
+
+The 5-minute warning includes a real-time countdown timer showing exactly how long until the daily cap is reached. This helps you wake baby at the right moment to protect bedtime.
+
 **Help Icon (?)**: Explains why the 60-90 minute crib rule matters for sleep training.
 
 ---
@@ -302,9 +323,27 @@ If no child is added yet:
 
 ---
 
+## Auto-Refresh Behavior
+
+The Dashboard automatically stays up-to-date:
+
+| Trigger | What Happens |
+|---------|--------------|
+| **Every 30 seconds** | Background refresh of all data |
+| **Return to tab** | Immediate refresh when you switch back to the app |
+| **Return from other page** | Refresh when navigating back to Dashboard |
+
+This ensures:
+- Schedule changes made on the Schedule page are immediately reflected
+- Multi-caregiver tracking stays in sync
+- Recommendations update as time passes
+
+---
+
 ## Tips for Dashboard Use
 
 1. **Keep It Open** - DreamTime auto-refreshes every 30 seconds
 2. **Use Time Editing** - Don't worry about tapping exactly on time
 3. **Watch the Recommendations** - They get more accurate as you track more data
 4. **Enable Notifications** - Get reminded before sleep windows
+5. **Check After Schedule Changes** - Dashboard refreshes automatically when you return from Schedule page

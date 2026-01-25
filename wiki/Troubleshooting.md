@@ -209,20 +209,28 @@ Solutions to common issues with DreamTime.
 
 **Solutions:**
 
-1. **Verify schedule configuration:**
+1. **Verify wake windows:**
    - Schedule > Wake Windows
-   - Ensure values match your child's needs
+   - Wake windows directly control nap timing
+   - Nap 1 = Wake time + Wake Window 1
 
 2. **Check logged sleep times:**
    - History > Today's sessions
-   - Verify all events were logged correctly
+   - Verify "Woke Up" time is correct (this is used for calculations, not "Out of Crib")
+   - If morning wake time is wrong, all subsequent recommendations will be off
 
-3. **Review sleep debt:**
+3. **Confirm schedule auto-saved:**
+   - Changes save automatically after 1 second
+   - Look for "Schedule updated" toast message
+   - Return to Dashboard - it refreshes automatically
+
+4. **Review sleep debt:**
    - Dashboard shows current sleep debt
    - Short naps → earlier bedtime
 
-4. **Reset schedule to defaults:**
-   - Schedule > Schedule Type > Select template
+5. **Reset wake windows to defaults:**
+   - Use "Reset to Default" button in wake window section
+   - Each schedule type has age-appropriate defaults
 
 ### Day Sleep Cap Incorrect
 
@@ -243,6 +251,27 @@ Solutions to common issues with DreamTime.
 3. **Manual cap adjustment:**
    - Schedule > Day Sleep Cap
    - Verify value in minutes (e.g., 210 = 3.5 hours)
+
+### Day Sleep Budget Countdown Not Appearing
+
+**Symptoms:**
+- No countdown timer on Dashboard
+- Budget tracker missing
+
+**Solutions:**
+
+1. **Check baby's state:**
+   - Day Sleep Budget only appears when baby is **asleep** during a nap
+   - Does not appear when In Crib but not yet asleep
+   - Does not appear for night sleep
+
+2. **Verify session type:**
+   - Budget tracker only shows for NAP sessions
+   - Not shown for NIGHT_SLEEP sessions
+
+3. **5-minute warning not showing:**
+   - Only appears when less than 5 minutes remain until daily cap
+   - Shows countdown timer and "Get baby soon!" alert
 
 ### Transition Not Progressing
 
