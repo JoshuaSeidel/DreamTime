@@ -266,9 +266,6 @@ function calculateNap2TwoNap(
     notes.push('Wake window extended - nap timing compressed');
   }
 
-  // Clamp recommended to window
-  recommended = clampToWindow(recommended, earliest, latest);
-
   // Calculate end by time (default 3:00 PM to protect bedtime)
   let endBy: Date | null = null;
   if (schedule.nap2EndBy) {
@@ -285,6 +282,47 @@ function calculateNap2TwoNap(
     maxDuration = exceptionDuration;
     notes.push('Extended nap 2 allowed (2.5hr) due to short/skipped nap 1');
   }
+
+  // CRITICAL: Check if nap 2 timing conflicts with endBy constraint
+  // If putting baby down at "earliest" would leave less than 45 min before endBy,
+  // we need to either adjust the timing or flag the conflict
+  const MINIMUM_USEFUL_NAP_MINUTES = 45; // Minimum useful nap duration
+
+  if (endBy) {
+    const minutesAvailableFromEarliest = differenceInMinutes(endBy, earliest);
+    const minutesAvailableFromRecommended = differenceInMinutes(endBy, recommended);
+
+    if (minutesAvailableFromEarliest < MINIMUM_USEFUL_NAP_MINUTES) {
+      // Not enough time for a useful nap even at earliest start
+      // Suggest skipping nap 2 and going for early bedtime
+      notes.length = 0; // Clear previous notes
+      notes.push('⚠️ Too late for nap 2 - consider early bedtime');
+      notes.push(`Nap would need to end by ${format(toZonedTime(endBy, timezone), 'h:mm a')}`);
+      notes.push('Putting down now would only allow ~' + Math.max(0, minutesAvailableFromEarliest) + ' min');
+
+      // Still return the window but flag it's problematic
+      maxDuration = Math.max(0, minutesAvailableFromEarliest);
+    } else if (minutesAvailableFromRecommended < MINIMUM_USEFUL_NAP_MINUTES) {
+      // Recommended time is too late, but earliest works
+      // Adjust recommended to allow at least minimum useful nap
+      const latestUsefulStart = addMinutes(endBy, -MINIMUM_USEFUL_NAP_MINUTES);
+      recommended = latestUsefulStart;
+      latest = latestUsefulStart;
+      notes.push(`Nap 2 timing adjusted - must end by ${format(toZonedTime(endBy, timezone), 'h:mm a')}`);
+      notes.push('Put down earlier to allow adequate nap time');
+
+      // Cap max duration to what's available
+      maxDuration = Math.min(maxDuration, minutesAvailableFromRecommended + MINIMUM_USEFUL_NAP_MINUTES);
+    } else if (minutesAvailableFromRecommended < maxDuration) {
+      // There's enough time for a useful nap, but not the full duration
+      // Adjust max duration to fit within endBy constraint
+      maxDuration = minutesAvailableFromRecommended;
+      notes.push(`Nap 2 capped at ${maxDuration}m to end by ${format(toZonedTime(endBy, timezone), 'h:mm a')}`);
+    }
+  }
+
+  // Clamp recommended to window
+  recommended = clampToWindow(recommended, earliest, latest);
 
   return {
     napNumber: 2,
