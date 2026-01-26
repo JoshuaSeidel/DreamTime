@@ -206,7 +206,8 @@ function calculateNap2TwoNap(
   timezone: string,
   baseDate: Date,
   nap1WasShort: boolean,
-  nap1Duration?: number
+  nap1Duration?: number,
+  nap1ActualSleepMinutes?: number // Actual sleep from nap 1 (for day sleep cap)
 ): NapRecommendation {
   const notes: string[] = [];
 
@@ -281,6 +282,17 @@ function calculateNap2TwoNap(
     const exceptionDuration = schedule.nap2ExceptionDuration ?? 150; // 2.5 hours default
     maxDuration = exceptionDuration;
     notes.push('Extended nap 2 allowed (2.5hr) due to short/skipped nap 1');
+  }
+
+  // Enforce day sleep cap - reduce nap 2 if nap 1 used too much of the cap
+  const daySleepCap = schedule.daySleepCap ?? 210; // Default 3.5 hours
+  if (nap1ActualSleepMinutes !== undefined && nap1ActualSleepMinutes > 0) {
+    const remainingDaySleep = daySleepCap - nap1ActualSleepMinutes;
+    if (remainingDaySleep < maxDuration) {
+      const originalMax = maxDuration;
+      maxDuration = Math.max(0, remainingDaySleep);
+      notes.push(`Nap 2 capped at ${maxDuration}m (${daySleepCap}m day cap - ${nap1ActualSleepMinutes}m nap 1)`);
+    }
   }
 
   // CRITICAL: Check if nap 2 timing conflicts with endBy constraint
@@ -625,7 +637,8 @@ export function calculateDaySchedule(
       timezone,
       baseDate,
       nap1WasShort,
-      actualNapDurations?.[0] // Only pass if we have actual data
+      actualNapDurations?.[0], // Only pass if we have actual data
+      actualNapDurations?.[0] // Nap 1 actual sleep for day sleep cap enforcement
     );
     naps.push(nap2);
 
