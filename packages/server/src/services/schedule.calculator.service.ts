@@ -207,7 +207,7 @@ function calculateNap2TwoNap(
   baseDate: Date,
   nap1WasShort: boolean,
   nap1Duration?: number,
-  nap1ActualSleepMinutes?: number // Actual sleep from nap 1 (for day sleep cap)
+  nap1ActualSleepMinutes?: number
 ): NapRecommendation {
   const notes: string[] = [];
 
@@ -276,22 +276,21 @@ function calculateNap2TwoNap(
   }
 
   // Determine max duration (exception if nap 1 was short/skipped)
-  // Default: 2 hours, Exception: 2.5 hours if nap 1 was skipped
-  let maxDuration = schedule.nap2MaxDuration ?? 120;
+  // Cap 1: 2 hours normally, 2.5 hours if nap 1 was skipped
+  let maxDuration = schedule.nap2MaxDuration ?? 120; // 2 hours
   if (nap1WasShort) {
-    const exceptionDuration = schedule.nap2ExceptionDuration ?? 150; // 2.5 hours default
+    const exceptionDuration = schedule.nap2ExceptionDuration ?? 150; // 2.5 hours
     maxDuration = exceptionDuration;
     notes.push('Extended nap 2 allowed (2.5hr) due to short/skipped nap 1');
   }
 
-  // Enforce day sleep cap - reduce nap 2 if nap 1 used too much of the cap
-  const daySleepCap = schedule.daySleepCap ?? 210; // Default 3.5 hours
+  // Cap 2: Enforce day sleep cap (3.5hr total) - reduce nap 2 if nap 1 used too much
+  const daySleepCap = schedule.daySleepCap ?? 210; // 3.5 hours default
   if (nap1ActualSleepMinutes !== undefined && nap1ActualSleepMinutes > 0) {
     const remainingDaySleep = daySleepCap - nap1ActualSleepMinutes;
     if (remainingDaySleep < maxDuration) {
-      const originalMax = maxDuration;
       maxDuration = Math.max(0, remainingDaySleep);
-      notes.push(`Nap 2 capped at ${maxDuration}m (${daySleepCap}m day cap - ${nap1ActualSleepMinutes}m nap 1)`);
+      notes.push(`Nap 2 reduced to ${maxDuration}m to stay within ${daySleepCap}m day cap`);
     }
   }
 
@@ -637,8 +636,8 @@ export function calculateDaySchedule(
       timezone,
       baseDate,
       nap1WasShort,
-      actualNapDurations?.[0], // Only pass if we have actual data
-      actualNapDurations?.[0] // Nap 1 actual sleep for day sleep cap enforcement
+      actualNapDurations?.[0], // Nap 1 duration for timing
+      actualNapDurations?.[0]  // Nap 1 actual sleep for day sleep cap
     );
     naps.push(nap2);
 
