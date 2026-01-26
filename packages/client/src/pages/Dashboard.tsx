@@ -525,28 +525,52 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Sleep Debt Indicator - Prominent display when there's sleep debt */}
-            {hasSchedule && sleepDebt.minutes > 0 && (
-              <Card className="border-amber-500/50 bg-gradient-to-r from-amber-500/10 to-amber-600/5">
+            {/* Sleep Debt Indicator - Always show when schedule exists */}
+            {hasSchedule && (
+              <Card className={cn(
+                sleepDebt.minutes > 0
+                  ? "border-amber-500/50 bg-gradient-to-r from-amber-500/10 to-amber-600/5"
+                  : "border-green-500/30 bg-gradient-to-r from-green-500/5 to-green-600/5"
+              )}>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-4">
-                    <div className="shrink-0 rounded-full bg-amber-500/20 p-3">
-                      <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                    <div className={cn(
+                      "shrink-0 rounded-full p-3",
+                      sleepDebt.minutes > 0 ? "bg-amber-500/20" : "bg-green-500/20"
+                    )}>
+                      {sleepDebt.minutes > 0 ? (
+                        <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        <Clock className="w-6 h-6 text-green-600 dark:text-green-400" />
+                      )}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-amber-700 dark:text-amber-300">
+                        <h3 className={cn(
+                          "font-semibold",
+                          sleepDebt.minutes > 0
+                            ? "text-amber-700 dark:text-amber-300"
+                            : "text-green-700 dark:text-green-300"
+                        )}>
                           Sleep Debt
                         </h3>
-                        <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                        <span className={cn(
+                          "text-2xl font-bold",
+                          sleepDebt.minutes > 0
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-green-600 dark:text-green-400"
+                        )}>
                           {sleepDebt.minutes} min
                         </span>
                       </div>
-                      {sleepDebt.note && (
-                        <p className="text-sm text-amber-700/80 dark:text-amber-300/80 mt-1">
-                          {sleepDebt.note}
-                        </p>
-                      )}
+                      <p className={cn(
+                        "text-sm mt-1",
+                        sleepDebt.minutes > 0
+                          ? "text-amber-700/80 dark:text-amber-300/80"
+                          : "text-green-700/80 dark:text-green-300/80"
+                      )}>
+                        {sleepDebt.note || (sleepDebt.minutes === 0 ? "On track! No sleep debt" : "Calculating...")}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
