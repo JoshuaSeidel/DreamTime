@@ -54,6 +54,11 @@ export const createScheduleSchema = z.object({
   napReminderMinutes: z.number().int().min(5).max(120).default(30),
   bedtimeReminderMinutes: z.number().int().min(5).max(120).default(30),
   wakeDeadlineReminderMinutes: z.number().int().min(5).max(60).default(15),
+
+  // Nap timing mode for 2-nap schedule
+  // WAKE_WINDOWS: Use user-configured wake windows
+  // CONSULTANT_RULES: Use sleep consultant's hardcoded rules based on wake time
+  napTimingMode: z.enum(['WAKE_WINDOWS', 'CONSULTANT_RULES']).default('WAKE_WINDOWS'),
 });
 
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
@@ -127,6 +132,9 @@ export interface SleepScheduleResponse {
   napReminderMinutes: number;
   bedtimeReminderMinutes: number;
   wakeDeadlineReminderMinutes: number;
+
+  // Nap timing mode
+  napTimingMode: 'WAKE_WINDOWS' | 'CONSULTANT_RULES';
 
   createdAt: Date;
   updatedAt: Date;

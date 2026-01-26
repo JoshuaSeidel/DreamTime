@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Bell,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 import { HelpIcon } from '../components/HelpIcon';
 import { HELP_CONTENT } from '@/lib/helpContent';
@@ -22,6 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { cn, formatTimeString, formatTimeRange } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
@@ -70,6 +72,7 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     napReminderMinutes: 30,
     bedtimeReminderMinutes: 30,
     wakeDeadlineReminderMinutes: 15,
+    napTimingMode: 'WAKE_WINDOWS',
   },
   ONE_NAP: {
     type: 'ONE_NAP',
@@ -219,6 +222,7 @@ export default function Schedule() {
             napReminderMinutes: scheduleResult.data.napReminderMinutes ?? 30,
             bedtimeReminderMinutes: scheduleResult.data.bedtimeReminderMinutes ?? 30,
             wakeDeadlineReminderMinutes: scheduleResult.data.wakeDeadlineReminderMinutes ?? 15,
+            napTimingMode: scheduleResult.data.napTimingMode ?? 'WAKE_WINDOWS',
           };
           setScheduleConfig(config);
         }
@@ -861,7 +865,41 @@ export default function Schedule() {
               <CardContent>
                 {selectedType ? (
                   <div className="space-y-4">
-                    {/* Wake Window 1: Wake to First Nap */}
+                    {/* Consultant Rules Toggle (only for 2-nap schedule) */}
+                    {selectedType === 'TWO_NAP' && (
+                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                            <div>
+                              <p className="font-medium text-sm">Use Consultant Rules</p>
+                              <p className="text-xs text-muted-foreground">Fixed times based on wake time</p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={scheduleConfig.napTimingMode === 'CONSULTANT_RULES'}
+                            onCheckedChange={(checked) => setScheduleConfig(prev => ({
+                              ...prev,
+                              napTimingMode: checked ? 'CONSULTANT_RULES' : 'WAKE_WINDOWS'
+                            }))}
+                          />
+                        </div>
+                        {scheduleConfig.napTimingMode === 'CONSULTANT_RULES' && (
+                          <div className="text-xs text-muted-foreground space-y-1 pl-6">
+                            <p className="font-medium text-foreground">Nap 1 Rules:</p>
+                            <ul className="list-disc list-inside space-y-0.5">
+                              <li>Woke before 6:30am → Nap at 8:30am</li>
+                              <li>Woke 6:30-6:59am → Nap at 8:45am</li>
+                              <li>Woke 7:00am+ → Nap at 9:00am</li>
+                            </ul>
+                            <p className="mt-2 italic">Cap at 2 hours, end by 11:00am</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Wake Window 1: Wake to First Nap (hidden when using consultant rules for 2-nap) */}
+                    {!(selectedType === 'TWO_NAP' && scheduleConfig.napTimingMode === 'CONSULTANT_RULES') && (
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">
                       <div className="flex items-center justify-between">
                         <div>
@@ -928,6 +966,7 @@ export default function Schedule() {
                         </div>
                       </div>
                     </div>
+                    )}
 
                     {/* Wake Window 2: Between Naps (for 2-nap/3-nap) OR Nap to Bedtime (for 1-nap) */}
                     {selectedType !== 'ONE_NAP' ? (

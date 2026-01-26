@@ -107,30 +107,68 @@ function calculateNap1TwoNap(
 ): NapRecommendation {
   const notes: string[] = [];
 
-  // Use user's configured wake windows to calculate based on actual wake time
-  const ww1Min = schedule.wakeWindow1Min ?? 120; // Default 2 hours
-  const ww1Max = schedule.wakeWindow1Max ?? 150; // Default 2.5 hours
+  let earliest: Date;
+  let latest: Date;
+  let recommended: Date;
 
-  // Debug logging to diagnose calculation issues
-  console.log(`[calculateNap1TwoNap] wakeTime: ${wakeTime.toISOString()}, ww1Min: ${ww1Min}, ww1Max: ${ww1Max}`);
+  // Check if using consultant rules or wake windows
+  const napTimingMode = schedule.napTimingMode ?? 'WAKE_WINDOWS';
 
-  // Calculate nap 1 times based on wake windows from actual wake time
-  const earliestByWakeWindow = addMinutes(wakeTime, ww1Min);
-  const latestByWakeWindow = addMinutes(wakeTime, ww1Max);
+  if (napTimingMode === 'CONSULTANT_RULES') {
+    // Sleep consultant's hardcoded rules for nap 1:
+    // - If woke before 6:30am → put down at 8:30am
+    // - If woke 6:30-6:59am → put down at 8:45am
+    // - If woke 7:00-7:30am → put down at 9:00am
+    const wakeTimeInTz = toZonedTime(wakeTime, timezone);
+    const wakeHour = wakeTimeInTz.getHours();
+    const wakeMinute = wakeTimeInTz.getMinutes();
+    const wakeTimeMinutes = wakeHour * 60 + wakeMinute; // Total minutes since midnight
 
-  console.log(`[calculateNap1TwoNap] earliest: ${earliestByWakeWindow.toISOString()}, latest: ${latestByWakeWindow.toISOString()}`);
+    let targetTime: string;
+    let ruleNote: string;
 
-  // Use wake window calculations as primary
-  let earliest = earliestByWakeWindow;
-  let latest = latestByWakeWindow;
-  let recommended = averageTime(earliest, latest);
+    if (wakeTimeMinutes < 6 * 60 + 30) {
+      // Woke before 6:30am
+      targetTime = '08:30';
+      ruleNote = 'Woke before 6:30am → Nap at 8:30am';
+    } else if (wakeTimeMinutes < 7 * 60) {
+      // Woke 6:30-6:59am
+      targetTime = '08:45';
+      ruleNote = 'Woke 6:30-6:59am → Nap at 8:45am';
+    } else {
+      // Woke 7:00am or later
+      targetTime = '09:00';
+      ruleNote = 'Woke 7:00am+ → Nap at 9:00am';
+    }
 
-  // Add note about wake window calculation
-  const ww1MinHours = Math.floor(ww1Min / 60);
-  const ww1MinMins = ww1Min % 60;
-  const ww1MaxHours = Math.floor(ww1Max / 60);
-  const ww1MaxMins = ww1Max % 60;
-  notes.push(`Wake window: ${ww1MinHours}h${ww1MinMins > 0 ? ww1MinMins + 'm' : ''}-${ww1MaxHours}h${ww1MaxMins > 0 ? ww1MaxMins + 'm' : ''} from wake`);
+    recommended = parseTimeString(targetTime, baseDate, timezone);
+    earliest = addMinutes(recommended, -15); // Allow 15 min early
+    latest = addMinutes(recommended, 15);    // Allow 15 min late
+    notes.push(`Consultant rules: ${ruleNote}`);
+
+    console.log(`[calculateNap1TwoNap] CONSULTANT_RULES: wakeTime=${format(wakeTimeInTz, 'HH:mm')}, target=${targetTime}`);
+  } else {
+    // Use user's configured wake windows to calculate based on actual wake time
+    const ww1Min = schedule.wakeWindow1Min ?? 120; // Default 2 hours
+    const ww1Max = schedule.wakeWindow1Max ?? 150; // Default 2.5 hours
+
+    // Debug logging to diagnose calculation issues
+    console.log(`[calculateNap1TwoNap] WAKE_WINDOWS: wakeTime: ${wakeTime.toISOString()}, ww1Min: ${ww1Min}, ww1Max: ${ww1Max}`);
+
+    // Calculate nap 1 times based on wake windows from actual wake time
+    earliest = addMinutes(wakeTime, ww1Min);
+    latest = addMinutes(wakeTime, ww1Max);
+    recommended = averageTime(earliest, latest);
+
+    console.log(`[calculateNap1TwoNap] earliest: ${earliest.toISOString()}, latest: ${latest.toISOString()}`);
+
+    // Add note about wake window calculation
+    const ww1MinHours = Math.floor(ww1Min / 60);
+    const ww1MinMins = ww1Min % 60;
+    const ww1MaxHours = Math.floor(ww1Max / 60);
+    const ww1MaxMins = ww1Max % 60;
+    notes.push(`Wake window: ${ww1MinHours}h${ww1MinMins > 0 ? ww1MinMins + 'm' : ''}-${ww1MaxHours}h${ww1MaxMins > 0 ? ww1MaxMins + 'm' : ''} from wake`);
+  }
 
   // Ensure earliest is not after latest
   if (isAfter(earliest, latest)) {

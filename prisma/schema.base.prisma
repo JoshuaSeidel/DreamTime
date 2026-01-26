@@ -211,6 +211,11 @@ model SleepSchedule {
   bedtimeReminderMinutes Int   @default(30)  // How many minutes before bedtime to notify
   wakeDeadlineReminderMinutes Int @default(15) // How many minutes before wake deadline to notify
 
+  // Nap timing mode for 2-nap schedule:
+  // - WAKE_WINDOWS: Use user-configured wake windows (default)
+  // - CONSULTANT_RULES: Use sleep consultant's hardcoded rules based on wake time
+  napTimingMode String @default("WAKE_WINDOWS")
+
   child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
