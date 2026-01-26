@@ -95,6 +95,14 @@ BEGIN
     END IF;
 END $$;
 
+-- napTimingMode column (WAKE_WINDOWS or CONSULTANT_RULES)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='SleepSchedule' AND column_name='napTimingMode') THEN
+        ALTER TABLE "SleepSchedule" ADD COLUMN "napTimingMode" TEXT NOT NULL DEFAULT 'WAKE_WINDOWS';
+    END IF;
+END $$;
+
 -- ===========================================
 -- SleepSession columns
 -- ===========================================
