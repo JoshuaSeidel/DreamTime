@@ -1,6 +1,9 @@
 # Build stage
 FROM node:20-alpine AS builder
 
+# Database provider: postgresql (default) or sqlite
+ARG DB_PROVIDER=postgresql
+
 # Install bash for setup script
 RUN apk add --no-cache bash
 
@@ -22,8 +25,8 @@ RUN npm ci
 COPY packages/server ./packages/server
 COPY tsconfig.base.json ./
 
-# Generate Prisma schema for PostgreSQL and generate client
-RUN chmod +x scripts/setup-prisma.sh && ./scripts/setup-prisma.sh postgresql
+# Generate Prisma schema for specified provider and generate client
+RUN chmod +x scripts/setup-prisma.sh && ./scripts/setup-prisma.sh ${DB_PROVIDER}
 
 # Build server
 RUN npm run build -w @dreamtime/server
