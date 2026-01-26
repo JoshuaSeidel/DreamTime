@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, Loader2, Plus, Baby, Car } from 'lucide-react';
+import { Moon, Clock, Loader2, Plus, Baby, Car, AlertTriangle } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
@@ -24,6 +24,7 @@ import {
   updateSession,
   getNextAction,
   getSchedule,
+  getTodaySummary,
   type SleepSession,
   type NextActionRecommendation,
   type SleepSchedule,
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [hasSchedule, setHasSchedule] = useState(false);
   const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
   const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
+  const [sleepDebt, setSleepDebt] = useState<{ minutes: number; note: string | null }>({ minutes: 0, note: null });
 
   // Onboarding wizard state - show automatically for new users
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -123,10 +125,20 @@ export default function Dashboard() {
         if (nextActionResult.success && nextActionResult.data) {
           setNextAction(nextActionResult.data);
         }
+
+        // Get today's summary for sleep debt display
+        const summaryResult = await getTodaySummary(accessToken, selectedChildId);
+        if (summaryResult.success && summaryResult.data) {
+          setSleepDebt({
+            minutes: summaryResult.data.sleepDebtMinutes,
+            note: summaryResult.data.sleepDebtNote,
+          });
+        }
       } else {
         setSchedule(null);
         setNextAction(null);
         setHasSchedule(false);
+        setSleepDebt({ minutes: 0, note: null });
       }
     } catch (err) {
       console.error('[Dashboard] Failed to load session data:', err);
@@ -512,6 +524,34 @@ export default function Dashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Sleep Debt Indicator - Prominent display when there's sleep debt */}
+            {hasSchedule && sleepDebt.minutes > 0 && (
+              <Card className="border-amber-500/50 bg-gradient-to-r from-amber-500/10 to-amber-600/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="shrink-0 rounded-full bg-amber-500/20 p-3">
+                      <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-amber-700 dark:text-amber-300">
+                          Sleep Debt
+                        </h3>
+                        <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          {sleepDebt.minutes} min
+                        </span>
+                      </div>
+                      {sleepDebt.note && (
+                        <p className="text-sm text-amber-700/80 dark:text-amber-300/80 mt-1">
+                          {sleepDebt.note}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Today's Bedtime Recommendation - Dynamic based on actual nap data */}
             {hasSchedule && (

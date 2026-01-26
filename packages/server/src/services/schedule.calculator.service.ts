@@ -409,11 +409,11 @@ function calculateSingleNap(
 /**
  * Calculate bedtime based on consultant's rules:
  *
- * For 2-nap schedule:
- * - Baseline: 6:30/7pm when naps 1&2 meet 1-hour goal
- * - If naps exceed goal and nap 2 ends 2:30pm+: 6:45/7pm
- * - If naps short of 1-hour goal: subtract shortfall from baseline
- * - Gap from nap 2 to bedtime: 4-4.5 hours (never later than 7:30pm)
+ * GOAL-BASED APPROACH:
+ * - Goal bedtime: 7:00pm (from bedtimeGoalStart)
+ * - Adjust EARLIER for sleep debt (subtract shortfall from goal)
+ * - Sleep debt takes PRIORITY over wake window minimum
+ * - Bounds: bedtimeEarliest (5:30pm) to bedtimeLatest (7:30pm)
  *
  * For 1-nap schedule:
  * - 2+ hour nap starting 12:30/1pm: 7:15/7:30pm
@@ -421,6 +421,12 @@ function calculateSingleNap(
  * - ~1 hour nap: 6:45/7pm
  * - 30-45 min nap: 6:15-6:45pm
  * - Repurpose lost sleep: if nap < 90 min, deduct from 7:15/7:30pm
+ *
+ * For 2-nap schedule:
+ * - Goal bedtime: 7:00pm when both naps meet 1-hour goal
+ * - If naps short of goal: subtract shortfall from 7:00pm
+ * - Sleep debt takes priority - can push bedtime EARLIER than wake window minimum
+ * - Never earlier than 5:30pm (bedtimeEarliest) or later than 7:30pm (bedtimeLatest)
  */
 function calculateBedtime(
   lastNapEndTime: Date,
@@ -437,16 +443,21 @@ function calculateBedtime(
   // Get schedule type
   const type = scheduleType ?? (schedule.type as ScheduleType);
 
-  // Get wake window for bedtime (4-4.5 hours is the consultant's recommendation)
+  // Get wake window for bedtime (informational only - sleep debt takes priority)
   const wwMin = schedule.wakeWindow3Min ?? schedule.wakeWindow2Min ?? 240; // 4 hours
   const wwMax = schedule.wakeWindow3Max ?? schedule.wakeWindow2Max ?? 270; // 4.5 hours
 
   const earliestByWakeWindow = addMinutes(lastNapEndTime, wwMin);
   const latestByWakeWindow = addMinutes(lastNapEndTime, wwMax);
 
-  // Get schedule constraints
+  // Get schedule constraints (hard bounds)
   const bedtimeEarliest = parseTimeString(schedule.bedtimeEarliest, baseDate, timezone);
   const bedtimeLatest = parseTimeString(schedule.bedtimeLatest, baseDate, timezone);
+
+  // Goal bedtime (default 7:00pm if not set)
+  const goalBedtime = schedule.bedtimeGoalStart
+    ? parseTimeString(schedule.bedtimeGoalStart, baseDate, timezone)
+    : parseTimeString('19:00', baseDate, timezone);
 
   // Calculate recommended bedtime based on consultant's rules
   let recommended: Date;
@@ -479,18 +490,14 @@ function calculateBedtime(
       recommended = parseTimeString('18:15', baseDate, timezone);
       notes.push('Very short nap - early bedtime to catch up');
     } else {
-      // No nap data yet - use goal or baseline
-      if (schedule.bedtimeGoalStart) {
-        recommended = parseTimeString(schedule.bedtimeGoalStart, baseDate, timezone);
-      } else {
-        recommended = baselineBedtime;
-      }
+      // No nap data yet - use goal
+      recommended = goalBedtime;
     }
 
   } else if (type === ScheduleType.TWO_NAP) {
     // 2-nap schedule bedtime calculation
-    // PRIMARY: Use wake window from nap 2 end time
-    // SECONDARY: Adjust earlier for sleep debt if naps were short
+    // GOAL-BASED: Start with goal (7pm), subtract sleep debt
+    // Sleep debt takes PRIORITY over wake window minimum
 
     const nap1Duration = napDurations?.[0] ?? 0;
     const hasNap1Data = napDurations !== undefined && napDurations.length >= 1;
@@ -505,43 +512,35 @@ function calculateBedtime(
     const totalShortfall = nap1Shortfall + nap2Shortfall;
 
     if (!hasNap1Data) {
-      // No nap data yet - use goal or average wake window
-      if (schedule.bedtimeGoalStart) {
-        recommended = parseTimeString(schedule.bedtimeGoalStart, baseDate, timezone);
-      } else {
-        recommended = averageTime(earliestByWakeWindow, latestByWakeWindow);
-      }
+      // No nap data yet - use goal bedtime
+      recommended = goalBedtime;
     } else if (!hasNap2Data) {
-      // Nap 1 completed but nap 2 hasn't happened yet - use goal time as estimate
-      if (schedule.bedtimeGoalStart) {
-        recommended = parseTimeString(schedule.bedtimeGoalStart, baseDate, timezone);
-        // Adjust for nap 1 debt
-        if (nap1Shortfall > 0) {
-          recommended = addMinutes(recommended, -nap1Shortfall);
-          notes.push(`Nap 1 debt: ${nap1Shortfall} min - early bedtime estimated`);
-        }
-      } else {
-        recommended = averageTime(earliestByWakeWindow, latestByWakeWindow);
+      // Nap 1 completed but nap 2 hasn't happened yet
+      // Estimate bedtime based on nap 1 debt
+      recommended = goalBedtime;
+      if (nap1Shortfall > 0) {
+        recommended = addMinutes(recommended, -nap1Shortfall);
+        notes.push(`Nap 1 debt: ${nap1Shortfall} min - earlier bedtime estimated`);
       }
     } else {
-      // Both naps completed - calculate bedtime from wake window
-      // Start with the middle of the wake window range
-      const wakeWindowBedtime = averageTime(earliestByWakeWindow, latestByWakeWindow);
+      // Both naps completed - calculate goal-based bedtime with sleep debt
+      // Start with goal bedtime (7pm)
+      recommended = goalBedtime;
 
       // Adjust earlier for sleep debt (shorter naps = earlier bedtime)
+      // Sleep debt takes PRIORITY - we do NOT clamp to wake window minimum
       if (totalShortfall > 0) {
-        recommended = addMinutes(wakeWindowBedtime, -totalShortfall);
-        notes.push(`${totalShortfall} min nap shortfall - earlier bedtime`);
+        recommended = addMinutes(recommended, -totalShortfall);
+        notes.push(`${totalShortfall} min sleep debt → earlier bedtime`);
       } else {
-        recommended = wakeWindowBedtime;
-        notes.push('Good naps! Bedtime based on wake window');
+        notes.push('Good naps! Goal bedtime');
       }
 
-      // Ensure we don't go earlier than the minimum wake window
-      const minBedtimeByWakeWindow = earliestByWakeWindow;
-      if (isBefore(recommended, minBedtimeByWakeWindow)) {
-        recommended = minBedtimeByWakeWindow;
-        notes.push(`Held to minimum wake window (${wwMin} min)`);
+      // Log wake window info (informational only)
+      const wakeWindowBedtime = averageTime(earliestByWakeWindow, latestByWakeWindow);
+      if (isBefore(recommended, earliestByWakeWindow)) {
+        const minBeforeWakeWindow = differenceInMinutes(earliestByWakeWindow, recommended);
+        notes.push(`(${minBeforeWakeWindow} min before wake window - sleep debt priority)`);
       }
     }
 
@@ -556,7 +555,8 @@ function calculateBedtime(
     }
   }
 
-  // Clamp recommended to schedule bounds first
+  // Clamp to schedule bounds ONLY (not wake window)
+  // Sleep debt can push earlier than wake window minimum
   if (isBefore(recommended, bedtimeEarliest)) {
     recommended = bedtimeEarliest;
     notes.push(`Held to earliest bedtime ${schedule.bedtimeEarliest}`);
