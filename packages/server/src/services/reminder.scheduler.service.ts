@@ -143,7 +143,8 @@ async function processChildReminders(
   // Get today's sessions to determine wake time and completed naps
   const todayStart = fromZonedTime(startOfDay(toZonedTime(now, timezone)), timezone);
 
-  const sessions = await prisma.sleepSession.findMany({
+  // Query for sessions created today
+  const todayCreatedSessions = await prisma.sleepSession.findMany({
     where: {
       childId,
       createdAt: { gte: todayStart },
@@ -151,12 +152,34 @@ async function processChildReminders(
     orderBy: { createdAt: 'asc' },
   });
 
+  // ALSO query for night sleep that started yesterday but woke up today
+  // Night sessions are created when baby is put down (yesterday evening)
+  // but wokeUpAt is set today morning - so we need to find these separately
+  const nightSessionFromYesterday = await prisma.sleepSession.findFirst({
+    where: {
+      childId,
+      sessionType: 'NIGHT_SLEEP',
+      createdAt: { lt: todayStart }, // Created before today (yesterday)
+      OR: [
+        { wokeUpAt: { gte: todayStart } }, // Woke up today
+        { state: { not: 'COMPLETED' } }, // Or still active
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  // Combine: use night session from yesterday if found, plus today's sessions
+  const sessions = nightSessionFromYesterday
+    ? [nightSessionFromYesterday, ...todayCreatedSessions.filter(s => s.id !== nightSessionFromYesterday.id)]
+    : todayCreatedSessions;
+
   // Find morning wake time (use wokeUpAt, not outOfCribAt - wake time is when baby woke, not left crib)
   let wakeTime: Date;
   const nightSession = sessions.find(s => s.sessionType === 'NIGHT_SLEEP' && s.wokeUpAt);
 
   if (nightSession?.wokeUpAt) {
     wakeTime = nightSession.wokeUpAt;
+    console.log(`[ReminderScheduler] ${childName}: Using recorded wake time ${format(toZonedTime(wakeTime, timezone), 'h:mm a')}`);
   } else {
     // Use schedule's earliest wake time as default
     const [hours, minutes] = schedule.wakeTimeEarliest.split(':').map(Number);
@@ -169,6 +192,7 @@ async function processChildReminders(
     if (isAfter(wakeTime, now)) {
       wakeTime = now;
     }
+    console.log(`[ReminderScheduler] ${childName}: WARNING - No night session with wokeUpAt found, using schedule default ${schedule.wakeTimeEarliest}`);
   }
 
   // Get completed naps today

@@ -170,7 +170,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todaySessions = await prisma.sleepSession.findMany({
+        // Query for sessions created today
+        const todayCreatedSessions = await prisma.sleepSession.findMany({
           where: {
             childId,
             createdAt: {
@@ -181,6 +182,27 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           orderBy: { createdAt: 'asc' },
         });
 
+        // ALSO query for night sleep that started yesterday but woke up today
+        // Night sessions are created when baby is put down (yesterday evening)
+        // but wokeUpAt is set today morning - so we need to find these separately
+        const nightSessionFromYesterday = await prisma.sleepSession.findFirst({
+          where: {
+            childId,
+            sessionType: SessionType.NIGHT_SLEEP,
+            createdAt: { lt: today }, // Created before today (yesterday)
+            OR: [
+              { wokeUpAt: { gte: today } }, // Woke up today
+              { state: { not: SessionState.COMPLETED } }, // Or still active
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // Combine: use night session from yesterday if found, plus today's sessions
+        const todaySessions = nightSessionFromYesterday
+          ? [nightSessionFromYesterday, ...todayCreatedSessions.filter(s => s.id !== nightSessionFromYesterday.id)]
+          : todayCreatedSessions;
+
         // Find wake time from night sleep or use schedule default
         let wakeTime: Date;
 
@@ -189,12 +211,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         );
         if (nightSession?.wokeUpAt) {
           wakeTime = nightSession.wokeUpAt;
+          console.log(`[NextAction] Using recorded wake time from night session: ${wakeTime.toISOString()}`);
         } else {
           // Default to schedule's wakeTimeEarliest in user's timezone
           const [hours, minutes] = (schedule.wakeTimeEarliest || '07:00').split(':').map(Number);
           const todayInUserTz = toZonedTime(new Date(), timezone);
           todayInUserTz.setHours(hours ?? 7, minutes ?? 0, 0, 0);
           wakeTime = fromZonedTime(todayInUserTz, timezone);
+          console.log(`[NextAction] WARNING: No night session with wokeUpAt found, using schedule default: ${wakeTime.toISOString()}`);
         }
 
         // Separate scheduled naps from ad-hoc naps (same logic as today-summary)
@@ -322,7 +346,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
-        const todaySessions = await prisma.sleepSession.findMany({
+        // Query for sessions created today
+        const todayCreatedSessions = await prisma.sleepSession.findMany({
           where: {
             childId,
             createdAt: {
@@ -332,6 +357,27 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           },
           orderBy: { createdAt: 'asc' },
         });
+
+        // ALSO query for night sleep that started yesterday but woke up today
+        // Night sessions are created when baby is put down (yesterday evening)
+        // but wokeUpAt is set today morning - so we need to find these separately
+        const nightSessionFromYesterday = await prisma.sleepSession.findFirst({
+          where: {
+            childId,
+            sessionType: SessionType.NIGHT_SLEEP,
+            createdAt: { lt: today }, // Created before today (yesterday)
+            OR: [
+              { wokeUpAt: { gte: today } }, // Woke up today
+              { state: { not: SessionState.COMPLETED } }, // Or still active
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // Combine: use night session from yesterday if found, plus today's sessions
+        const todaySessions = nightSessionFromYesterday
+          ? [nightSessionFromYesterday, ...todayCreatedSessions.filter(s => s.id !== nightSessionFromYesterday.id)]
+          : todayCreatedSessions;
 
         // Find wake time from night sleep or use schedule default
         let wakeTime: Date | null = null;
