@@ -496,8 +496,11 @@ function calculateBedtime(
 
   } else if (type === ScheduleType.TWO_NAP) {
     // 2-nap schedule bedtime calculation
-    // GOAL-BASED: Start with goal (7pm), subtract sleep debt
-    // Sleep debt takes PRIORITY over wake window minimum
+    // Two modes available:
+    // - GOAL_BASED: Start with goal (7pm), subtract sleep debt, sleep debt takes priority
+    // - WAKE_WINDOW: Start with wake window from nap end, subtract sleep debt, clamp to wake window min
+
+    const bedtimeMode = schedule.bedtimeMode ?? 'GOAL_BASED';
 
     const nap1Duration = napDurations?.[0] ?? 0;
     const hasNap1Data = napDurations !== undefined && napDurations.length >= 1;
@@ -511,36 +514,72 @@ function calculateBedtime(
     const nap2Shortfall = hasNap2Data ? Math.max(0, nap2Goal - nap2Duration) : 0;
     const totalShortfall = nap1Shortfall + nap2Shortfall;
 
-    if (!hasNap1Data) {
-      // No nap data yet - use goal bedtime
-      recommended = goalBedtime;
-    } else if (!hasNap2Data) {
-      // Nap 1 completed but nap 2 hasn't happened yet
-      // Estimate bedtime based on nap 1 debt
-      recommended = goalBedtime;
-      if (nap1Shortfall > 0) {
-        recommended = addMinutes(recommended, -nap1Shortfall);
-        notes.push(`Nap 1 debt: ${nap1Shortfall} min - earlier bedtime estimated`);
-      }
-    } else {
-      // Both naps completed - calculate goal-based bedtime with sleep debt
-      // Start with goal bedtime (7pm)
-      recommended = goalBedtime;
+    if (bedtimeMode === 'WAKE_WINDOW') {
+      // WAKE_WINDOW mode: Calculate from nap end time using wake window
+      // Then adjust for sleep debt, but respect wake window minimum
 
-      // Adjust earlier for sleep debt (shorter naps = earlier bedtime)
-      // Sleep debt takes PRIORITY - we do NOT clamp to wake window minimum
-      if (totalShortfall > 0) {
-        recommended = addMinutes(recommended, -totalShortfall);
-        notes.push(`${totalShortfall} min sleep debt → earlier bedtime`);
+      if (!hasNap1Data) {
+        // No nap data yet - use goal bedtime as estimate
+        recommended = goalBedtime;
+      } else if (!hasNap2Data) {
+        // Nap 1 completed but nap 2 hasn't happened yet
+        recommended = goalBedtime;
+        if (nap1Shortfall > 0) {
+          recommended = addMinutes(recommended, -nap1Shortfall);
+          notes.push(`Nap 1 debt: ${nap1Shortfall} min - earlier bedtime estimated`);
+        }
       } else {
-        notes.push('Good naps! Goal bedtime');
+        // Both naps completed - calculate from wake window
+        const wakeWindowBedtime = averageTime(earliestByWakeWindow, latestByWakeWindow);
+        recommended = wakeWindowBedtime;
+
+        // Adjust earlier for sleep debt
+        if (totalShortfall > 0) {
+          recommended = addMinutes(recommended, -totalShortfall);
+          notes.push(`${totalShortfall} min sleep debt → earlier bedtime`);
+        } else {
+          notes.push('Good naps! Wake window bedtime');
+        }
+
+        // In WAKE_WINDOW mode, respect the minimum wake window
+        if (isBefore(recommended, earliestByWakeWindow)) {
+          recommended = earliestByWakeWindow;
+          notes.push(`Held to minimum wake window (${wwMin} min)`);
+        }
       }
 
-      // Log wake window info (informational only)
-      const wakeWindowBedtime = averageTime(earliestByWakeWindow, latestByWakeWindow);
-      if (isBefore(recommended, earliestByWakeWindow)) {
-        const minBeforeWakeWindow = differenceInMinutes(earliestByWakeWindow, recommended);
-        notes.push(`(${minBeforeWakeWindow} min before wake window - sleep debt priority)`);
+    } else {
+      // GOAL_BASED mode (default): Start with goal, subtract sleep debt
+      // Sleep debt takes PRIORITY over wake window minimum
+
+      if (!hasNap1Data) {
+        // No nap data yet - use goal bedtime
+        recommended = goalBedtime;
+      } else if (!hasNap2Data) {
+        // Nap 1 completed but nap 2 hasn't happened yet
+        recommended = goalBedtime;
+        if (nap1Shortfall > 0) {
+          recommended = addMinutes(recommended, -nap1Shortfall);
+          notes.push(`Nap 1 debt: ${nap1Shortfall} min - earlier bedtime estimated`);
+        }
+      } else {
+        // Both naps completed - calculate goal-based bedtime with sleep debt
+        recommended = goalBedtime;
+
+        // Adjust earlier for sleep debt (shorter naps = earlier bedtime)
+        // Sleep debt takes PRIORITY - we do NOT clamp to wake window minimum
+        if (totalShortfall > 0) {
+          recommended = addMinutes(recommended, -totalShortfall);
+          notes.push(`${totalShortfall} min sleep debt → earlier bedtime`);
+        } else {
+          notes.push('Good naps! Goal bedtime');
+        }
+
+        // Log wake window info (informational only)
+        if (isBefore(recommended, earliestByWakeWindow)) {
+          const minBeforeWakeWindow = differenceInMinutes(earliestByWakeWindow, recommended);
+          notes.push(`(${minBeforeWakeWindow} min before wake window - sleep debt priority)`);
+        }
       }
     }
 

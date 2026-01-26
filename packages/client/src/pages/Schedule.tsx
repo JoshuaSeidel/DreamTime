@@ -73,6 +73,7 @@ const DEFAULT_SCHEDULES: Record<Exclude<ScheduleType, 'TRANSITION'>, Partial<Cre
     bedtimeReminderMinutes: 30,
     wakeDeadlineReminderMinutes: 15,
     napTimingMode: 'WAKE_WINDOWS',
+    bedtimeMode: 'GOAL_BASED',
   },
   ONE_NAP: {
     type: 'ONE_NAP',
@@ -223,6 +224,7 @@ export default function Schedule() {
             bedtimeReminderMinutes: scheduleResult.data.bedtimeReminderMinutes ?? 30,
             wakeDeadlineReminderMinutes: scheduleResult.data.wakeDeadlineReminderMinutes ?? 15,
             napTimingMode: scheduleResult.data.napTimingMode ?? 'WAKE_WINDOWS',
+            bedtimeMode: scheduleResult.data.bedtimeMode ?? 'GOAL_BASED',
           };
           setScheduleConfig(config);
         }
@@ -1224,6 +1226,66 @@ export default function Schedule() {
                         />
                       </div>
                     </div>
+
+                    {/* Bedtime Calculation Mode Toggle (for 2-nap schedule) */}
+                    {selectedType === 'TWO_NAP' && (
+                      <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Moon className="w-4 h-4 text-primary" />
+                            <div>
+                              <p className="font-medium text-sm">Bedtime Mode</p>
+                              <p className="text-xs text-muted-foreground">How bedtime is calculated</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant={scheduleConfig.bedtimeMode === 'GOAL_BASED' ? 'default' : 'outline'}
+                            size="sm"
+                            className="flex-1 text-xs"
+                            onClick={() => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeMode: 'GOAL_BASED'
+                            }))}
+                          >
+                            Goal-Based
+                          </Button>
+                          <Button
+                            variant={scheduleConfig.bedtimeMode === 'WAKE_WINDOW' ? 'default' : 'outline'}
+                            size="sm"
+                            className="flex-1 text-xs"
+                            onClick={() => setScheduleConfig(prev => ({
+                              ...prev,
+                              bedtimeMode: 'WAKE_WINDOW'
+                            }))}
+                          >
+                            Wake Window
+                          </Button>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1 pl-6">
+                          {scheduleConfig.bedtimeMode === 'GOAL_BASED' ? (
+                            <>
+                              <p className="font-medium text-foreground">Goal-Based Mode:</p>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                <li>Start with goal bedtime (7pm)</li>
+                                <li>Subtract sleep debt from goal</li>
+                                <li>Sleep debt takes priority over wake window</li>
+                              </ul>
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-medium text-foreground">Wake Window Mode:</p>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                <li>Calculate from nap end + wake window</li>
+                                <li>Adjust earlier for sleep debt</li>
+                                <li>Respects minimum wake window</li>
+                              </ul>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Target Bedtime - Editable */}
                     <div className="p-3 rounded-lg bg-muted/50 space-y-2">

@@ -59,6 +59,11 @@ export const createScheduleSchema = z.object({
   // WAKE_WINDOWS: Use user-configured wake windows
   // CONSULTANT_RULES: Use sleep consultant's hardcoded rules based on wake time
   napTimingMode: z.enum(['WAKE_WINDOWS', 'CONSULTANT_RULES']).default('WAKE_WINDOWS'),
+
+  // Bedtime calculation mode
+  // GOAL_BASED: Start with goal bedtime (7pm) and subtract sleep debt
+  // WAKE_WINDOW: Calculate from nap end time using wake window, then subtract sleep debt
+  bedtimeMode: z.enum(['GOAL_BASED', 'WAKE_WINDOW']).default('GOAL_BASED'),
 });
 
 export type CreateScheduleInput = z.infer<typeof createScheduleSchema>;
@@ -135,6 +140,9 @@ export interface SleepScheduleResponse {
 
   // Nap timing mode
   napTimingMode: 'WAKE_WINDOWS' | 'CONSULTANT_RULES';
+
+  // Bedtime calculation mode
+  bedtimeMode: 'GOAL_BASED' | 'WAKE_WINDOW';
 
   createdAt: Date;
   updatedAt: Date;

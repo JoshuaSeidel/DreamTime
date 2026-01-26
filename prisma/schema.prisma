@@ -216,6 +216,11 @@ model SleepSchedule {
   // - CONSULTANT_RULES: Use sleep consultant's hardcoded rules based on wake time
   napTimingMode String @default("WAKE_WINDOWS")
 
+  // Bedtime calculation mode:
+  // - GOAL_BASED: Start with goal bedtime (7pm) and subtract sleep debt (default)
+  // - WAKE_WINDOW: Calculate from nap end time using wake window, then subtract sleep debt
+  bedtimeMode String @default("GOAL_BASED")
+
   child           Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

@@ -94,6 +94,7 @@ function formatSchedule(
     bedtimeReminderMinutes?: number;
     wakeDeadlineReminderMinutes?: number;
     napTimingMode?: string;
+    bedtimeMode?: string;
     createdAt: Date;
     updatedAt: Date;
   }
@@ -107,6 +108,7 @@ function formatSchedule(
     bedtimeReminderMinutes: schedule.bedtimeReminderMinutes ?? 30,
     wakeDeadlineReminderMinutes: schedule.wakeDeadlineReminderMinutes ?? 15,
     napTimingMode: (schedule.napTimingMode as 'WAKE_WINDOWS' | 'CONSULTANT_RULES') ?? 'WAKE_WINDOWS',
+    bedtimeMode: (schedule.bedtimeMode as 'GOAL_BASED' | 'WAKE_WINDOW') ?? 'GOAL_BASED',
   };
 }
 

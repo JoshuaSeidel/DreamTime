@@ -391,6 +391,8 @@ export interface SleepSchedule {
   wakeDeadlineReminderMinutes: number;
   // Nap timing mode for 2-nap schedule
   napTimingMode: 'WAKE_WINDOWS' | 'CONSULTANT_RULES';
+  // Bedtime calculation mode
+  bedtimeMode: 'GOAL_BASED' | 'WAKE_WINDOW';
   createdAt: string;
   updatedAt: string;
 }
@@ -441,6 +443,8 @@ export interface CreateScheduleInput {
   wakeDeadlineReminderMinutes?: number;
   // Nap timing mode for 2-nap schedule
   napTimingMode?: 'WAKE_WINDOWS' | 'CONSULTANT_RULES';
+  // Bedtime calculation mode
+  bedtimeMode?: 'GOAL_BASED' | 'WAKE_WINDOW';
 }
 
 export async function getSchedule(
