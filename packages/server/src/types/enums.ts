@@ -79,6 +79,22 @@ export function isValidNapLocation(value: string): value is NapLocation {
   return Object.values(NapLocation).includes(value as NapLocation);
 }
 
+// Wake type for sleep cycles - determines rest credit calculation
+// QUIET: Normal awake in crib - counts as 50% rest credit (existing behavior)
+// RESTLESS: Baby moving/fussing but not crying - 0% credit
+// CRYING: Baby actively crying - 0% credit
+export const WakeType = {
+  QUIET: 'QUIET',
+  RESTLESS: 'RESTLESS',
+  CRYING: 'CRYING',
+} as const;
+
+export type WakeType = (typeof WakeType)[keyof typeof WakeType];
+
+export function isValidWakeType(value: string): value is WakeType {
+  return Object.values(WakeType).includes(value as WakeType);
+}
+
 // State machine validation for sleep sessions
 // Supports multiple wake/sleep cycles:
 // - PENDING can go to ASLEEP (normal) or COMPLETED (baby never fell asleep)

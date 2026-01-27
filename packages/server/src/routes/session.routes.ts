@@ -4,10 +4,14 @@ import {
   updateSessionSchema,
   listSessionsQuerySchema,
   createAdHocSessionSchema,
+  createSleepCycleSchema,
+  updateSleepCycleSchema,
   type CreateSessionInput,
   type UpdateSessionInput,
   type ListSessionsQuery,
   type CreateAdHocSessionInput,
+  type CreateSleepCycleInput,
+  type UpdateSleepCycleInput,
 } from '../schemas/session.schema.js';
 import {
   listSessions,
@@ -19,6 +23,9 @@ import {
   getDailySummary,
   createAdHocSession,
   recalculateTodaySessions,
+  createSleepCycle,
+  updateSleepCycle,
+  deleteSleepCycle,
   SessionServiceError,
 } from '../services/session.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
@@ -514,6 +521,177 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         }
 
         return reply.send(successResponse({ message: 'Session deleted successfully' }));
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // =====================================================
+  // Sleep Cycle Routes (for retroactive editing)
+  // =====================================================
+
+  // Create a sleep cycle for a session
+  app.post<{
+    Params: { childId: string; sessionId: string };
+    Body: CreateSleepCycleInput;
+  }>(
+    '/:childId/sessions/:sessionId/cycles',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Add a sleep cycle to a session (retroactive editing from video review)',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+            sessionId: { type: 'string' },
+          },
+          required: ['childId', 'sessionId'],
+        },
+        body: {
+          type: 'object',
+          required: ['asleepAt'],
+          properties: {
+            asleepAt: { type: 'string', format: 'date-time' },
+            wokeUpAt: { type: 'string', format: 'date-time' },
+            wakeType: {
+              type: 'string',
+              enum: ['QUIET', 'RESTLESS', 'CRYING'],
+              description: 'QUIET = 50% rest credit, RESTLESS/CRYING = 0% credit',
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { childId: string; sessionId: string };
+        Body: CreateSleepCycleInput;
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId, sessionId } = request.params;
+        const input = createSleepCycleSchema.parse(request.body);
+
+        const cycle = await createSleepCycle(userId, childId, sessionId, input);
+
+        return reply.status(201).send(successResponse(cycle));
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Update a sleep cycle
+  app.patch<{
+    Params: { childId: string; sessionId: string; cycleId: string };
+    Body: UpdateSleepCycleInput;
+  }>(
+    '/:childId/sessions/:sessionId/cycles/:cycleId',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Update a sleep cycle',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+            sessionId: { type: 'string' },
+            cycleId: { type: 'string' },
+          },
+          required: ['childId', 'sessionId', 'cycleId'],
+        },
+        body: {
+          type: 'object',
+          properties: {
+            asleepAt: { type: 'string', format: 'date-time' },
+            wokeUpAt: { type: 'string', format: 'date-time' },
+            wakeType: {
+              type: 'string',
+              enum: ['QUIET', 'RESTLESS', 'CRYING'],
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { childId: string; sessionId: string; cycleId: string };
+        Body: UpdateSleepCycleInput;
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId, sessionId, cycleId } = request.params;
+        const input = updateSleepCycleSchema.parse(request.body);
+
+        const cycle = await updateSleepCycle(userId, childId, sessionId, cycleId, input);
+
+        return reply.send(successResponse(cycle));
+      } catch (error) {
+        if (error instanceof SessionServiceError) {
+          return reply.status(error.statusCode).send(
+            errorResponse(error.code, error.message)
+          );
+        }
+        throw error;
+      }
+    }
+  );
+
+  // Delete a sleep cycle
+  app.delete<{
+    Params: { childId: string; sessionId: string; cycleId: string };
+  }>(
+    '/:childId/sessions/:sessionId/cycles/:cycleId',
+    {
+      onRequest: [app.authenticate],
+      schema: {
+        description: 'Delete a sleep cycle',
+        tags: ['Sessions'],
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: 'object',
+          properties: {
+            childId: { type: 'string' },
+            sessionId: { type: 'string' },
+            cycleId: { type: 'string' },
+          },
+          required: ['childId', 'sessionId', 'cycleId'],
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { childId: string; sessionId: string; cycleId: string };
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const { userId } = request.user;
+        const { childId, sessionId, cycleId } = request.params;
+
+        await deleteSleepCycle(userId, childId, sessionId, cycleId);
+
+        return reply.send(successResponse({ message: 'Cycle deleted successfully' }));
       } catch (error) {
         if (error instanceof SessionServiceError) {
           return reply.status(error.statusCode).send(

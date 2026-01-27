@@ -244,6 +244,20 @@ export async function updateCaregiverRole(
 // Sessions API
 export type NapLocation = 'CRIB' | 'CAR' | 'STROLLER' | 'CARRIER' | 'SWING' | 'PLAYPEN' | 'OTHER';
 
+// Wake type for sleep cycles - determines rest credit calculation
+export type WakeType = 'QUIET' | 'RESTLESS' | 'CRYING';
+
+// Sleep cycle interface
+export interface SleepCycle {
+  id: string;
+  cycleNumber: number;
+  asleepAt: string;
+  wokeUpAt: string | null;
+  wakeType: WakeType;
+  sleepMinutes: number | null;
+  awakeMinutes: number | null;
+}
+
 export interface SleepSession {
   id: string;
   childId: string;
@@ -272,6 +286,11 @@ export interface SleepSession {
   lastUpdatedByUserId: string | null;
   createdByName: string | null;
   lastUpdatedByName: string | null;
+  // Sleep cycles for retroactive editing
+  sleepCycles?: SleepCycle[];
+  wakeUpCount?: number;
+  totalCycleSleepMinutes?: number;
+  totalAwakeMinutes?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -363,6 +382,61 @@ export async function createAdHocSession(
       method: 'POST',
       body: JSON.stringify(data),
     },
+    accessToken
+  );
+}
+
+// Sleep Cycle API (retroactive editing)
+export async function createSleepCycle(
+  accessToken: string,
+  childId: string,
+  sessionId: string,
+  data: {
+    asleepAt: string;
+    wokeUpAt?: string;
+    wakeType?: WakeType;
+  }
+): Promise<ApiResponse<SleepCycle>> {
+  return fetchWithAuth<SleepCycle>(
+    `/children/${childId}/sessions/${sessionId}/cycles`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    },
+    accessToken
+  );
+}
+
+export async function updateSleepCycle(
+  accessToken: string,
+  childId: string,
+  sessionId: string,
+  cycleId: string,
+  data: {
+    asleepAt?: string;
+    wokeUpAt?: string | null;
+    wakeType?: WakeType;
+  }
+): Promise<ApiResponse<SleepCycle>> {
+  return fetchWithAuth<SleepCycle>(
+    `/children/${childId}/sessions/${sessionId}/cycles/${cycleId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    },
+    accessToken
+  );
+}
+
+export async function deleteSleepCycle(
+  accessToken: string,
+  childId: string,
+  sessionId: string,
+  cycleId: string
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchWithAuth<{ message: string }>(
+    `/children/${childId}/sessions/${sessionId}/cycles/${cycleId}`,
+    { method: 'DELETE' },
     accessToken
   );
 }
@@ -633,3 +707,4 @@ export async function completeOnboarding(
     accessToken
   );
 }
+

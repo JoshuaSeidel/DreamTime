@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Sun, Clock, ChevronRight, Calendar, Loader2, X, AlertTriangle, Pencil, Check } from 'lucide-react';
+import { Moon, Sun, Clock, ChevronRight, Calendar, Loader2, X, AlertTriangle, Pencil, Check, Plus, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { getSessions, updateSession, type SleepSession } from '@/lib/api';
+import { getSessions, updateSession, createSleepCycle, deleteSleepCycle, type SleepSession, type WakeType } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
 
@@ -22,6 +24,12 @@ export default function History() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Sleep cycle editing state
+  const [isAddingCycle, setIsAddingCycle] = useState(false);
+  const [newCycleAsleepAt, setNewCycleAsleepAt] = useState('');
+  const [newCycleWokeUpAt, setNewCycleWokeUpAt] = useState('');
+  const [newCycleWakeType, setNewCycleWakeType] = useState<WakeType>('QUIET');
 
   // Get child ID from localStorage
   useEffect(() => {
@@ -258,6 +266,85 @@ export default function History() {
     } catch (err) {
       console.error('Failed to save notes:', err);
       toast.error('Error', 'Failed to save notes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Reset cycle form
+  const resetCycleForm = () => {
+    setNewCycleAsleepAt('');
+    setNewCycleWokeUpAt('');
+    setNewCycleWakeType('QUIET');
+  };
+
+  // Add a sleep cycle
+  const handleAddCycle = async () => {
+    if (!selectedSession || !accessToken || !selectedChildId || !newCycleAsleepAt) return;
+
+    setIsSaving(true);
+    try {
+      const result = await createSleepCycle(accessToken, selectedChildId, selectedSession.id, {
+        asleepAt: new Date(newCycleAsleepAt).toISOString(),
+        wokeUpAt: newCycleWokeUpAt ? new Date(newCycleWokeUpAt).toISOString() : undefined,
+        wakeType: newCycleWakeType,
+      });
+
+      if (result.success) {
+        // Reload sessions to get updated data
+        await loadSessions();
+        // Find the updated session
+        const updatedSessions = await getSessions(accessToken, selectedChildId);
+        if (updatedSessions.success && updatedSessions.data) {
+          const updatedSession = updatedSessions.data.find(s => s.id === selectedSession.id);
+          if (updatedSession) {
+            setSelectedSession(updatedSession);
+            setSessions(updatedSessions.data.sort((a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            ));
+          }
+        }
+        toast.success('Cycle added', 'Sleep cycle added successfully');
+        setIsAddingCycle(false);
+        resetCycleForm();
+      } else {
+        toast.error('Failed to add cycle', result.error?.message || 'Please try again');
+      }
+    } catch (err) {
+      console.error('Failed to add cycle:', err);
+      toast.error('Error', 'Failed to add cycle');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete a sleep cycle
+  const handleDeleteCycle = async (cycleId: string) => {
+    if (!selectedSession || !accessToken || !selectedChildId) return;
+
+    setIsSaving(true);
+    try {
+      const result = await deleteSleepCycle(accessToken, selectedChildId, selectedSession.id, cycleId);
+
+      if (result.success) {
+        // Reload sessions to get updated data
+        const updatedSessions = await getSessions(accessToken, selectedChildId);
+        if (updatedSessions.success && updatedSessions.data) {
+          const updatedSession = updatedSessions.data.find(s => s.id === selectedSession.id);
+          if (updatedSession) {
+            setSelectedSession(updatedSession);
+            setSessions(updatedSessions.data.sort((a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            ));
+          }
+        }
+        toast.success('Cycle deleted', 'Sleep cycle removed');
+      } else {
+        toast.error('Failed to delete', result.error?.message || 'Please try again');
+      }
+    } catch (err) {
+      console.error('Failed to delete cycle:', err);
+      toast.error('Error', 'Failed to delete cycle');
     } finally {
       setIsSaving(false);
     }
@@ -680,6 +767,131 @@ export default function History() {
                     </p>
                   )}
                 </div>
+
+                {/* Sleep Cycles Section - show for completed sessions */}
+                {selectedSession.state === 'COMPLETED' && (
+                  <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm text-muted-foreground">
+                        Sleep Cycles
+                        {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 && (
+                          <span className="ml-2 text-xs">({selectedSession.sleepCycles.length})</span>
+                        )}
+                      </h4>
+                      {!isAddingCycle && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setIsAddingCycle(true)}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Add Cycle
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Existing cycles list */}
+                    {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedSession.sleepCycles.map((cycle) => (
+                          <div key={cycle.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">Cycle {cycle.cycleNumber}</span>
+                                {cycle.wakeType !== 'QUIET' && (
+                                  <Badge
+                                    variant={cycle.wakeType === 'CRYING' ? 'destructive' : 'secondary'}
+                                    className="text-xs"
+                                  >
+                                    {cycle.wakeType === 'CRYING' ? 'Crying' : 'Restless'}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatTime(cycle.asleepAt, selectedSession.timezone)}
+                                {cycle.wokeUpAt && ` - ${formatTime(cycle.wokeUpAt, selectedSession.timezone)}`}
+                                {cycle.sleepMinutes !== null && cycle.sleepMinutes > 0 && ` (${formatDuration(cycle.sleepMinutes)})`}
+                              </div>
+                            </div>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6"
+                              onClick={() => handleDeleteCycle(cycle.id)}
+                              disabled={isSaving}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No cycles recorded. Add cycles from video review.
+                      </p>
+                    )}
+
+                    {/* Add cycle form */}
+                    {isAddingCycle && (
+                      <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                        <div className="space-y-2">
+                          <Label className="text-xs">Fell Asleep</Label>
+                          <Input
+                            type="datetime-local"
+                            value={newCycleAsleepAt}
+                            onChange={(e) => setNewCycleAsleepAt(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Woke Up (optional)</Label>
+                          <Input
+                            type="datetime-local"
+                            value={newCycleWokeUpAt}
+                            onChange={(e) => setNewCycleWokeUpAt(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Wake Period Type</Label>
+                          <Select
+                            value={newCycleWakeType}
+                            onValueChange={(v: WakeType) => setNewCycleWakeType(v)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="QUIET">Quiet (50% rest credit)</SelectItem>
+                              <SelectItem value="RESTLESS">Restless (0% credit)</SelectItem>
+                              <SelectItem value="CRYING">Crying (0% credit)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setIsAddingCycle(false);
+                              resetCycleForm();
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleAddCycle}
+                            disabled={isSaving || !newCycleAsleepAt}
+                          >
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Cycle'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Logged By info */}
                 {(selectedSession.createdByName || selectedSession.lastUpdatedByName) && (

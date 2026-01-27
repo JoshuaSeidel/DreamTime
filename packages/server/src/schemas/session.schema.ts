@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SessionType, SessionState, NapLocation } from '../types/enums.js';
+import { SessionType, SessionState, NapLocation, WakeType } from '../types/enums.js';
 
 export const createSessionSchema = z.object({
   sessionType: z.enum([SessionType.NAP, SessionType.NIGHT_SLEEP] as const),
@@ -61,6 +61,35 @@ export const createAdHocSessionSchema = z.object({
 });
 
 export type CreateAdHocSessionInput = z.infer<typeof createAdHocSessionSchema>;
+
+// Schema for creating a sleep cycle (retroactive editing)
+export const createSleepCycleSchema = z.object({
+  asleepAt: z.string().datetime(),
+  wokeUpAt: z.string().datetime().optional(),
+  wakeType: z.enum([WakeType.QUIET, WakeType.RESTLESS, WakeType.CRYING] as const).default(WakeType.QUIET),
+});
+
+export type CreateSleepCycleInput = z.infer<typeof createSleepCycleSchema>;
+
+// Schema for updating a sleep cycle
+export const updateSleepCycleSchema = z.object({
+  asleepAt: z.string().datetime().optional(),
+  wokeUpAt: z.string().datetime().optional(),
+  wakeType: z.enum([WakeType.QUIET, WakeType.RESTLESS, WakeType.CRYING] as const).optional(),
+});
+
+export type UpdateSleepCycleInput = z.infer<typeof updateSleepCycleSchema>;
+
+// Sleep cycle response type
+export interface SleepCycleResponse {
+  id: string;
+  cycleNumber: number;
+  asleepAt: Date;
+  wokeUpAt: Date | null;
+  wakeType: string;
+  sleepMinutes: number | null;
+  awakeMinutes: number | null;
+}
 
 export interface SleepSessionResponse {
   id: string;

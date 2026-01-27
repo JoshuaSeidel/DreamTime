@@ -5,6 +5,7 @@ import {
   Role,
   SessionState,
   InviteStatus,
+  WakeType,
   isValidStateTransition,
 } from '../types/enums.js';
 import type {
@@ -13,6 +14,9 @@ import type {
   ListSessionsQuery,
   SleepSessionResponse,
   PaginatedSessions,
+  CreateSleepCycleInput,
+  UpdateSleepCycleInput,
+  SleepCycleResponse,
 } from '../schemas/session.schema.js';
 
 export class SessionServiceError extends Error {
@@ -24,16 +28,6 @@ export class SessionServiceError extends Error {
     super(message);
     this.name = 'SessionServiceError';
   }
-}
-
-// Sleep cycle interface for responses
-interface SleepCycleResponse {
-  id: string;
-  cycleNumber: number;
-  asleepAt: Date;
-  wokeUpAt: Date | null;
-  sleepMinutes: number | null;
-  awakeMinutes: number | null;
 }
 
 // Verify user has access to child and check role
@@ -96,6 +90,7 @@ interface SessionWithUserInfo {
     cycleNumber: number;
     asleepAt: Date;
     wokeUpAt: Date | null;
+    wakeType: string;
     sleepMinutes: number | null;
     awakeMinutes: number | null;
   }>;
@@ -133,6 +128,7 @@ function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
       cycleNumber: c.cycleNumber,
       asleepAt: c.asleepAt,
       wokeUpAt: c.wokeUpAt,
+      wakeType: c.wakeType,
       sleepMinutes: c.sleepMinutes,
       awakeMinutes: c.awakeMinutes,
     })),
@@ -939,4 +935,376 @@ export async function getDailySummary(
     totalAwakeMinutes,
     sessions: sessions.map(formatSession),
   };
+}
+
+// =====================================================
+// Sleep Cycle CRUD Operations (for retroactive editing)
+// =====================================================
+
+// Calculate qualified rest accounting for wakeType
+// QUIET wake periods: 50% credit (existing behavior)
+// RESTLESS/CRYING wake periods: 0% credit
+function calculateQualifiedRestWithCycles(
+  cycles: Array<{
+    sleepMinutes: number | null;
+    awakeMinutes: number | null;
+    wakeType: string;
+  }>,
+  settlingMinutes: number,
+  postWakeMinutes: number
+): number {
+  let totalSleepMinutes = 0;
+  let qualifiedAwakeMinutes = 0;
+
+  for (const cycle of cycles) {
+    totalSleepMinutes += cycle.sleepMinutes ?? 0;
+
+    // Only count awake time for QUIET periods (50% credit)
+    // RESTLESS and CRYING get 0% credit
+    if (cycle.wakeType === WakeType.QUIET) {
+      qualifiedAwakeMinutes += cycle.awakeMinutes ?? 0;
+    }
+  }
+
+  // Settling and post-wake time always get 50% credit
+  const totalAwakeCrib = qualifiedAwakeMinutes + settlingMinutes + postWakeMinutes;
+
+  return Math.round(totalAwakeCrib / 2 + totalSleepMinutes);
+}
+
+// Recalculate session durations from cycles
+async function recalculateSessionFromCycles(
+  sessionId: string,
+  userId: string
+): Promise<void> {
+  const session = await prisma.sleepSession.findUnique({
+    where: { id: sessionId },
+    include: { sleepCycles: { orderBy: { cycleNumber: 'asc' } } },
+  });
+
+  if (!session) return;
+
+  const cycles = session.sleepCycles;
+
+  if (cycles.length === 0) {
+    // No cycles - use session timestamps directly
+    const durations = calculateDurations(
+      session.putDownAt,
+      session.asleepAt,
+      session.wokeUpAt,
+      session.outOfCribAt,
+      session.isAdHoc
+    );
+
+    await prisma.sleepSession.update({
+      where: { id: sessionId },
+      data: {
+        sleepMinutes: durations.sleepMinutes,
+        settlingMinutes: durations.settlingMinutes,
+        postWakeMinutes: durations.postWakeMinutes,
+        awakeCribMinutes: durations.awakeCribMinutes,
+        qualifiedRestMinutes: durations.qualifiedRestMinutes,
+        lastUpdatedByUserId: userId,
+      },
+    });
+    return;
+  }
+
+  // Calculate awake time between cycles
+  for (let i = 0; i < cycles.length - 1; i++) {
+    const currentCycle = cycles[i];
+    const nextCycle = cycles[i + 1];
+
+    if (currentCycle && nextCycle && currentCycle.wokeUpAt) {
+      const awakeMinutes = Math.max(
+        0,
+        Math.round((nextCycle.asleepAt.getTime() - currentCycle.wokeUpAt.getTime()) / 60000)
+      );
+
+      await prisma.sleepCycle.update({
+        where: { id: currentCycle.id },
+        data: { awakeMinutes },
+      });
+    }
+  }
+
+  // Clear awakeMinutes for the last cycle (no next cycle to transition to)
+  const lastCycle = cycles[cycles.length - 1];
+  if (lastCycle) {
+    await prisma.sleepCycle.update({
+      where: { id: lastCycle.id },
+      data: { awakeMinutes: null },
+    });
+  }
+
+  // Refetch cycles with updated awake times
+  const updatedCycles = await prisma.sleepCycle.findMany({
+    where: { sessionId },
+    orderBy: { cycleNumber: 'asc' },
+  });
+
+  // Calculate total sleep from all cycles
+  let totalSleepMinutes = 0;
+  for (const cycle of updatedCycles) {
+    totalSleepMinutes += cycle.sleepMinutes ?? 0;
+  }
+
+  // Calculate settling time (put down to first asleep)
+  let settlingMinutes = 0;
+  if (session.putDownAt && updatedCycles[0]) {
+    settlingMinutes = Math.max(
+      0,
+      Math.round((updatedCycles[0].asleepAt.getTime() - session.putDownAt.getTime()) / 60000)
+    );
+  }
+
+  // Calculate post-wake time (last cycle woke up to out of crib)
+  let postWakeMinutes = 0;
+  const finalCycle = updatedCycles[updatedCycles.length - 1];
+  if (finalCycle?.wokeUpAt && session.outOfCribAt) {
+    postWakeMinutes = Math.max(
+      0,
+      Math.round((session.outOfCribAt.getTime() - finalCycle.wokeUpAt.getTime()) / 60000)
+    );
+  }
+
+  // Calculate qualified rest with wakeType consideration
+  const qualifiedRestMinutes = calculateQualifiedRestWithCycles(
+    updatedCycles,
+    settlingMinutes,
+    postWakeMinutes
+  );
+
+  // Calculate total awake time in crib
+  let awakeCribMinutes = settlingMinutes + postWakeMinutes;
+  for (const cycle of updatedCycles) {
+    awakeCribMinutes += cycle.awakeMinutes ?? 0;
+  }
+
+  // Update session with calculated values
+  await prisma.sleepSession.update({
+    where: { id: sessionId },
+    data: {
+      sleepMinutes: totalSleepMinutes,
+      settlingMinutes,
+      postWakeMinutes,
+      awakeCribMinutes,
+      qualifiedRestMinutes,
+      lastUpdatedByUserId: userId,
+    },
+  });
+}
+
+// Create a sleep cycle
+export async function createSleepCycle(
+  userId: string,
+  childId: string,
+  sessionId: string,
+  input: CreateSleepCycleInput
+): Promise<SleepCycleResponse> {
+  await verifyChildAccess(userId, childId, true);
+
+  const session = await prisma.sleepSession.findFirst({
+    where: { id: sessionId, childId },
+    include: { sleepCycles: { orderBy: { asleepAt: 'asc' } } },
+  });
+
+  if (!session) {
+    throw new SessionServiceError('Session not found', 'SESSION_NOT_FOUND', 404);
+  }
+
+  const asleepAt = new Date(input.asleepAt);
+  const wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : null;
+
+  // Calculate sleep duration for this cycle
+  const sleepMinutes = wokeUpAt
+    ? Math.max(0, Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000))
+    : null;
+
+  // Create the cycle
+  const cycle = await prisma.sleepCycle.create({
+    data: {
+      sessionId,
+      cycleNumber: 0, // Will be renumbered
+      asleepAt,
+      wokeUpAt,
+      wakeType: input.wakeType ?? WakeType.QUIET,
+      sleepMinutes,
+    },
+  });
+
+  // Renumber all cycles by asleepAt order
+  const allCycles = await prisma.sleepCycle.findMany({
+    where: { sessionId },
+    orderBy: { asleepAt: 'asc' },
+  });
+
+  for (let i = 0; i < allCycles.length; i++) {
+    const c = allCycles[i];
+    if (c) {
+      await prisma.sleepCycle.update({
+        where: { id: c.id },
+        data: { cycleNumber: i + 1 },
+      });
+    }
+  }
+
+  // Recalculate session durations
+  await recalculateSessionFromCycles(sessionId, userId);
+
+  // Fetch the updated cycle
+  const updatedCycle = await prisma.sleepCycle.findUnique({
+    where: { id: cycle.id },
+  });
+
+  if (!updatedCycle) {
+    throw new SessionServiceError('Cycle not found after creation', 'CYCLE_NOT_FOUND', 404);
+  }
+
+  return {
+    id: updatedCycle.id,
+    cycleNumber: updatedCycle.cycleNumber,
+    asleepAt: updatedCycle.asleepAt,
+    wokeUpAt: updatedCycle.wokeUpAt,
+    wakeType: updatedCycle.wakeType,
+    sleepMinutes: updatedCycle.sleepMinutes,
+    awakeMinutes: updatedCycle.awakeMinutes,
+  };
+}
+
+// Update a sleep cycle
+export async function updateSleepCycle(
+  userId: string,
+  childId: string,
+  sessionId: string,
+  cycleId: string,
+  input: UpdateSleepCycleInput
+): Promise<SleepCycleResponse> {
+  await verifyChildAccess(userId, childId, true);
+
+  const cycle = await prisma.sleepCycle.findFirst({
+    where: { id: cycleId, sessionId },
+    include: { session: true },
+  });
+
+  if (!cycle || cycle.session.childId !== childId) {
+    throw new SessionServiceError('Cycle not found', 'CYCLE_NOT_FOUND', 404);
+  }
+
+  const updateData: {
+    asleepAt?: Date;
+    wokeUpAt?: Date | null;
+    wakeType?: string;
+    sleepMinutes?: number | null;
+  } = {};
+
+  if (input.asleepAt) {
+    updateData.asleepAt = new Date(input.asleepAt);
+  }
+
+  if (input.wokeUpAt !== undefined) {
+    updateData.wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : null;
+  }
+
+  if (input.wakeType) {
+    updateData.wakeType = input.wakeType;
+  }
+
+  // Recalculate sleep duration
+  const finalAsleepAt = updateData.asleepAt ?? cycle.asleepAt;
+  const finalWokeUpAt = updateData.wokeUpAt !== undefined ? updateData.wokeUpAt : cycle.wokeUpAt;
+
+  if (finalWokeUpAt) {
+    updateData.sleepMinutes = Math.max(
+      0,
+      Math.round((finalWokeUpAt.getTime() - finalAsleepAt.getTime()) / 60000)
+    );
+  } else {
+    updateData.sleepMinutes = null;
+  }
+
+  const updatedCycle = await prisma.sleepCycle.update({
+    where: { id: cycleId },
+    data: updateData,
+  });
+
+  // If asleepAt changed, renumber cycles
+  if (input.asleepAt) {
+    const allCycles = await prisma.sleepCycle.findMany({
+      where: { sessionId },
+      orderBy: { asleepAt: 'asc' },
+    });
+
+    for (let i = 0; i < allCycles.length; i++) {
+      const c = allCycles[i];
+      if (c) {
+        await prisma.sleepCycle.update({
+          where: { id: c.id },
+          data: { cycleNumber: i + 1 },
+        });
+      }
+    }
+  }
+
+  // Recalculate session durations
+  await recalculateSessionFromCycles(sessionId, userId);
+
+  // Fetch updated cycle
+  const finalCycle = await prisma.sleepCycle.findUnique({
+    where: { id: cycleId },
+  });
+
+  if (!finalCycle) {
+    throw new SessionServiceError('Cycle not found after update', 'CYCLE_NOT_FOUND', 404);
+  }
+
+  return {
+    id: finalCycle.id,
+    cycleNumber: finalCycle.cycleNumber,
+    asleepAt: finalCycle.asleepAt,
+    wokeUpAt: finalCycle.wokeUpAt,
+    wakeType: finalCycle.wakeType,
+    sleepMinutes: finalCycle.sleepMinutes,
+    awakeMinutes: finalCycle.awakeMinutes,
+  };
+}
+
+// Delete a sleep cycle
+export async function deleteSleepCycle(
+  userId: string,
+  childId: string,
+  sessionId: string,
+  cycleId: string
+): Promise<void> {
+  await verifyChildAccess(userId, childId, true);
+
+  const cycle = await prisma.sleepCycle.findFirst({
+    where: { id: cycleId, sessionId },
+    include: { session: true },
+  });
+
+  if (!cycle || cycle.session.childId !== childId) {
+    throw new SessionServiceError('Cycle not found', 'CYCLE_NOT_FOUND', 404);
+  }
+
+  await prisma.sleepCycle.delete({ where: { id: cycleId } });
+
+  // Renumber remaining cycles
+  const remainingCycles = await prisma.sleepCycle.findMany({
+    where: { sessionId },
+    orderBy: { asleepAt: 'asc' },
+  });
+
+  for (let i = 0; i < remainingCycles.length; i++) {
+    const c = remainingCycles[i];
+    if (c) {
+      await prisma.sleepCycle.update({
+        where: { id: c.id },
+        data: { cycleNumber: i + 1 },
+      });
+    }
+  }
+
+  // Recalculate session durations
+  await recalculateSessionFromCycles(sessionId, userId);
 }

@@ -322,13 +322,19 @@ model SleepSession {
 }
 
 // Sleep Cycle - tracks individual asleep/awake cycles within a session
-// Used primarily for night sleep where baby may wake multiple times
+// Used for both naps and night sleep where baby may wake multiple times
 model SleepCycle {
   id          String   @id @default(uuid())
   sessionId   String
   cycleNumber Int      // 1, 2, 3, etc. - order of the cycle
   asleepAt    DateTime // When baby fell asleep in this cycle
   wokeUpAt    DateTime? // When baby woke up from this cycle
+
+  // Wake period quality - determines rest credit calculation
+  // QUIET: Normal awake - counts as 50% rest credit
+  // RESTLESS: Baby moving/fussing - 0% credit
+  // CRYING: Baby actively crying - 0% credit
+  wakeType    String   @default("QUIET")
 
   // Calculated duration for this cycle
   sleepMinutes Int?    // Time asleep in this cycle
