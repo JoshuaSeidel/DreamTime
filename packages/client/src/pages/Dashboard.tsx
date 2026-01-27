@@ -672,6 +672,7 @@ export default function Dashboard() {
         onOpenChange={setShowSleepTypeDialog}
         onSelect={handleSleepTypeSelect}
         currentNapCount={todaySummary.napCount}
+        scheduleType={schedule?.type}
       />
 
       {/* Onboarding Wizard - shows automatically for new users */}
