@@ -636,179 +636,158 @@ export default function History() {
                     </div>
                   )}
 
-                  {/* Put Down */}
-                  {selectedSession.putDownAt && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Put Down</span>
-                      {editingField === 'putDownAt' ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="datetime-local"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-48 h-8 text-sm"
-                          />
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveEdit} disabled={isSaving}>
-                            <Check className="w-4 h-4 text-green-500" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cancelEdit}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.putDownAt, selectedSession.timezone)}</span>
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('putDownAt', selectedSession.putDownAt)}>
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Build chronologically sorted timeline */}
+                  {(() => {
+                    // Build all timeline events
+                    type TimelineEvent = {
+                      type: 'putDown' | 'asleep' | 'wokeUp' | 'backAsleep' | 'finalWake' | 'outOfCrib';
+                      time: Date;
+                      label: string;
+                      editField?: string;
+                      cycleId?: string;
+                      wakeType?: string;
+                    };
 
-                  {/* Fell Asleep */}
-                  {selectedSession.asleepAt && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Fell Asleep</span>
-                      {editingField === 'asleepAt' ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="datetime-local"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-48 h-8 text-sm"
-                          />
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveEdit} disabled={isSaving}>
-                            <Check className="w-4 h-4 text-green-500" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cancelEdit}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.asleepAt, selectedSession.timezone)}</span>
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('asleepAt', selectedSession.asleepAt)}>
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    const events: TimelineEvent[] = [];
 
-                  {/* Wake events interleaved in timeline */}
-                  {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 && (
-                    <>
-                      {selectedSession.sleepCycles.map((cycle) => (
-                        <div key={cycle.id} className="space-y-1 pl-3 border-l-2 border-muted ml-1">
-                          {/* Wake time */}
-                          <div className="flex items-center justify-between gap-2">
+                    if (selectedSession.putDownAt) {
+                      events.push({
+                        type: 'putDown',
+                        time: new Date(selectedSession.putDownAt),
+                        label: 'Put Down',
+                        editField: 'putDownAt',
+                      });
+                    }
+
+                    if (selectedSession.asleepAt) {
+                      events.push({
+                        type: 'asleep',
+                        time: new Date(selectedSession.asleepAt),
+                        label: 'Fell Asleep',
+                        editField: 'asleepAt',
+                      });
+                    }
+
+                    // Add wake events from cycles
+                    if (selectedSession.sleepCycles) {
+                      for (const cycle of selectedSession.sleepCycles) {
+                        events.push({
+                          type: 'wokeUp',
+                          time: new Date(cycle.wokeUpAt),
+                          label: 'Woke Up',
+                          cycleId: cycle.id,
+                          wakeType: cycle.wakeType,
+                        });
+
+                        if (cycle.fellBackAsleepAt) {
+                          events.push({
+                            type: 'backAsleep',
+                            time: new Date(cycle.fellBackAsleepAt),
+                            label: 'Back Asleep',
+                            cycleId: cycle.id,
+                          });
+                        }
+                      }
+                    }
+
+                    if (selectedSession.wokeUpAt) {
+                      events.push({
+                        type: 'finalWake',
+                        time: new Date(selectedSession.wokeUpAt),
+                        label: selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? 'Final Wake' : 'Woke Up',
+                        editField: 'wokeUpAt',
+                      });
+                    }
+
+                    if (selectedSession.outOfCribAt) {
+                      events.push({
+                        type: 'outOfCrib',
+                        time: new Date(selectedSession.outOfCribAt),
+                        label: 'Out of Crib',
+                        editField: 'outOfCribAt',
+                      });
+                    }
+
+                    // Sort chronologically
+                    events.sort((a, b) => a.time.getTime() - b.time.getTime());
+
+                    return events.map((event, idx) => {
+                      const isEditable = event.editField && ['putDownAt', 'asleepAt', 'wokeUpAt', 'outOfCribAt'].includes(event.editField);
+                      const isCycleWake = event.type === 'wokeUp' && event.cycleId;
+
+                      // Get wake type badge
+                      const getWakeTypeBadge = () => {
+                        if (!event.wakeType) return null;
+                        const variant = event.wakeType === 'CRYING' ? 'destructive' :
+                                       event.wakeType === 'RESTLESS' ? 'secondary' : 'outline';
+                        const label = event.wakeType === 'CRYING' ? 'Crying' :
+                                     event.wakeType === 'RESTLESS' ? 'Restless' : 'Quiet';
+                        return (
+                          <Badge variant={variant} className="text-xs">
+                            {label}
+                          </Badge>
+                        );
+                      };
+
+                      return (
+                        <div key={`${event.type}-${idx}`} className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">{event.label}</span>
+                            {isCycleWake && getWakeTypeBadge()}
+                          </div>
+                          {isEditable && editingField === event.editField ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">Woke Up</span>
-                              {cycle.wakeType !== 'QUIET' && (
-                                <Badge
-                                  variant={cycle.wakeType === 'CRYING' ? 'destructive' : 'secondary'}
-                                  className="text-xs"
-                                >
-                                  {cycle.wakeType === 'CRYING' ? 'Crying' : 'Restless'}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span>{formatTime(cycle.wokeUpAt, selectedSession.timezone)}</span>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6"
-                                onClick={() => handleDeleteWakeEvent(cycle.id)}
-                                disabled={isSaving}
-                              >
-                                <Trash2 className="w-3 h-3 text-destructive" />
+                              <Input
+                                type="datetime-local"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                className="w-48 h-8 text-sm"
+                              />
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveEdit} disabled={isSaving}>
+                                <Check className="w-4 h-4 text-green-500" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cancelEdit}>
+                                <X className="w-4 h-4" />
                               </Button>
                             </div>
-                          </div>
-                          {/* Fell back asleep time */}
-                          {cycle.fellBackAsleepAt ? (
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-muted-foreground">Back Asleep</span>
-                              <span>{formatTime(cycle.fellBackAsleepAt, selectedSession.timezone)}</span>
-                            </div>
                           ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-muted-foreground text-xs italic">No sleep time recorded</span>
+                            <div className="flex items-center gap-2">
+                              <span>{formatDateTime(event.time.toISOString(), selectedSession.timezone)}</span>
+                              {isEditable && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  onClick={() => startEdit(event.editField!, event.time.toISOString())}
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {isCycleWake && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  onClick={() => handleDeleteWakeEvent(event.cycleId!)}
+                                  disabled={isSaving}
+                                >
+                                  <Trash2 className="w-3 h-3 text-destructive" />
+                                </Button>
+                              )}
                             </div>
                           )}
-                          {cycle.awakeMinutes !== null && cycle.awakeMinutes > 0 && (
-                            <div className="text-xs text-muted-foreground">
-                              Awake for {formatDuration(cycle.awakeMinutes)}
-                            </div>
-                          )}
                         </div>
-                      ))}
-                    </>
+                      );
+                    });
+                  })()}
+
+                  {/* Show message if no sleep time recorded for a wake event */}
+                  {selectedSession.sleepCycles && selectedSession.sleepCycles.some(c => !c.fellBackAsleepAt) && (
+                    <p className="text-xs text-muted-foreground italic pl-2">
+                      Note: Some wake events don't have a "back asleep" time recorded
+                    </p>
                   )}
 
-                  {/* Final Woke Up (session level) */}
-                  {selectedSession.wokeUpAt && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">
-                        {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? 'Final Wake' : 'Woke Up'}
-                      </span>
-                      {editingField === 'wokeUpAt' ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="datetime-local"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-48 h-8 text-sm"
-                          />
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveEdit} disabled={isSaving}>
-                            <Check className="w-4 h-4 text-green-500" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cancelEdit}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.wokeUpAt, selectedSession.timezone)}</span>
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('wokeUpAt', selectedSession.wokeUpAt)}>
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Out of Crib */}
-                  {selectedSession.outOfCribAt && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Out of Crib</span>
-                      {editingField === 'outOfCribAt' ? (
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="datetime-local"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-48 h-8 text-sm"
-                          />
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={saveEdit} disabled={isSaving}>
-                            <Check className="w-4 h-4 text-green-500" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={cancelEdit}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.outOfCribAt, selectedSession.timezone)}</span>
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('outOfCribAt', selectedSession.outOfCribAt)}>
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {/* Durations with warnings */}
