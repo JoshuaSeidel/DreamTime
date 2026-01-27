@@ -23,6 +23,16 @@ import {
 } from '../services/session.service.js';
 import { successResponse, errorResponse } from '../types/api.js';
 import { publishState, isMqttEnabled } from '../services/mqtt.service.js';
+import { prisma } from '../config/database.js';
+
+// Helper to get user timezone
+async function getUserTimezone(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  });
+  return user?.timezone ?? 'America/New_York';
+}
 
 export async function sessionRoutes(app: FastifyInstance): Promise<void> {
   // List sessions with pagination and filtering
@@ -425,7 +435,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const { userId } = request.user;
         const { childId } = request.params;
 
-        const result = await recalculateTodaySessions(userId, childId);
+        const timezone = await getUserTimezone(userId);
+        const result = await recalculateTodaySessions(userId, childId, timezone);
 
         return reply.send(successResponse(result));
       } catch (error) {

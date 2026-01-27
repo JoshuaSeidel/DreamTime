@@ -1,4 +1,6 @@
 import { prisma } from '../config/database.js';
+import { startOfDay, addDays } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import {
   Role,
   SessionState,
@@ -798,14 +800,16 @@ export async function createAdHocSession(
 // Used to fix sessions after a calculation bug fix
 export async function recalculateTodaySessions(
   userId: string,
-  childId: string
+  childId: string,
+  timezone: string = 'America/New_York'
 ): Promise<{ recalculated: number; sessions: Array<{ id: string; oldQualifiedRest: number | null; newQualifiedRest: number | null }> }> {
   await verifyChildAccess(userId, childId, true);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  // Use user's timezone for "today" boundaries
+  const nowInUserTz = toZonedTime(new Date(), timezone);
+  const todayStartInUserTz = startOfDay(nowInUserTz);
+  const today = fromZonedTime(todayStartInUserTz, timezone);
+  const tomorrow = fromZonedTime(addDays(todayStartInUserTz, 1), timezone);
 
   // Get today's completed NAP sessions
   const sessions = await prisma.sleepSession.findMany({

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { startOfDay, addDays } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import {
   calculateDaySchedule,
@@ -164,11 +165,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           );
         }
 
-        // Get today's sessions
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Get today's sessions - use user's timezone for "today" boundaries
+        // This ensures a user in EST sees sessions created "today" in their timezone
+        const nowInUserTz = toZonedTime(new Date(), timezone);
+        const todayStartInUserTz = startOfDay(nowInUserTz);
+        const today = fromZonedTime(todayStartInUserTz, timezone);
+        const tomorrow = fromZonedTime(addDays(todayStartInUserTz, 1), timezone);
 
         // Query for sessions created today
         const todayCreatedSessions = await prisma.sleepSession.findMany({
@@ -340,11 +342,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           );
         }
 
-        // Get today's sessions
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        // Get today's sessions - use user's timezone for "today" boundaries
+        // This ensures a user in EST sees sessions created "today" in their timezone
+        const nowInUserTz = toZonedTime(new Date(), timezone);
+        const todayStartInUserTz = startOfDay(nowInUserTz);
+        const today = fromZonedTime(todayStartInUserTz, timezone);
+        const tomorrow = fromZonedTime(addDays(todayStartInUserTz, 1), timezone);
 
         // Query for sessions created today
         const todayCreatedSessions = await prisma.sleepSession.findMany({
