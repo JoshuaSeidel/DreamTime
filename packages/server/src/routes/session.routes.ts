@@ -284,7 +284,11 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const input = createSessionSchema.parse(request.body);
 
-        const session = await createSession(userId, childId, input);
+        // Get device timezone from header for storing with session
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
+
+        const session = await createSession(userId, childId, input, timezone);
 
         // Publish state change to MQTT for Home Assistant
         if (isMqttEnabled()) {
@@ -406,7 +410,11 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const input = createAdHocSessionSchema.parse(request.body);
 
-        const session = await createAdHocSession(userId, childId, input);
+        // Get device timezone from header for storing with session
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
+
+        const session = await createAdHocSession(userId, childId, input, timezone);
 
         // Publish state change to MQTT for Home Assistant
         if (isMqttEnabled()) {

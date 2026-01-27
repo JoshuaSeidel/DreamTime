@@ -81,24 +81,35 @@ export default function History() {
     return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
-  const formatTime = (dateString: string | null) => {
+  // Format time using session's stored timezone (for historical accuracy)
+  // Falls back to device timezone if session has no stored timezone
+  const formatTime = (dateString: string | null, sessionTimezone?: string | null) => {
     if (!dateString) return '--:--';
-    return new Date(dateString).toLocaleTimeString([], {
+    const options: Intl.DateTimeFormatOptions = {
       hour: '2-digit',
       minute: '2-digit',
-    });
+    };
+    if (sessionTimezone) {
+      options.timeZone = sessionTimezone;
+    }
+    return new Date(dateString).toLocaleTimeString([], options);
   };
 
-  const formatDateTime = (dateString: string | null) => {
+  // Format date/time using session's stored timezone (for historical accuracy)
+  const formatDateTime = (dateString: string | null, sessionTimezone?: string | null) => {
     if (!dateString) return '--';
     const date = new Date(dateString);
-    return date.toLocaleString([], {
+    const options: Intl.DateTimeFormatOptions = {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
+    };
+    if (sessionTimezone) {
+      options.timeZone = sessionTimezone;
+    }
+    return date.toLocaleString([], options);
   };
 
   const formatDateTimeForInput = (dateString: string | null) => {
@@ -342,8 +353,8 @@ export default function History() {
                             <span className="font-medium">{sessionDate}</span>
                             <Clock className="w-3 h-3 ml-1" />
                             <span>
-                              {formatTime(session.putDownAt)}
-                              {session.outOfCribAt && ` - ${formatTime(session.outOfCribAt)}`}
+                              {formatTime(session.putDownAt, session.timezone)}
+                              {session.outOfCribAt && ` - ${formatTime(session.outOfCribAt, session.timezone)}`}
                             </span>
                           </div>
                         </div>
@@ -438,7 +449,7 @@ export default function History() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.putDownAt)}</span>
+                          <span>{formatDateTime(selectedSession.putDownAt, selectedSession.timezone)}</span>
                           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('putDownAt', selectedSession.putDownAt)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
@@ -468,7 +479,7 @@ export default function History() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.asleepAt)}</span>
+                          <span>{formatDateTime(selectedSession.asleepAt, selectedSession.timezone)}</span>
                           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('asleepAt', selectedSession.asleepAt)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
@@ -498,7 +509,7 @@ export default function History() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.wokeUpAt)}</span>
+                          <span>{formatDateTime(selectedSession.wokeUpAt, selectedSession.timezone)}</span>
                           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('wokeUpAt', selectedSession.wokeUpAt)}>
                             <Pencil className="w-3 h-3" />
                           </Button>
@@ -528,7 +539,7 @@ export default function History() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span>{formatDateTime(selectedSession.outOfCribAt)}</span>
+                          <span>{formatDateTime(selectedSession.outOfCribAt, selectedSession.timezone)}</span>
                           <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEdit('outOfCribAt', selectedSession.outOfCribAt)}>
                             <Pencil className="w-3 h-3" />
                           </Button>

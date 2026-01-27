@@ -80,6 +80,7 @@ interface SessionWithUserInfo {
   outOfCribAt: Date | null;
   cryingMinutes: number | null;
   notes: string | null;
+  timezone: string | null;
   totalMinutes: number | null;
   sleepMinutes: number | null;
   settlingMinutes: number | null;
@@ -320,7 +321,8 @@ export async function getSession(
 export async function createSession(
   userId: string,
   childId: string,
-  input: CreateSessionInput
+  input: CreateSessionInput,
+  timezone?: string
 ): Promise<SleepSessionResponse> {
   await verifyChildAccess(userId, childId, true);
 
@@ -334,6 +336,7 @@ export async function createSession(
       napNumber: input.napNumber ?? null,
       putDownAt,
       notes: input.notes ?? null,
+      timezone: timezone ?? null, // Store timezone for historical accuracy
       createdByUserId: userId,
       lastUpdatedByUserId: userId,
     },
@@ -720,7 +723,8 @@ export async function createAdHocSession(
     asleepAt: string;
     wokeUpAt?: string; // Optional - if not provided, starts in ASLEEP state
     notes?: string;
-  }
+  },
+  timezone?: string
 ): Promise<SleepSessionResponse> {
   await verifyChildAccess(userId, childId, true);
 
@@ -752,6 +756,7 @@ export async function createAdHocSession(
         wokeUpAt,
         outOfCribAt: wokeUpAt,
         notes: input.notes ?? null,
+        timezone: timezone ?? null, // Store timezone for historical accuracy
         totalMinutes: durations.totalMinutes,
         sleepMinutes: durations.sleepMinutes,
         settlingMinutes: 0,
@@ -783,6 +788,7 @@ export async function createAdHocSession(
       putDownAt: asleepAt, // For ad-hoc, putDown = asleep
       asleepAt,
       notes: input.notes ?? null,
+      timezone: timezone ?? null, // Store timezone for historical accuracy
       createdByUserId: userId,
       lastUpdatedByUserId: userId,
     },

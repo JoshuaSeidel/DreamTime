@@ -290,6 +290,10 @@ model SleepSession {
   cryingMinutes Int?     // For CIO/Ferber tracking
   notes         String?
 
+  // Timezone where session was recorded (for accurate history display)
+  // Stored so historical data shows in the timezone it was recorded, not current device timezone
+  timezone      String?  // e.g., "America/New_York", "Europe/London"
+
   // Who logged this entry (for multi-caregiver tracking)
   createdByUserId  String?   // User who created the session
   lastUpdatedByUserId String? // User who last updated the session

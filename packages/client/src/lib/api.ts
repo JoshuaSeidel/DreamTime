@@ -259,6 +259,8 @@ export interface SleepSession {
   outOfCribAt: string | null;
   cryingMinutes: number | null;
   notes: string | null;
+  // Timezone where session was recorded (for accurate history display)
+  timezone: string | null;
   totalMinutes: number | null;
   sleepMinutes: number | null;
   settlingMinutes: number | null;

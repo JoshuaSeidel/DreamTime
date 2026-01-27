@@ -81,6 +81,9 @@ export interface SleepSessionResponse {
   cryingMinutes: number | null;
   notes: string | null;
 
+  // Timezone where session was recorded (for accurate history display)
+  timezone: string | null;
+
   // Duration calculations
   totalMinutes: number | null;      // Total time in crib (putDown to outOfCrib)
   sleepMinutes: number | null;      // Actual sleep time (asleep to wokeUp)
