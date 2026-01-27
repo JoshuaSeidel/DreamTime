@@ -769,13 +769,14 @@ export async function createAdHocSession(
   return formatSession(session);
 }
 
-// Recalculate qualifiedRestMinutes for today's sessions
+// Recalculate durations for today's sessions
 // Used to fix sessions after a calculation bug fix
+// This now properly handles sessions with wake events (sleep cycles)
 export async function recalculateTodaySessions(
   userId: string,
   childId: string,
   timezone: string = 'America/New_York'
-): Promise<{ recalculated: number; sessions: Array<{ id: string; oldQualifiedRest: number | null; newQualifiedRest: number | null }> }> {
+): Promise<{ recalculated: number; sessions: Array<{ id: string; oldSleep: number | null; newSleep: number | null; oldQualifiedRest: number | null; newQualifiedRest: number | null }> }> {
   await verifyChildAccess(userId, childId, true);
 
   // Use user's timezone for "today" boundaries
@@ -784,11 +785,10 @@ export async function recalculateTodaySessions(
   const today = fromZonedTime(todayStartInUserTz, timezone);
   const tomorrow = fromZonedTime(addDays(todayStartInUserTz, 1), timezone);
 
-  // Get today's completed NAP sessions
+  // Get today's completed sessions (both NAP and NIGHT_SLEEP)
   const sessions = await prisma.sleepSession.findMany({
     where: {
       childId,
-      sessionType: 'NAP',
       state: SessionState.COMPLETED,
       createdAt: {
         gte: today,
@@ -797,35 +797,26 @@ export async function recalculateTodaySessions(
     },
   });
 
-  const results: Array<{ id: string; oldQualifiedRest: number | null; newQualifiedRest: number | null }> = [];
+  const results: Array<{ id: string; oldSleep: number | null; newSleep: number | null; oldQualifiedRest: number | null; newQualifiedRest: number | null }> = [];
 
   for (const session of sessions) {
+    const oldSleep = session.sleepMinutes;
     const oldQualifiedRest = session.qualifiedRestMinutes;
 
-    // Recalculate durations
-    const durations = calculateDurations(
-      session.putDownAt,
-      session.asleepAt,
-      session.wokeUpAt,
-      session.outOfCribAt,
-      session.isAdHoc
-    );
+    // Recalculate using the proper function that handles wake events
+    await recalculateSessionFromCycles(session.id, userId);
 
-    // Update the session
-    await prisma.sleepSession.update({
+    // Fetch the updated session to get new values
+    const updated = await prisma.sleepSession.findUnique({
       where: { id: session.id },
-      data: {
-        settlingMinutes: durations.settlingMinutes,
-        postWakeMinutes: durations.postWakeMinutes,
-        awakeCribMinutes: durations.awakeCribMinutes,
-        qualifiedRestMinutes: durations.qualifiedRestMinutes,
-      },
     });
 
     results.push({
       id: session.id,
+      oldSleep,
+      newSleep: updated?.sleepMinutes ?? null,
       oldQualifiedRest,
-      newQualifiedRest: durations.qualifiedRestMinutes,
+      newQualifiedRest: updated?.qualifiedRestMinutes ?? null,
     });
   }
 

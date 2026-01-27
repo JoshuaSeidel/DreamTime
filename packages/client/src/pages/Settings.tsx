@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyRound, Trash2, Loader2, HelpCircle, BookOpen } from 'lucide-react';
+import { User, Baby, Bell, Moon, Sun, Monitor, LogOut, ChevronRight, Globe, KeyRound, Trash2, Loader2, HelpCircle, BookOpen, RefreshCw, Wrench } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useTheme } from '../components/ThemeProvider';
 import AddChildDialog from '../components/AddChildDialog';
@@ -29,7 +29,7 @@ import {
   isRunningAsPWA,
   sendServerTestNotification,
 } from '@/lib/notifications';
-import { getChildren, deleteChild, type Child } from '@/lib/api';
+import { getChildren, deleteChild, recalculateTodaySessions, type Child } from '@/lib/api';
 
 export default function Settings() {
   const { user, logout, accessToken } = useAuthStore();
@@ -57,6 +57,18 @@ export default function Settings() {
 
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Maintenance state
+  const [isRecalculating, setIsRecalculating] = useState(false);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+
+  // Get selected child ID from localStorage
+  useEffect(() => {
+    const storedChildId = localStorage.getItem('selectedChildId');
+    if (storedChildId) {
+      setSelectedChildId(storedChildId);
+    }
+  }, []);
 
   // Load children
   const loadChildren = useCallback(async () => {
@@ -273,6 +285,45 @@ export default function Settings() {
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleRecalculateSessions = async () => {
+    if (!accessToken || !selectedChildId) {
+      toast.error('No child selected', 'Please select a child from the dashboard first');
+      return;
+    }
+
+    setIsRecalculating(true);
+    try {
+      const result = await recalculateTodaySessions(accessToken, selectedChildId);
+      if (result.success && result.data) {
+        const { recalculated, sessions } = result.data;
+        if (recalculated === 0) {
+          toast.success('No sessions to recalculate', "Today's sessions are already up to date");
+        } else {
+          // Show summary of changes
+          const changedSessions = sessions.filter(s => s.oldSleep !== s.newSleep || s.oldQualifiedRest !== s.newQualifiedRest);
+          if (changedSessions.length > 0) {
+            toast.success(
+              `Recalculated ${recalculated} session${recalculated === 1 ? '' : 's'}`,
+              `${changedSessions.length} session${changedSessions.length === 1 ? ' was' : 's were'} updated`
+            );
+          } else {
+            toast.success(
+              `Checked ${recalculated} session${recalculated === 1 ? '' : 's'}`,
+              'No changes needed - durations were already correct'
+            );
+          }
+        }
+      } else {
+        toast.error('Recalculation failed', result.error?.message || 'Please try again');
+      }
+    } catch (err) {
+      console.error('Failed to recalculate sessions:', err);
+      toast.error('Error', 'Failed to recalculate sessions');
+    } finally {
+      setIsRecalculating(false);
+    }
   };
 
   const themeOptions = [
@@ -571,6 +622,39 @@ export default function Settings() {
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Data Maintenance */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wrench className="w-4 h-4" />
+              Data Maintenance
+            </CardTitle>
+            <CardDescription>
+              Fix and recalculate session data
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="w-full justify-start gap-3"
+              onClick={handleRecalculateSessions}
+              disabled={isRecalculating || !selectedChildId}
+            >
+              {isRecalculating ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              <div className="text-left flex-1">
+                <p className="font-medium">Recalculate Today's Sessions</p>
+                <p className="text-sm text-muted-foreground">
+                  Fix sleep durations for sessions with wake events
+                </p>
+              </div>
             </Button>
           </CardContent>
         </Card>

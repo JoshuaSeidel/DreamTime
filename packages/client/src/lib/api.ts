@@ -444,6 +444,29 @@ export async function deleteSleepCycle(
   );
 }
 
+// Recalculate today's sessions (fix durations after bug fixes)
+export interface RecalculateResult {
+  recalculated: number;
+  sessions: Array<{
+    id: string;
+    oldSleep: number | null;
+    newSleep: number | null;
+    oldQualifiedRest: number | null;
+    newQualifiedRest: number | null;
+  }>;
+}
+
+export async function recalculateTodaySessions(
+  accessToken: string,
+  childId: string
+): Promise<ApiResponse<RecalculateResult>> {
+  return fetchWithAuth<RecalculateResult>(
+    `/children/${childId}/sessions/recalculate`,
+    { method: 'POST' },
+    accessToken
+  );
+}
+
 // Schedule API
 export type ScheduleType = 'THREE_NAP' | 'TWO_NAP' | 'ONE_NAP' | 'TRANSITION';
 
