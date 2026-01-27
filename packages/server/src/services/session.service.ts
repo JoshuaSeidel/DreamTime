@@ -912,15 +912,13 @@ function calculateQualifiedRestWithCycles(
     awakeMinutes: number | null;
     wakeType: string;
   }>,
+  totalSleepMinutes: number,  // Total sleep including final sleep period
   settlingMinutes: number,
   postWakeMinutes: number
 ): number {
-  let totalSleepMinutes = 0;
   let qualifiedAwakeMinutes = 0;
 
   for (const cycle of cycles) {
-    totalSleepMinutes += cycle.sleepMinutes ?? 0;
-
     // Only count awake time for QUIET periods (50% credit)
     // RESTLESS and CRYING get 0% credit
     if (cycle.wakeType === WakeType.QUIET) {
@@ -978,6 +976,7 @@ async function recalculateSessionFromCycles(
   }
 
   // Calculate sleep and awake durations for each wake event
+  // Timeline: asleepAt -> [wake1.wokeUpAt -> wake1.fellBackAsleepAt] -> [wake2.wokeUpAt -> wake2.fellBackAsleepAt] -> ... -> session.wokeUpAt -> outOfCribAt
   let totalSleepMinutes = 0;
 
   for (let i = 0; i < cycles.length; i++) {
@@ -1006,11 +1005,34 @@ async function recalculateSessionFromCycles(
     }
 
     // Calculate awake duration for this wake event
+    // The "end" of awake time is either:
+    // 1. fellBackAsleepAt if they fell back asleep during this cycle
+    // 2. Next cycle's wokeUpAt (implies they fell asleep in between)
+    // 3. Session's wokeUpAt if this is the last cycle (implies they fell asleep then woke for good)
+    // 4. If none above, it's still in progress or went directly out of crib
     let awakeMinutes: number | null = null;
+    let awakeEndTime: Date | null = null;
+
     if (cycle.fellBackAsleepAt) {
+      // Explicit fell back asleep time recorded
+      awakeEndTime = cycle.fellBackAsleepAt;
+    } else if (i < cycles.length - 1) {
+      // There's a next wake event - baby must have fallen asleep before it
+      // Use next wake's wokeUpAt as awake end (they fell asleep somewhere in between)
+      const nextCycle = cycles[i + 1];
+      if (nextCycle) {
+        awakeEndTime = nextCycle.wokeUpAt;
+      }
+    } else if (session.wokeUpAt && cycle.wokeUpAt.getTime() < session.wokeUpAt.getTime()) {
+      // This is the last cycle and session has a later wokeUpAt
+      // Baby fell asleep and woke up at session.wokeUpAt
+      awakeEndTime = session.wokeUpAt;
+    }
+
+    if (awakeEndTime) {
       awakeMinutes = Math.max(
         0,
-        Math.round((cycle.fellBackAsleepAt.getTime() - cycle.wokeUpAt.getTime()) / 60000)
+        Math.round((awakeEndTime.getTime() - cycle.wokeUpAt.getTime()) / 60000)
       );
     }
 
@@ -1023,13 +1045,23 @@ async function recalculateSessionFromCycles(
 
   // Check if there's final sleep after last wake event
   const lastCycle = cycles[cycles.length - 1];
-  if (lastCycle?.fellBackAsleepAt && session.wokeUpAt) {
-    // Baby fell back asleep and then had final wake at session.wokeUpAt
-    const finalSleepMinutes = Math.max(
-      0,
-      Math.round((session.wokeUpAt.getTime() - lastCycle.fellBackAsleepAt.getTime()) / 60000)
-    );
-    totalSleepMinutes += finalSleepMinutes;
+
+  // Final sleep happens if:
+  // 1. Last cycle has fellBackAsleepAt - sleep from there to session.wokeUpAt
+  // 2. Last cycle has no fellBackAsleepAt but session.wokeUpAt is later - baby fell asleep
+  //    (in this case we don't know exact fell asleep time, so we count from cycle.wokeUpAt to session.wokeUpAt as awake,
+  //     but we need to check if there's still sleep between that and outOfCrib)
+  if (lastCycle && session.wokeUpAt) {
+    if (lastCycle.fellBackAsleepAt) {
+      // Explicit: sleep from fellBackAsleepAt to wokeUpAt
+      const finalSleepMinutes = Math.max(
+        0,
+        Math.round((session.wokeUpAt.getTime() - lastCycle.fellBackAsleepAt.getTime()) / 60000)
+      );
+      totalSleepMinutes += finalSleepMinutes;
+    }
+    // If no fellBackAsleepAt but wokeUpAt is later, we already counted the period as awake in the loop above
+    // No additional sleep to add in this case (the baby was awake from cycle.wokeUpAt until session.wokeUpAt)
   }
 
   // Settling time: put down to first asleep (session level, unchanged)
@@ -1038,12 +1070,11 @@ async function recalculateSessionFromCycles(
     : 0;
 
   // Post-wake time: final wake to out of crib
-  // If there are wake events, the "final wake" might be the last cycle if they didn't fall back asleep
-  // Or it's session.wokeUpAt if they fell back asleep after last wake event
+  // The "final wake" is always session.wokeUpAt (when the baby woke up for good)
+  // If there are wake events without fellBackAsleepAt and wokeUpAt equals the last cycle's wokeUpAt,
+  // then that cycle IS the final wake
   let postWakeMinutes = 0;
-  const finalWakeTime = (lastCycle && !lastCycle.fellBackAsleepAt)
-    ? lastCycle.wokeUpAt  // Last wake event was the final wake
-    : session.wokeUpAt;   // They fell back asleep, so session.wokeUpAt is final wake
+  const finalWakeTime = session.wokeUpAt;
 
   if (finalWakeTime && session.outOfCribAt) {
     postWakeMinutes = Math.max(
@@ -1068,6 +1099,7 @@ async function recalculateSessionFromCycles(
   // Calculate qualified rest with wakeType consideration
   const qualifiedRestMinutes = calculateQualifiedRestWithCycles(
     updatedCycles,
+    totalSleepMinutes,
     settlingMinutes,
     postWakeMinutes
   );
