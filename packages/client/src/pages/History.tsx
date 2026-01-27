@@ -535,12 +535,106 @@ export default function History() {
                   <span className="font-medium">{formatDate(selectedSession.putDownAt || selectedSession.createdAt)}</span>
                 </div>
 
-                {/* Timestamps - Editable */}
+                {/* Timeline - Unified chronological view */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-sm text-muted-foreground">Timeline</h4>
-                    <span className="text-xs text-muted-foreground">Tap pencil to edit</span>
+                    <div className="flex items-center gap-2">
+                      {selectedSession.state === 'COMPLETED' && !isAddingEvent && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-xs"
+                          onClick={() => setIsAddingEvent(true)}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Add Event
+                        </Button>
+                      )}
+                      <span className="text-xs text-muted-foreground">Tap pencil to edit</span>
+                    </div>
                   </div>
+
+                  {/* Add event form - inline at top */}
+                  {isAddingEvent && (
+                    <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={eventType === 'wake' ? 'default' : 'outline'}
+                          className="flex-1"
+                          onClick={() => setEventType('wake')}
+                        >
+                          <Sun className="w-3 h-3 mr-1" />
+                          Woke Up
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={eventType === 'sleep' ? 'default' : 'outline'}
+                          className="flex-1"
+                          onClick={() => setEventType('sleep')}
+                        >
+                          <Moon className="w-3 h-3 mr-1" />
+                          Fell Asleep
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">
+                          {eventType === 'wake' ? 'Woke Up At' : 'Fell Back Asleep At'}
+                        </Label>
+                        <Input
+                          type="datetime-local"
+                          value={eventTime}
+                          onChange={(e) => setEventTime(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      {eventType === 'wake' && (
+                        <div className="space-y-2">
+                          <Label className="text-xs">Wake Type</Label>
+                          <Select
+                            value={newWakeType}
+                            onValueChange={(v: WakeType) => setNewWakeType(v)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="QUIET">Quiet (50% rest credit)</SelectItem>
+                              <SelectItem value="RESTLESS">Restless (0% credit)</SelectItem>
+                              <SelectItem value="CRYING">Crying (0% credit)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                      {eventType === 'sleep' && (
+                        <p className="text-xs text-muted-foreground">
+                          Updates the most recent wake event that doesn't have a sleep time.
+                        </p>
+                      )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setIsAddingEvent(false);
+                            resetEventForm();
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleAddEvent}
+                          disabled={isSaving || !eventTime}
+                        >
+                          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                            eventType === 'wake' ? 'Add Wake' : 'Add Sleep'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Put Down */}
                   {selectedSession.putDownAt && (
@@ -602,10 +696,64 @@ export default function History() {
                     </div>
                   )}
 
-                  {/* Woke Up */}
+                  {/* Wake events interleaved in timeline */}
+                  {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 && (
+                    <>
+                      {selectedSession.sleepCycles.map((cycle) => (
+                        <div key={cycle.id} className="space-y-1 pl-3 border-l-2 border-muted ml-1">
+                          {/* Wake time */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-muted-foreground">Woke Up</span>
+                              {cycle.wakeType !== 'QUIET' && (
+                                <Badge
+                                  variant={cycle.wakeType === 'CRYING' ? 'destructive' : 'secondary'}
+                                  className="text-xs"
+                                >
+                                  {cycle.wakeType === 'CRYING' ? 'Crying' : 'Restless'}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span>{formatTime(cycle.wokeUpAt, selectedSession.timezone)}</span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6"
+                                onClick={() => handleDeleteWakeEvent(cycle.id)}
+                                disabled={isSaving}
+                              >
+                                <Trash2 className="w-3 h-3 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                          {/* Fell back asleep time */}
+                          {cycle.fellBackAsleepAt ? (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-muted-foreground">Back Asleep</span>
+                              <span>{formatTime(cycle.fellBackAsleepAt, selectedSession.timezone)}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-muted-foreground text-xs italic">No sleep time recorded</span>
+                            </div>
+                          )}
+                          {cycle.awakeMinutes !== null && cycle.awakeMinutes > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                              Awake for {formatDuration(cycle.awakeMinutes)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Final Woke Up (session level) */}
                   {selectedSession.wokeUpAt && (
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Woke Up</span>
+                      <span className="text-muted-foreground">
+                        {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? 'Final Wake' : 'Woke Up'}
+                      </span>
                       {editingField === 'wokeUpAt' ? (
                         <div className="flex items-center gap-2">
                           <Input
@@ -794,170 +942,6 @@ export default function History() {
                     </p>
                   )}
                 </div>
-
-                {/* Sleep Events Section - show for completed sessions */}
-                {selectedSession.state === 'COMPLETED' && (
-                  <div className="space-y-3 border-t pt-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm text-muted-foreground">
-                        Sleep Timeline
-                        {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 && (
-                          <span className="ml-2 text-xs">({selectedSession.sleepCycles.length} wakes)</span>
-                        )}
-                      </h4>
-                      {!isAddingEvent && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => setIsAddingEvent(true)}
-                        >
-                          <Plus className="w-3 h-3 mr-1" />
-                          Add Event
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Existing wake events list */}
-                    {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? (
-                      <div className="space-y-2">
-                        {selectedSession.sleepCycles.map((cycle) => (
-                          <div key={cycle.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium">Wake {cycle.cycleNumber}</span>
-                                {cycle.wakeType !== 'QUIET' && (
-                                  <Badge
-                                    variant={cycle.wakeType === 'CRYING' ? 'destructive' : 'secondary'}
-                                    className="text-xs"
-                                  >
-                                    {cycle.wakeType === 'CRYING' ? 'Crying' : 'Restless'}
-                                  </Badge>
-                                )}
-                                {!cycle.fellBackAsleepAt && (
-                                  <Badge variant="outline" className="text-xs">
-                                    No sleep time
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                Woke: {formatTime(cycle.wokeUpAt, selectedSession.timezone)}
-                                {cycle.fellBackAsleepAt && ` → Back asleep: ${formatTime(cycle.fellBackAsleepAt, selectedSession.timezone)}`}
-                                {cycle.awakeMinutes !== null && cycle.awakeMinutes > 0 && ` (${formatDuration(cycle.awakeMinutes)} awake)`}
-                              </div>
-                              {cycle.sleepMinutes !== null && cycle.sleepMinutes > 0 && (
-                                <div className="text-xs text-muted-foreground">
-                                  Slept {formatDuration(cycle.sleepMinutes)} before this wake
-                                </div>
-                              )}
-                            </div>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6"
-                              onClick={() => handleDeleteWakeEvent(cycle.id)}
-                              disabled={isSaving}
-                            >
-                              <Trash2 className="w-3 h-3 text-destructive" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No wake events recorded. Add from video review.
-                      </p>
-                    )}
-
-                    {/* Add event form */}
-                    {isAddingEvent && (
-                      <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
-                        {/* Event type selector */}
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant={eventType === 'wake' ? 'default' : 'outline'}
-                            className="flex-1"
-                            onClick={() => setEventType('wake')}
-                          >
-                            <Sun className="w-3 h-3 mr-1" />
-                            Woke Up
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={eventType === 'sleep' ? 'default' : 'outline'}
-                            className="flex-1"
-                            onClick={() => setEventType('sleep')}
-                          >
-                            <Moon className="w-3 h-3 mr-1" />
-                            Fell Asleep
-                          </Button>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs">
-                            {eventType === 'wake' ? 'Woke Up At' : 'Fell Back Asleep At'}
-                          </Label>
-                          <Input
-                            type="datetime-local"
-                            value={eventTime}
-                            onChange={(e) => setEventTime(e.target.value)}
-                            className="h-9"
-                          />
-                        </div>
-
-                        {/* Wake type selector - only for wake events */}
-                        {eventType === 'wake' && (
-                          <div className="space-y-2">
-                            <Label className="text-xs">Wake Type</Label>
-                            <Select
-                              value={newWakeType}
-                              onValueChange={(v: WakeType) => setNewWakeType(v)}
-                            >
-                              <SelectTrigger className="h-9">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="QUIET">Quiet (50% rest credit)</SelectItem>
-                                <SelectItem value="RESTLESS">Restless (0% credit)</SelectItem>
-                                <SelectItem value="CRYING">Crying (0% credit)</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-
-                        {/* Help text for sleep events */}
-                        {eventType === 'sleep' && (
-                          <p className="text-xs text-muted-foreground">
-                            This will update the most recent wake event that doesn't have a sleep time.
-                          </p>
-                        )}
-
-                        <div className="flex gap-2 pt-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setIsAddingEvent(false);
-                              resetEventForm();
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={handleAddEvent}
-                            disabled={isSaving || !eventTime}
-                          >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : (
-                              eventType === 'wake' ? 'Add Wake' : 'Add Sleep'
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Logged By info */}
                 {(selectedSession.createdByName || selectedSession.lastUpdatedByName) && (
