@@ -974,6 +974,7 @@ async function recalculateSessionFromCycles(
     await prisma.sleepSession.update({
       where: { id: sessionId },
       data: {
+        totalMinutes: durations.totalMinutes,
         sleepMinutes: durations.sleepMinutes,
         settlingMinutes: durations.settlingMinutes,
         postWakeMinutes: durations.postWakeMinutes,
@@ -1080,10 +1081,17 @@ async function recalculateSessionFromCycles(
     postWakeMinutes
   );
 
+  // Calculate total time in crib
+  let totalMinutes: number | null = null;
+  if (session.putDownAt && session.outOfCribAt) {
+    totalMinutes = Math.max(0, Math.round((session.outOfCribAt.getTime() - session.putDownAt.getTime()) / 60000));
+  }
+
   // Update session with calculated values
   await prisma.sleepSession.update({
     where: { id: sessionId },
     data: {
+      totalMinutes,
       sleepMinutes: totalSleepMinutes,
       settlingMinutes,
       postWakeMinutes,
