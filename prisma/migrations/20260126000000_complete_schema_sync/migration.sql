@@ -280,3 +280,15 @@ BEGIN
         CREATE INDEX "ChildCaregiver_childId_isActive_idx" ON "ChildCaregiver"("childId", "isActive");
     END IF;
 END $$;
+
+-- ===========================================
+-- SleepSchedule bedtimeMode column
+-- ===========================================
+
+-- bedtimeMode column (GOAL_BASED or WAKE_WINDOW)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='SleepSchedule' AND column_name='bedtimeMode') THEN
+        ALTER TABLE "SleepSchedule" ADD COLUMN "bedtimeMode" TEXT NOT NULL DEFAULT 'GOAL_BASED';
+    END IF;
+END $$;
