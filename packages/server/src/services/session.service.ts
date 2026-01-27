@@ -907,18 +907,23 @@ export async function getDailySummary(
 // QUIET wake periods: 50% credit (existing behavior)
 // RESTLESS/CRYING wake periods: 0% credit
 function calculateQualifiedRestWithCycles(
-  cycles: Array<{
+  sleepCycles: Array<{
     sleepMinutes: number | null;
     awakeMinutes: number | null;
     wakeType: string;
   }>,
-  totalSleepMinutes: number,  // Total sleep including final sleep period
-  settlingMinutes: number,
+  settlingEvents: Array<{
+    awakeMinutes: number | null;
+    wakeType: string;
+  }>,
+  totalSleepMinutes: number,
+  quietSettlingMinutes: number,  // Settling time NOT covered by settling events (gets 50% credit)
   postWakeMinutes: number
 ): number {
   let qualifiedAwakeMinutes = 0;
 
-  for (const cycle of cycles) {
+  // Process sleep cycles (wake events after first sleep)
+  for (const cycle of sleepCycles) {
     // Only count awake time for QUIET periods (50% credit)
     // RESTLESS and CRYING get 0% credit
     if (cycle.wakeType === WakeType.QUIET) {
@@ -926,8 +931,18 @@ function calculateQualifiedRestWithCycles(
     }
   }
 
-  // Settling and post-wake time always get 50% credit
-  const totalAwakeCrib = qualifiedAwakeMinutes + settlingMinutes + postWakeMinutes;
+  // Process settling events (events before first sleep)
+  for (const event of settlingEvents) {
+    // Only count awake time for QUIET periods (50% credit)
+    // RESTLESS and CRYING get 0% credit
+    if (event.wakeType === WakeType.QUIET) {
+      qualifiedAwakeMinutes += event.awakeMinutes ?? 0;
+    }
+  }
+
+  // quietSettlingMinutes is the settling time not covered by events (default 50% credit)
+  // postWakeMinutes always gets 50% credit
+  const totalAwakeCrib = qualifiedAwakeMinutes + quietSettlingMinutes + postWakeMinutes;
 
   return Math.round(totalAwakeCrib / 2 + totalSleepMinutes);
 }
@@ -949,6 +964,22 @@ async function recalculateSessionFromCycles(
   if (!session) return;
 
   const cycles = session.sleepCycles;
+
+  // Separate cycles into settling events (before asleepAt) and sleep cycles (after asleepAt)
+  // Settling events: when baby was crying/restless before falling asleep the first time
+  // Sleep cycles: wake events that happened after baby was already asleep
+  const settlingEvents: typeof cycles = [];
+  const sleepCycles: typeof cycles = [];
+
+  for (const cycle of cycles) {
+    if (session.asleepAt && cycle.wokeUpAt.getTime() < session.asleepAt.getTime()) {
+      // This event happened before asleepAt - it's a settling event
+      settlingEvents.push(cycle);
+    } else {
+      // This event happened after asleepAt - it's a sleep cycle
+      sleepCycles.push(cycle);
+    }
+  }
 
   if (cycles.length === 0) {
     // No wake events - use session timestamps directly
@@ -975,22 +1006,56 @@ async function recalculateSessionFromCycles(
     return;
   }
 
-  // Calculate sleep and awake durations for each wake event
+  // Process settling events (before first sleep)
+  // Calculate awake duration for each settling event
+  for (let i = 0; i < settlingEvents.length; i++) {
+    const event = settlingEvents[i];
+    if (!event) continue;
+
+    // Determine when this settling event ended
+    // 1. fellBackAsleepAt (which would be = asleepAt for the last settling event)
+    // 2. Next settling event's wokeUpAt
+    // 3. session.asleepAt if this is the last settling event
+    let awakeEndTime: Date | null = null;
+
+    if (event.fellBackAsleepAt) {
+      awakeEndTime = event.fellBackAsleepAt;
+    } else if (i < settlingEvents.length - 1) {
+      const nextEvent = settlingEvents[i + 1];
+      if (nextEvent) {
+        awakeEndTime = nextEvent.wokeUpAt;
+      }
+    } else if (session.asleepAt) {
+      awakeEndTime = session.asleepAt;
+    }
+
+    const awakeMinutes = awakeEndTime
+      ? Math.max(0, Math.round((awakeEndTime.getTime() - event.wokeUpAt.getTime()) / 60000))
+      : null;
+
+    // Update the settling event
+    await prisma.sleepCycle.update({
+      where: { id: event.id },
+      data: { sleepMinutes: null, awakeMinutes, cycleNumber: i + 1 },
+    });
+  }
+
+  // Calculate sleep and awake durations for each sleep cycle (wake events after first sleep)
   // Timeline: asleepAt -> [wake1.wokeUpAt -> wake1.fellBackAsleepAt] -> [wake2.wokeUpAt -> wake2.fellBackAsleepAt] -> ... -> session.wokeUpAt -> outOfCribAt
   let totalSleepMinutes = 0;
 
-  for (let i = 0; i < cycles.length; i++) {
-    const cycle = cycles[i];
+  for (let i = 0; i < sleepCycles.length; i++) {
+    const cycle = sleepCycles[i];
     if (!cycle) continue;
 
     // Determine when sleep started before this wake
     let sleepStartTime: Date | null;
     if (i === 0) {
-      // First wake - sleep started at session.asleepAt
+      // First wake after initial sleep - sleep started at session.asleepAt
       sleepStartTime = session.asleepAt;
     } else {
       // Subsequent wake - sleep started when they fell back asleep after previous wake
-      const prevCycle = cycles[i - 1];
+      const prevCycle = sleepCycles[i - 1];
       sleepStartTime = prevCycle?.fellBackAsleepAt ?? null;
     }
 
@@ -1016,10 +1081,10 @@ async function recalculateSessionFromCycles(
     if (cycle.fellBackAsleepAt) {
       // Explicit fell back asleep time recorded
       awakeEndTime = cycle.fellBackAsleepAt;
-    } else if (i < cycles.length - 1) {
+    } else if (i < sleepCycles.length - 1) {
       // There's a next wake event - baby must have fallen asleep before it
       // Use next wake's wokeUpAt as awake end (they fell asleep somewhere in between)
-      const nextCycle = cycles[i + 1];
+      const nextCycle = sleepCycles[i + 1];
       if (nextCycle) {
         awakeEndTime = nextCycle.wokeUpAt;
       }
@@ -1037,14 +1102,15 @@ async function recalculateSessionFromCycles(
     }
 
     // Update cycle with calculated durations
+    // cycleNumber continues from settling events
     await prisma.sleepCycle.update({
       where: { id: cycle.id },
-      data: { sleepMinutes, awakeMinutes, cycleNumber: i + 1 },
+      data: { sleepMinutes, awakeMinutes, cycleNumber: settlingEvents.length + i + 1 },
     });
   }
 
   // Check if there's final sleep after last wake event
-  const lastCycle = cycles[cycles.length - 1];
+  const lastCycle = sleepCycles.length > 0 ? sleepCycles[sleepCycles.length - 1] : null;
 
   // Final sleep happens if:
   // 1. Last cycle has fellBackAsleepAt - sleep from there to session.wokeUpAt
@@ -1064,15 +1130,38 @@ async function recalculateSessionFromCycles(
     // No additional sleep to add in this case (the baby was awake from cycle.wokeUpAt until session.wokeUpAt)
   }
 
-  // Settling time: put down to first asleep (session level, unchanged)
-  const settlingMinutes = session.putDownAt && session.asleepAt
+  // If there are no sleep cycles but there is asleepAt and wokeUpAt, calculate sleep directly
+  if (sleepCycles.length === 0 && session.asleepAt && session.wokeUpAt) {
+    totalSleepMinutes = Math.max(
+      0,
+      Math.round((session.wokeUpAt.getTime() - session.asleepAt.getTime()) / 60000)
+    );
+  }
+
+  // Total settling time: put down to first asleep
+  const totalSettlingMinutes = session.putDownAt && session.asleepAt
     ? Math.max(0, Math.round((session.asleepAt.getTime() - session.putDownAt.getTime()) / 60000))
     : 0;
 
+  // Refetch settling events with updated values
+  const updatedSettlingEvents = await prisma.sleepCycle.findMany({
+    where: {
+      sessionId,
+      wokeUpAt: session.asleepAt ? { lt: session.asleepAt } : undefined
+    },
+    orderBy: { wokeUpAt: 'asc' },
+  });
+
+  // Calculate settling time NOT covered by settling events (gets default 50% credit)
+  // This is the time from putDown to first settling event, plus any gaps between settling events
+  let settlingEventAwakeMinutes = 0;
+  for (const event of updatedSettlingEvents) {
+    settlingEventAwakeMinutes += event.awakeMinutes ?? 0;
+  }
+  const quietSettlingMinutes = Math.max(0, totalSettlingMinutes - settlingEventAwakeMinutes);
+
   // Post-wake time: final wake to out of crib
   // The "final wake" is always session.wokeUpAt (when the baby woke up for good)
-  // If there are wake events without fellBackAsleepAt and wokeUpAt equals the last cycle's wokeUpAt,
-  // then that cycle IS the final wake
   let postWakeMinutes = 0;
   const finalWakeTime = session.wokeUpAt;
 
@@ -1083,24 +1172,28 @@ async function recalculateSessionFromCycles(
     );
   }
 
-  // Refetch cycles with updated values
-  const updatedCycles = await prisma.sleepCycle.findMany({
-    where: { sessionId },
+  // Refetch all cycles with updated values
+  const updatedSleepCycles = await prisma.sleepCycle.findMany({
+    where: {
+      sessionId,
+      wokeUpAt: session.asleepAt ? { gte: session.asleepAt } : undefined
+    },
     orderBy: { wokeUpAt: 'asc' },
   });
 
-  // Calculate total awake time in crib (from wake events)
-  let wakeEventAwakeMinutes = 0;
-  for (const cycle of updatedCycles) {
-    wakeEventAwakeMinutes += cycle.awakeMinutes ?? 0;
+  // Calculate total awake time in crib
+  let sleepCycleAwakeMinutes = 0;
+  for (const cycle of updatedSleepCycles) {
+    sleepCycleAwakeMinutes += cycle.awakeMinutes ?? 0;
   }
-  const awakeCribMinutes = settlingMinutes + postWakeMinutes + wakeEventAwakeMinutes;
+  const awakeCribMinutes = totalSettlingMinutes + postWakeMinutes + sleepCycleAwakeMinutes;
 
   // Calculate qualified rest with wakeType consideration
   const qualifiedRestMinutes = calculateQualifiedRestWithCycles(
-    updatedCycles,
+    updatedSleepCycles,
+    updatedSettlingEvents,
     totalSleepMinutes,
-    settlingMinutes,
+    quietSettlingMinutes,
     postWakeMinutes
   );
 
@@ -1116,7 +1209,7 @@ async function recalculateSessionFromCycles(
     data: {
       totalMinutes,
       sleepMinutes: totalSleepMinutes,
-      settlingMinutes,
+      settlingMinutes: totalSettlingMinutes,
       postWakeMinutes,
       awakeCribMinutes,
       qualifiedRestMinutes,
