@@ -777,8 +777,14 @@ export function calculateNextAction(
     // Check if this is night sleep and past wake deadline
     if (isNightSleep && mustWakeBy) {
       const [hours, minutes] = mustWakeBy.split(':').map(Number);
-      const wakeDeadline = new Date(currentTime);
-      wakeDeadline.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+
+      // Convert current time to user's timezone to properly compare with wake deadline
+      const currentTimeInTz = toZonedTime(currentTime, timezone);
+
+      // Create wake deadline in user's timezone, then convert back to UTC for comparison
+      const wakeDeadlineInTz = new Date(currentTimeInTz);
+      wakeDeadlineInTz.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+      const wakeDeadline = fromZonedTime(wakeDeadlineInTz, timezone);
 
       // If deadline is in the past today (e.g., it's after 7:30am), check if we're past it
       if (currentTime >= wakeDeadline) {
