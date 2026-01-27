@@ -88,8 +88,8 @@ interface SessionWithUserInfo {
   sleepCycles?: Array<{
     id: string;
     cycleNumber: number;
-    asleepAt: Date;
-    wokeUpAt: Date | null;
+    wokeUpAt: Date;
+    fellBackAsleepAt: Date | null;
     wakeType: string;
     sleepMinutes: number | null;
     awakeMinutes: number | null;
@@ -108,13 +108,13 @@ function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
   totalCycleSleepMinutes?: number;
   totalAwakeMinutes?: number;
 } {
-  // Calculate totals from sleep cycles if present
+  // Calculate totals from wake events (sleep cycles) if present
   let wakeUpCount = 0;
   let totalCycleSleepMinutes = 0;
   let totalAwakeMinutes = 0;
 
   if (session.sleepCycles && session.sleepCycles.length > 0) {
-    wakeUpCount = session.sleepCycles.filter(c => c.wokeUpAt !== null).length;
+    wakeUpCount = session.sleepCycles.length; // Each cycle is a wake event
     totalCycleSleepMinutes = session.sleepCycles.reduce((sum, c) => sum + (c.sleepMinutes ?? 0), 0);
     totalAwakeMinutes = session.sleepCycles.reduce((sum, c) => sum + (c.awakeMinutes ?? 0), 0);
   }
@@ -126,8 +126,8 @@ function formatSession(session: SessionWithUserInfo): SleepSessionResponse & {
     sleepCycles: session.sleepCycles?.map(c => ({
       id: c.id,
       cycleNumber: c.cycleNumber,
-      asleepAt: c.asleepAt,
       wokeUpAt: c.wokeUpAt,
+      fellBackAsleepAt: c.fellBackAsleepAt,
       wakeType: c.wakeType,
       sleepMinutes: c.sleepMinutes,
       awakeMinutes: c.awakeMinutes,
@@ -411,45 +411,30 @@ export async function updateSession(
 
         const asleepTime = input.asleepAt ? new Date(input.asleepAt) : now;
 
-        if (isNightSleep) {
-          // For night sleep, create a new sleep cycle
-          const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
-
-          if (currentState === SessionState.AWAKE && lastCycle && lastCycle.wokeUpAt) {
-            // Baby fell back asleep after waking - update last cycle's awake time and create new cycle
-            const awakeMinutes = Math.max(0, Math.round((asleepTime.getTime() - lastCycle.wokeUpAt.getTime()) / 60000));
+        if (isNightSleep && currentState === SessionState.AWAKE) {
+          // Baby fell back asleep after waking - update last wake event's fellBackAsleepAt
+          const lastWakeEvent = session.sleepCycles[session.sleepCycles.length - 1];
+          if (lastWakeEvent && !lastWakeEvent.fellBackAsleepAt) {
+            const awakeMinutes = Math.max(0, Math.round((asleepTime.getTime() - lastWakeEvent.wokeUpAt.getTime()) / 60000));
 
             await prisma.sleepCycle.update({
-              where: { id: lastCycle.id },
-              data: { awakeMinutes },
+              where: { id: lastWakeEvent.id },
+              data: {
+                fellBackAsleepAt: asleepTime,
+                awakeMinutes,
+              },
             });
+          }
+        } else if (currentState === SessionState.PENDING) {
+          // First time falling asleep - just set session.asleepAt
+          updateData.asleepAt = asleepTime;
+        } else if (!isNightSleep && currentState !== SessionState.AWAKE) {
+          // For naps, set asleepAt
+          updateData.asleepAt = asleepTime;
+        }
 
-            // Create a new cycle for this sleep period
-            const newCycleNumber = lastCycle.cycleNumber + 1;
-            await prisma.sleepCycle.create({
-              data: {
-                sessionId: session.id,
-                cycleNumber: newCycleNumber,
-                asleepAt: asleepTime,
-              },
-            });
-          } else if (currentState === SessionState.PENDING) {
-            // First time falling asleep - create first cycle
-            await prisma.sleepCycle.create({
-              data: {
-                sessionId: session.id,
-                cycleNumber: 1,
-                asleepAt: asleepTime,
-              },
-            });
-            updateData.asleepAt = asleepTime;
-          }
-        } else {
-          // For naps, keep the simple approach
-          if (currentState !== SessionState.AWAKE) {
-            updateData.asleepAt = asleepTime;
-          }
-          // Clear wokeUpAt since baby is asleep again
+        // Clear wokeUpAt since baby is asleep again (for naps)
+        if (!isNightSleep) {
           updateData.wokeUpAt = null as unknown as Date;
         }
         break;
@@ -483,20 +468,18 @@ export async function updateSession(
           updateData.state = newState;
           updateData.wokeUpAt = wokeUpTime;
 
+          // For night sleep, create a wake event
+          // Sleep duration will be calculated by recalculateSessionFromCycles
           if (isNightSleep) {
-            // Update the current cycle with woke up time and calculate sleep duration
-            const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
-            if (lastCycle && !lastCycle.wokeUpAt) {
-              const sleepMinutes = Math.max(0, Math.round((wokeUpTime.getTime() - lastCycle.asleepAt.getTime()) / 60000));
-
-              await prisma.sleepCycle.update({
-                where: { id: lastCycle.id },
-                data: {
-                  wokeUpAt: wokeUpTime,
-                  sleepMinutes,
-                },
-              });
-            }
+            const cycleCount = session.sleepCycles.length;
+            await prisma.sleepCycle.create({
+              data: {
+                sessionId: session.id,
+                cycleNumber: cycleCount + 1,
+                wokeUpAt: wokeUpTime,
+                wakeType: 'QUIET',
+              },
+            });
           }
         }
         break;
@@ -513,21 +496,9 @@ export async function updateSession(
         updateData.state = newState;
         updateData.outOfCribAt = input.outOfCribAt ? new Date(input.outOfCribAt) : now;
 
-        // For night sleep, finalize any open cycle
-        if (isNightSleep) {
-          const lastCycle = session.sleepCycles[session.sleepCycles.length - 1];
-          if (lastCycle && !lastCycle.wokeUpAt && updateData.outOfCribAt) {
-            // Baby was still asleep when taken out - record final wake
-            const sleepMinutes = Math.max(0, Math.round((updateData.outOfCribAt.getTime() - lastCycle.asleepAt.getTime()) / 60000));
-
-            await prisma.sleepCycle.update({
-              where: { id: lastCycle.id },
-              data: {
-                wokeUpAt: updateData.outOfCribAt,
-                sleepMinutes,
-              },
-            });
-          }
+        // If coming from ASLEEP state (baby was still asleep), set wokeUpAt to outOfCribAt
+        if (currentState === SessionState.ASLEEP && !session.wokeUpAt) {
+          updateData.wokeUpAt = updateData.outOfCribAt;
         }
         break;
     }
@@ -590,9 +561,9 @@ export async function updateSession(
       updateData.totalMinutes = Math.max(0, Math.round((finalOutOfCribAt.getTime() - finalPutDownAt.getTime()) / 60000));
     }
 
-    // Settling time (first put down to first asleep)
-    if (finalPutDownAt && cycles[0]) {
-      updateData.settlingMinutes = Math.max(0, Math.round((cycles[0].asleepAt.getTime() - finalPutDownAt.getTime()) / 60000));
+    // Settling time (put down to first asleep) - uses session.asleepAt, not cycle data
+    if (finalPutDownAt && finalAsleepAt) {
+      updateData.settlingMinutes = Math.max(0, Math.round((finalAsleepAt.getTime() - finalPutDownAt.getTime()) / 60000));
     }
 
     // Post wake time (last cycle woke up to out of crib)
@@ -972,14 +943,18 @@ function calculateQualifiedRestWithCycles(
   return Math.round(totalAwakeCrib / 2 + totalSleepMinutes);
 }
 
-// Recalculate session durations from cycles
+// Recalculate session durations from wake events (cycles)
+// Wake events are ordered by wokeUpAt time. Sleep periods are calculated as:
+// - First sleep: session.asleepAt → first cycle.wokeUpAt
+// - Between wakes: previous cycle.fellBackAsleepAt → current cycle.wokeUpAt
+// - Final sleep (if applicable): last cycle.fellBackAsleepAt → session.wokeUpAt
 async function recalculateSessionFromCycles(
   sessionId: string,
   userId: string
 ): Promise<void> {
   const session = await prisma.sleepSession.findUnique({
     where: { id: sessionId },
-    include: { sleepCycles: { orderBy: { cycleNumber: 'asc' } } },
+    include: { sleepCycles: { orderBy: { wokeUpAt: 'asc' } } },
   });
 
   if (!session) return;
@@ -987,7 +962,7 @@ async function recalculateSessionFromCycles(
   const cycles = session.sleepCycles;
 
   if (cycles.length === 0) {
-    // No cycles - use session timestamps directly
+    // No wake events - use session timestamps directly
     const durations = calculateDurations(
       session.putDownAt,
       session.asleepAt,
@@ -1010,63 +985,93 @@ async function recalculateSessionFromCycles(
     return;
   }
 
-  // Calculate awake time between cycles
-  for (let i = 0; i < cycles.length - 1; i++) {
-    const currentCycle = cycles[i];
-    const nextCycle = cycles[i + 1];
+  // Calculate sleep and awake durations for each wake event
+  let totalSleepMinutes = 0;
 
-    if (currentCycle && nextCycle && currentCycle.wokeUpAt) {
-      const awakeMinutes = Math.max(
-        0,
-        Math.round((nextCycle.asleepAt.getTime() - currentCycle.wokeUpAt.getTime()) / 60000)
-      );
+  for (let i = 0; i < cycles.length; i++) {
+    const cycle = cycles[i];
+    if (!cycle) continue;
 
-      await prisma.sleepCycle.update({
-        where: { id: currentCycle.id },
-        data: { awakeMinutes },
-      });
+    // Determine when sleep started before this wake
+    let sleepStartTime: Date | null;
+    if (i === 0) {
+      // First wake - sleep started at session.asleepAt
+      sleepStartTime = session.asleepAt;
+    } else {
+      // Subsequent wake - sleep started when they fell back asleep after previous wake
+      const prevCycle = cycles[i - 1];
+      sleepStartTime = prevCycle?.fellBackAsleepAt ?? null;
     }
-  }
 
-  // Clear awakeMinutes for the last cycle (no next cycle to transition to)
-  const lastCycle = cycles[cycles.length - 1];
-  if (lastCycle) {
+    // Calculate sleep duration before this wake
+    let sleepMinutes: number | null = null;
+    if (sleepStartTime) {
+      sleepMinutes = Math.max(
+        0,
+        Math.round((cycle.wokeUpAt.getTime() - sleepStartTime.getTime()) / 60000)
+      );
+      totalSleepMinutes += sleepMinutes;
+    }
+
+    // Calculate awake duration for this wake event
+    let awakeMinutes: number | null = null;
+    if (cycle.fellBackAsleepAt) {
+      awakeMinutes = Math.max(
+        0,
+        Math.round((cycle.fellBackAsleepAt.getTime() - cycle.wokeUpAt.getTime()) / 60000)
+      );
+    }
+
+    // Update cycle with calculated durations
     await prisma.sleepCycle.update({
-      where: { id: lastCycle.id },
-      data: { awakeMinutes: null },
+      where: { id: cycle.id },
+      data: { sleepMinutes, awakeMinutes, cycleNumber: i + 1 },
     });
   }
 
-  // Refetch cycles with updated awake times
-  const updatedCycles = await prisma.sleepCycle.findMany({
-    where: { sessionId },
-    orderBy: { cycleNumber: 'asc' },
-  });
-
-  // Calculate total sleep from all cycles
-  let totalSleepMinutes = 0;
-  for (const cycle of updatedCycles) {
-    totalSleepMinutes += cycle.sleepMinutes ?? 0;
-  }
-
-  // Calculate settling time (put down to first asleep)
-  let settlingMinutes = 0;
-  if (session.putDownAt && updatedCycles[0]) {
-    settlingMinutes = Math.max(
+  // Check if there's final sleep after last wake event
+  const lastCycle = cycles[cycles.length - 1];
+  if (lastCycle?.fellBackAsleepAt && session.wokeUpAt) {
+    // Baby fell back asleep and then had final wake at session.wokeUpAt
+    const finalSleepMinutes = Math.max(
       0,
-      Math.round((updatedCycles[0].asleepAt.getTime() - session.putDownAt.getTime()) / 60000)
+      Math.round((session.wokeUpAt.getTime() - lastCycle.fellBackAsleepAt.getTime()) / 60000)
     );
+    totalSleepMinutes += finalSleepMinutes;
   }
 
-  // Calculate post-wake time (last cycle woke up to out of crib)
+  // Settling time: put down to first asleep (session level, unchanged)
+  const settlingMinutes = session.putDownAt && session.asleepAt
+    ? Math.max(0, Math.round((session.asleepAt.getTime() - session.putDownAt.getTime()) / 60000))
+    : 0;
+
+  // Post-wake time: final wake to out of crib
+  // If there are wake events, the "final wake" might be the last cycle if they didn't fall back asleep
+  // Or it's session.wokeUpAt if they fell back asleep after last wake event
   let postWakeMinutes = 0;
-  const finalCycle = updatedCycles[updatedCycles.length - 1];
-  if (finalCycle?.wokeUpAt && session.outOfCribAt) {
+  const finalWakeTime = (lastCycle && !lastCycle.fellBackAsleepAt)
+    ? lastCycle.wokeUpAt  // Last wake event was the final wake
+    : session.wokeUpAt;   // They fell back asleep, so session.wokeUpAt is final wake
+
+  if (finalWakeTime && session.outOfCribAt) {
     postWakeMinutes = Math.max(
       0,
-      Math.round((session.outOfCribAt.getTime() - finalCycle.wokeUpAt.getTime()) / 60000)
+      Math.round((session.outOfCribAt.getTime() - finalWakeTime.getTime()) / 60000)
     );
   }
+
+  // Refetch cycles with updated values
+  const updatedCycles = await prisma.sleepCycle.findMany({
+    where: { sessionId },
+    orderBy: { wokeUpAt: 'asc' },
+  });
+
+  // Calculate total awake time in crib (from wake events)
+  let wakeEventAwakeMinutes = 0;
+  for (const cycle of updatedCycles) {
+    wakeEventAwakeMinutes += cycle.awakeMinutes ?? 0;
+  }
+  const awakeCribMinutes = settlingMinutes + postWakeMinutes + wakeEventAwakeMinutes;
 
   // Calculate qualified rest with wakeType consideration
   const qualifiedRestMinutes = calculateQualifiedRestWithCycles(
@@ -1074,12 +1079,6 @@ async function recalculateSessionFromCycles(
     settlingMinutes,
     postWakeMinutes
   );
-
-  // Calculate total awake time in crib
-  let awakeCribMinutes = settlingMinutes + postWakeMinutes;
-  for (const cycle of updatedCycles) {
-    awakeCribMinutes += cycle.awakeMinutes ?? 0;
-  }
 
   // Update session with calculated values
   await prisma.sleepSession.update({
@@ -1095,7 +1094,9 @@ async function recalculateSessionFromCycles(
   });
 }
 
-// Create a sleep cycle
+// Create a wake event (sleep cycle)
+// A wake event represents when the baby woke up during the sleep session.
+// The system auto-calculates sleep durations from the timeline.
 export async function createSleepCycle(
   userId: string,
   childId: string,
@@ -1106,50 +1107,27 @@ export async function createSleepCycle(
 
   const session = await prisma.sleepSession.findFirst({
     where: { id: sessionId, childId },
-    include: { sleepCycles: { orderBy: { asleepAt: 'asc' } } },
   });
 
   if (!session) {
     throw new SessionServiceError('Session not found', 'SESSION_NOT_FOUND', 404);
   }
 
-  const asleepAt = new Date(input.asleepAt);
-  const wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : null;
+  const wokeUpAt = new Date(input.wokeUpAt);
+  const fellBackAsleepAt = input.fellBackAsleepAt ? new Date(input.fellBackAsleepAt) : null;
 
-  // Calculate sleep duration for this cycle
-  const sleepMinutes = wokeUpAt
-    ? Math.max(0, Math.round((wokeUpAt.getTime() - asleepAt.getTime()) / 60000))
-    : null;
-
-  // Create the cycle
+  // Create the wake event
   const cycle = await prisma.sleepCycle.create({
     data: {
       sessionId,
-      cycleNumber: 0, // Will be renumbered
-      asleepAt,
+      cycleNumber: 0, // Will be renumbered by recalculate
       wokeUpAt,
+      fellBackAsleepAt,
       wakeType: input.wakeType ?? WakeType.QUIET,
-      sleepMinutes,
     },
   });
 
-  // Renumber all cycles by asleepAt order
-  const allCycles = await prisma.sleepCycle.findMany({
-    where: { sessionId },
-    orderBy: { asleepAt: 'asc' },
-  });
-
-  for (let i = 0; i < allCycles.length; i++) {
-    const c = allCycles[i];
-    if (c) {
-      await prisma.sleepCycle.update({
-        where: { id: c.id },
-        data: { cycleNumber: i + 1 },
-      });
-    }
-  }
-
-  // Recalculate session durations
+  // Recalculate session durations (this also renumbers cycles by wokeUpAt order)
   await recalculateSessionFromCycles(sessionId, userId);
 
   // Fetch the updated cycle
@@ -1164,15 +1142,15 @@ export async function createSleepCycle(
   return {
     id: updatedCycle.id,
     cycleNumber: updatedCycle.cycleNumber,
-    asleepAt: updatedCycle.asleepAt,
     wokeUpAt: updatedCycle.wokeUpAt,
+    fellBackAsleepAt: updatedCycle.fellBackAsleepAt,
     wakeType: updatedCycle.wakeType,
     sleepMinutes: updatedCycle.sleepMinutes,
     awakeMinutes: updatedCycle.awakeMinutes,
   };
 }
 
-// Update a sleep cycle
+// Update a wake event (sleep cycle)
 export async function updateSleepCycle(
   userId: string,
   childId: string,
@@ -1192,61 +1170,29 @@ export async function updateSleepCycle(
   }
 
   const updateData: {
-    asleepAt?: Date;
-    wokeUpAt?: Date | null;
+    wokeUpAt?: Date;
+    fellBackAsleepAt?: Date | null;
     wakeType?: string;
-    sleepMinutes?: number | null;
   } = {};
 
-  if (input.asleepAt) {
-    updateData.asleepAt = new Date(input.asleepAt);
+  if (input.wokeUpAt) {
+    updateData.wokeUpAt = new Date(input.wokeUpAt);
   }
 
-  if (input.wokeUpAt !== undefined) {
-    updateData.wokeUpAt = input.wokeUpAt ? new Date(input.wokeUpAt) : null;
+  if (input.fellBackAsleepAt !== undefined) {
+    updateData.fellBackAsleepAt = input.fellBackAsleepAt ? new Date(input.fellBackAsleepAt) : null;
   }
 
   if (input.wakeType) {
     updateData.wakeType = input.wakeType;
   }
 
-  // Recalculate sleep duration
-  const finalAsleepAt = updateData.asleepAt ?? cycle.asleepAt;
-  const finalWokeUpAt = updateData.wokeUpAt !== undefined ? updateData.wokeUpAt : cycle.wokeUpAt;
-
-  if (finalWokeUpAt) {
-    updateData.sleepMinutes = Math.max(
-      0,
-      Math.round((finalWokeUpAt.getTime() - finalAsleepAt.getTime()) / 60000)
-    );
-  } else {
-    updateData.sleepMinutes = null;
-  }
-
-  const updatedCycle = await prisma.sleepCycle.update({
+  await prisma.sleepCycle.update({
     where: { id: cycleId },
     data: updateData,
   });
 
-  // If asleepAt changed, renumber cycles
-  if (input.asleepAt) {
-    const allCycles = await prisma.sleepCycle.findMany({
-      where: { sessionId },
-      orderBy: { asleepAt: 'asc' },
-    });
-
-    for (let i = 0; i < allCycles.length; i++) {
-      const c = allCycles[i];
-      if (c) {
-        await prisma.sleepCycle.update({
-          where: { id: c.id },
-          data: { cycleNumber: i + 1 },
-        });
-      }
-    }
-  }
-
-  // Recalculate session durations
+  // Recalculate session durations (this also renumbers cycles by wokeUpAt order)
   await recalculateSessionFromCycles(sessionId, userId);
 
   // Fetch updated cycle
@@ -1261,15 +1207,15 @@ export async function updateSleepCycle(
   return {
     id: finalCycle.id,
     cycleNumber: finalCycle.cycleNumber,
-    asleepAt: finalCycle.asleepAt,
     wokeUpAt: finalCycle.wokeUpAt,
+    fellBackAsleepAt: finalCycle.fellBackAsleepAt,
     wakeType: finalCycle.wakeType,
     sleepMinutes: finalCycle.sleepMinutes,
     awakeMinutes: finalCycle.awakeMinutes,
   };
 }
 
-// Delete a sleep cycle
+// Delete a wake event (sleep cycle)
 export async function deleteSleepCycle(
   userId: string,
   childId: string,
@@ -1289,22 +1235,6 @@ export async function deleteSleepCycle(
 
   await prisma.sleepCycle.delete({ where: { id: cycleId } });
 
-  // Renumber remaining cycles
-  const remainingCycles = await prisma.sleepCycle.findMany({
-    where: { sessionId },
-    orderBy: { asleepAt: 'asc' },
-  });
-
-  for (let i = 0; i < remainingCycles.length; i++) {
-    const c = remainingCycles[i];
-    if (c) {
-      await prisma.sleepCycle.update({
-        where: { id: c.id },
-        data: { cycleNumber: i + 1 },
-      });
-    }
-  }
-
-  // Recalculate session durations
+  // Recalculate session durations (this also renumbers remaining cycles)
   await recalculateSessionFromCycles(sessionId, userId);
 }

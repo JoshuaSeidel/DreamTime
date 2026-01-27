@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { getSessions, updateSession, createSleepCycle, deleteSleepCycle, type SleepSession, type WakeType } from '@/lib/api';
+import { getSessions, updateSession, createSleepCycle, updateSleepCycle, deleteSleepCycle, type SleepSession, type WakeType } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
 
@@ -25,11 +25,11 @@ export default function History() {
   const [notesValue, setNotesValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sleep cycle editing state
-  const [isAddingCycle, setIsAddingCycle] = useState(false);
-  const [newCycleAsleepAt, setNewCycleAsleepAt] = useState('');
-  const [newCycleWokeUpAt, setNewCycleWokeUpAt] = useState('');
-  const [newCycleWakeType, setNewCycleWakeType] = useState<WakeType>('QUIET');
+  // Sleep event editing state
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
+  const [eventType, setEventType] = useState<'wake' | 'sleep'>('wake');
+  const [eventTime, setEventTime] = useState('');
+  const [newWakeType, setNewWakeType] = useState<WakeType>('QUIET');
 
   // Get child ID from localStorage
   useEffect(() => {
@@ -271,24 +271,48 @@ export default function History() {
     }
   };
 
-  // Reset cycle form
-  const resetCycleForm = () => {
-    setNewCycleAsleepAt('');
-    setNewCycleWokeUpAt('');
-    setNewCycleWakeType('QUIET');
+  // Reset event form
+  const resetEventForm = () => {
+    setEventType('wake');
+    setEventTime('');
+    setNewWakeType('QUIET');
   };
 
-  // Add a sleep cycle
-  const handleAddCycle = async () => {
-    if (!selectedSession || !accessToken || !selectedChildId || !newCycleAsleepAt) return;
+  // Add a sleep or wake event
+  const handleAddEvent = async () => {
+    if (!selectedSession || !accessToken || !selectedChildId || !eventTime) return;
 
     setIsSaving(true);
     try {
-      const result = await createSleepCycle(accessToken, selectedChildId, selectedSession.id, {
-        asleepAt: new Date(newCycleAsleepAt).toISOString(),
-        wokeUpAt: newCycleWokeUpAt ? new Date(newCycleWokeUpAt).toISOString() : undefined,
-        wakeType: newCycleWakeType,
-      });
+      let result;
+      const eventTimeISO = new Date(eventTime).toISOString();
+
+      if (eventType === 'wake') {
+        // Adding a wake event - create a new sleep cycle
+        result = await createSleepCycle(accessToken, selectedChildId, selectedSession.id, {
+          wokeUpAt: eventTimeISO,
+          wakeType: newWakeType,
+        });
+      } else {
+        // Adding a sleep event - find the most recent wake event without fellBackAsleepAt and update it
+        const cycles = selectedSession.sleepCycles || [];
+        // Sort by wokeUpAt descending to find most recent
+        const sortedCycles = [...cycles].sort((a, b) =>
+          new Date(b.wokeUpAt).getTime() - new Date(a.wokeUpAt).getTime()
+        );
+        // Find a wake event that doesn't have fellBackAsleepAt yet
+        const targetCycle = sortedCycles.find(c => !c.fellBackAsleepAt);
+
+        if (!targetCycle) {
+          toast.error('No wake event found', 'Add a wake event first, then add when baby fell back asleep');
+          setIsSaving(false);
+          return;
+        }
+
+        result = await updateSleepCycle(accessToken, selectedChildId, selectedSession.id, targetCycle.id, {
+          fellBackAsleepAt: eventTimeISO,
+        });
+      }
 
       if (result.success) {
         // Reload sessions to get updated data
@@ -304,22 +328,25 @@ export default function History() {
             ));
           }
         }
-        toast.success('Cycle added', 'Sleep cycle added successfully');
-        setIsAddingCycle(false);
-        resetCycleForm();
+        toast.success(
+          eventType === 'wake' ? 'Wake event added' : 'Sleep time recorded',
+          'Timeline updated and durations recalculated'
+        );
+        setIsAddingEvent(false);
+        resetEventForm();
       } else {
-        toast.error('Failed to add cycle', result.error?.message || 'Please try again');
+        toast.error('Failed to add', result.error?.message || 'Please try again');
       }
     } catch (err) {
-      console.error('Failed to add cycle:', err);
-      toast.error('Error', 'Failed to add cycle');
+      console.error('Failed to add event:', err);
+      toast.error('Error', 'Failed to add event');
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Delete a sleep cycle
-  const handleDeleteCycle = async (cycleId: string) => {
+  // Delete a wake event
+  const handleDeleteWakeEvent = async (cycleId: string) => {
     if (!selectedSession || !accessToken || !selectedChildId) return;
 
     setIsSaving(true);
@@ -338,7 +365,7 @@ export default function History() {
             ));
           }
         }
-        toast.success('Cycle deleted', 'Sleep cycle removed');
+        toast.success('Wake event deleted', 'Wake event removed and durations recalculated');
       } else {
         toast.error('Failed to delete', result.error?.message || 'Please try again');
       }
@@ -768,37 +795,37 @@ export default function History() {
                   )}
                 </div>
 
-                {/* Sleep Cycles Section - show for completed sessions */}
+                {/* Sleep Events Section - show for completed sessions */}
                 {selectedSession.state === 'COMPLETED' && (
                   <div className="space-y-3 border-t pt-4">
                     <div className="flex items-center justify-between">
                       <h4 className="font-medium text-sm text-muted-foreground">
-                        Sleep Cycles
+                        Sleep Timeline
                         {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 && (
-                          <span className="ml-2 text-xs">({selectedSession.sleepCycles.length})</span>
+                          <span className="ml-2 text-xs">({selectedSession.sleepCycles.length} wakes)</span>
                         )}
                       </h4>
-                      {!isAddingCycle && (
+                      {!isAddingEvent && (
                         <Button
                           size="sm"
                           variant="ghost"
                           className="h-6 px-2 text-xs"
-                          onClick={() => setIsAddingCycle(true)}
+                          onClick={() => setIsAddingEvent(true)}
                         >
                           <Plus className="w-3 h-3 mr-1" />
-                          Add Cycle
+                          Add Event
                         </Button>
                       )}
                     </div>
 
-                    {/* Existing cycles list */}
+                    {/* Existing wake events list */}
                     {selectedSession.sleepCycles && selectedSession.sleepCycles.length > 0 ? (
                       <div className="space-y-2">
                         {selectedSession.sleepCycles.map((cycle) => (
                           <div key={cycle.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium">Cycle {cycle.cycleNumber}</span>
+                                <span className="text-sm font-medium">Wake {cycle.cycleNumber}</span>
                                 {cycle.wakeType !== 'QUIET' && (
                                   <Badge
                                     variant={cycle.wakeType === 'CRYING' ? 'destructive' : 'secondary'}
@@ -807,18 +834,28 @@ export default function History() {
                                     {cycle.wakeType === 'CRYING' ? 'Crying' : 'Restless'}
                                   </Badge>
                                 )}
+                                {!cycle.fellBackAsleepAt && (
+                                  <Badge variant="outline" className="text-xs">
+                                    No sleep time
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                {formatTime(cycle.asleepAt, selectedSession.timezone)}
-                                {cycle.wokeUpAt && ` - ${formatTime(cycle.wokeUpAt, selectedSession.timezone)}`}
-                                {cycle.sleepMinutes !== null && cycle.sleepMinutes > 0 && ` (${formatDuration(cycle.sleepMinutes)})`}
+                                Woke: {formatTime(cycle.wokeUpAt, selectedSession.timezone)}
+                                {cycle.fellBackAsleepAt && ` → Back asleep: ${formatTime(cycle.fellBackAsleepAt, selectedSession.timezone)}`}
+                                {cycle.awakeMinutes !== null && cycle.awakeMinutes > 0 && ` (${formatDuration(cycle.awakeMinutes)} awake)`}
                               </div>
+                              {cycle.sleepMinutes !== null && cycle.sleepMinutes > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  Slept {formatDuration(cycle.sleepMinutes)} before this wake
+                                </div>
+                              )}
                             </div>
                             <Button
                               size="icon"
                               variant="ghost"
                               className="h-6 w-6"
-                              onClick={() => handleDeleteCycle(cycle.id)}
+                              onClick={() => handleDeleteWakeEvent(cycle.id)}
                               disabled={isSaving}
                             >
                               <Trash2 className="w-3 h-3 text-destructive" />
@@ -828,64 +865,93 @@ export default function History() {
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        No cycles recorded. Add cycles from video review.
+                        No wake events recorded. Add from video review.
                       </p>
                     )}
 
-                    {/* Add cycle form */}
-                    {isAddingCycle && (
+                    {/* Add event form */}
+                    {isAddingEvent && (
                       <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
-                        <div className="space-y-2">
-                          <Label className="text-xs">Fell Asleep</Label>
-                          <Input
-                            type="datetime-local"
-                            value={newCycleAsleepAt}
-                            onChange={(e) => setNewCycleAsleepAt(e.target.value)}
-                            className="h-9"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">Woke Up (optional)</Label>
-                          <Input
-                            type="datetime-local"
-                            value={newCycleWokeUpAt}
-                            onChange={(e) => setNewCycleWokeUpAt(e.target.value)}
-                            className="h-9"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-xs">Wake Period Type</Label>
-                          <Select
-                            value={newCycleWakeType}
-                            onValueChange={(v: WakeType) => setNewCycleWakeType(v)}
+                        {/* Event type selector */}
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant={eventType === 'wake' ? 'default' : 'outline'}
+                            className="flex-1"
+                            onClick={() => setEventType('wake')}
                           >
-                            <SelectTrigger className="h-9">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="QUIET">Quiet (50% rest credit)</SelectItem>
-                              <SelectItem value="RESTLESS">Restless (0% credit)</SelectItem>
-                              <SelectItem value="CRYING">Crying (0% credit)</SelectItem>
-                            </SelectContent>
-                          </Select>
+                            <Sun className="w-3 h-3 mr-1" />
+                            Woke Up
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={eventType === 'sleep' ? 'default' : 'outline'}
+                            className="flex-1"
+                            onClick={() => setEventType('sleep')}
+                          >
+                            <Moon className="w-3 h-3 mr-1" />
+                            Fell Asleep
+                          </Button>
                         </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">
+                            {eventType === 'wake' ? 'Woke Up At' : 'Fell Back Asleep At'}
+                          </Label>
+                          <Input
+                            type="datetime-local"
+                            value={eventTime}
+                            onChange={(e) => setEventTime(e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+
+                        {/* Wake type selector - only for wake events */}
+                        {eventType === 'wake' && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Wake Type</Label>
+                            <Select
+                              value={newWakeType}
+                              onValueChange={(v: WakeType) => setNewWakeType(v)}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="QUIET">Quiet (50% rest credit)</SelectItem>
+                                <SelectItem value="RESTLESS">Restless (0% credit)</SelectItem>
+                                <SelectItem value="CRYING">Crying (0% credit)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Help text for sleep events */}
+                        {eventType === 'sleep' && (
+                          <p className="text-xs text-muted-foreground">
+                            This will update the most recent wake event that doesn't have a sleep time.
+                          </p>
+                        )}
+
                         <div className="flex gap-2 pt-1">
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => {
-                              setIsAddingCycle(false);
-                              resetCycleForm();
+                              setIsAddingEvent(false);
+                              resetEventForm();
                             }}
                           >
                             Cancel
                           </Button>
                           <Button
                             size="sm"
-                            onClick={handleAddCycle}
-                            disabled={isSaving || !newCycleAsleepAt}
+                            onClick={handleAddEvent}
+                            disabled={isSaving || !eventTime}
                           >
-                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Cycle'}
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+                              eventType === 'wake' ? 'Add Wake' : 'Add Sleep'
+                            )}
                           </Button>
                         </div>
                       </div>

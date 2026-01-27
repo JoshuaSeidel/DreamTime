@@ -545,7 +545,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     {
       onRequest: [app.authenticate],
       schema: {
-        description: 'Add a sleep cycle to a session (retroactive editing from video review)',
+        description: 'Add a wake event to a session (retroactive editing from video review). Sleep periods are auto-calculated from the timeline.',
         tags: ['Sessions'],
         security: [{ bearerAuth: [] }],
         params: {
@@ -558,10 +558,10 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         },
         body: {
           type: 'object',
-          required: ['asleepAt'],
+          required: ['wokeUpAt'],
           properties: {
-            asleepAt: { type: 'string', format: 'date-time' },
-            wokeUpAt: { type: 'string', format: 'date-time' },
+            wokeUpAt: { type: 'string', format: 'date-time', description: 'When the baby woke up (required)' },
+            fellBackAsleepAt: { type: 'string', format: 'date-time', description: 'When baby fell back asleep (optional)' },
             wakeType: {
               type: 'string',
               enum: ['QUIET', 'RESTLESS', 'CRYING'],
@@ -597,7 +597,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // Update a sleep cycle
+  // Update a wake event
   app.patch<{
     Params: { childId: string; sessionId: string; cycleId: string };
     Body: UpdateSleepCycleInput;
@@ -606,7 +606,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
     {
       onRequest: [app.authenticate],
       schema: {
-        description: 'Update a sleep cycle',
+        description: 'Update a wake event',
         tags: ['Sessions'],
         security: [{ bearerAuth: [] }],
         params: {
@@ -621,8 +621,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         body: {
           type: 'object',
           properties: {
-            asleepAt: { type: 'string', format: 'date-time' },
             wokeUpAt: { type: 'string', format: 'date-time' },
+            fellBackAsleepAt: { type: 'string', format: 'date-time', nullable: true },
             wakeType: {
               type: 'string',
               enum: ['QUIET', 'RESTLESS', 'CRYING'],

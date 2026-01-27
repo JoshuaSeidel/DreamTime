@@ -62,33 +62,37 @@ export const createAdHocSessionSchema = z.object({
 
 export type CreateAdHocSessionInput = z.infer<typeof createAdHocSessionSchema>;
 
-// Schema for creating a sleep cycle (retroactive editing)
+// Schema for creating a wake event (retroactive editing)
+// A wake event represents when the baby woke up during a sleep session.
+// The system auto-calculates sleep periods from the timeline:
+// - First sleep: session.asleepAt → first wake's wokeUpAt
+// - Subsequent sleep: previous fellBackAsleepAt → current wokeUpAt
 export const createSleepCycleSchema = z.object({
-  asleepAt: z.string().datetime(),
-  wokeUpAt: z.string().datetime().optional(),
+  wokeUpAt: z.string().datetime(), // When baby woke up (required)
+  fellBackAsleepAt: z.string().datetime().optional(), // When baby fell back asleep (optional)
   wakeType: z.enum([WakeType.QUIET, WakeType.RESTLESS, WakeType.CRYING] as const).default(WakeType.QUIET),
 });
 
 export type CreateSleepCycleInput = z.infer<typeof createSleepCycleSchema>;
 
-// Schema for updating a sleep cycle
+// Schema for updating a wake event
 export const updateSleepCycleSchema = z.object({
-  asleepAt: z.string().datetime().optional(),
   wokeUpAt: z.string().datetime().optional(),
+  fellBackAsleepAt: z.string().datetime().optional().nullable(), // null to clear it
   wakeType: z.enum([WakeType.QUIET, WakeType.RESTLESS, WakeType.CRYING] as const).optional(),
 });
 
 export type UpdateSleepCycleInput = z.infer<typeof updateSleepCycleSchema>;
 
-// Sleep cycle response type
+// Sleep cycle response type - represents a wake event and derived sleep period
 export interface SleepCycleResponse {
   id: string;
   cycleNumber: number;
-  asleepAt: Date;
-  wokeUpAt: Date | null;
+  wokeUpAt: Date;
+  fellBackAsleepAt: Date | null;
   wakeType: string;
-  sleepMinutes: number | null;
-  awakeMinutes: number | null;
+  sleepMinutes: number | null; // Sleep before this wake (auto-calculated)
+  awakeMinutes: number | null; // Time awake during this wake event
 }
 
 export interface SleepSessionResponse {

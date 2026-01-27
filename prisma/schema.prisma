@@ -323,12 +323,17 @@ model SleepSession {
 
 // Sleep Cycle - tracks individual asleep/awake cycles within a session
 // Used for both naps and night sleep where baby may wake multiple times
+// A SleepCycle represents a wake event during a sleep session.
+// The baby woke up (wokeUpAt) and optionally fell back asleep (fellBackAsleepAt).
+// Sleep durations are auto-calculated from the timeline:
+// - First sleep period: session.asleepAt → first cycle.wokeUpAt
+// - Subsequent sleep: previous cycle.fellBackAsleepAt → current cycle.wokeUpAt
 model SleepCycle {
-  id          String   @id @default(uuid())
-  sessionId   String
-  cycleNumber Int      // 1, 2, 3, etc. - order of the cycle
-  asleepAt    DateTime // When baby fell asleep in this cycle
-  wokeUpAt    DateTime? // When baby woke up from this cycle
+  id               String    @id @default(uuid())
+  sessionId        String
+  cycleNumber      Int       // 1, 2, 3, etc. - order of wake events
+  wokeUpAt         DateTime  // When baby woke up (required)
+  fellBackAsleepAt DateTime? // When baby fell back asleep (null if final wake or not yet)
 
   // Wake period quality - determines rest credit calculation
   // QUIET: Normal awake - counts as 50% rest credit
@@ -336,9 +341,9 @@ model SleepCycle {
   // CRYING: Baby actively crying - 0% credit
   wakeType    String   @default("QUIET")
 
-  // Calculated duration for this cycle
-  sleepMinutes Int?    // Time asleep in this cycle
-  awakeMinutes Int?    // Time awake before falling back asleep (null for last cycle)
+  // Calculated durations (auto-populated)
+  sleepMinutes Int?    // Sleep time BEFORE this wake (auto-calculated from timeline)
+  awakeMinutes Int?    // Duration awake during this wake event
 
   session     SleepSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now())

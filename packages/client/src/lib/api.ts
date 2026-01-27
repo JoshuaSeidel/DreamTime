@@ -247,15 +247,16 @@ export type NapLocation = 'CRIB' | 'CAR' | 'STROLLER' | 'CARRIER' | 'SWING' | 'P
 // Wake type for sleep cycles - determines rest credit calculation
 export type WakeType = 'QUIET' | 'RESTLESS' | 'CRYING';
 
-// Sleep cycle interface
+// Sleep cycle (wake event) interface
+// Represents when baby woke up during a sleep session
 export interface SleepCycle {
   id: string;
   cycleNumber: number;
-  asleepAt: string;
-  wokeUpAt: string | null;
+  wokeUpAt: string; // When baby woke up (required)
+  fellBackAsleepAt: string | null; // When baby fell back asleep (optional)
   wakeType: WakeType;
-  sleepMinutes: number | null;
-  awakeMinutes: number | null;
+  sleepMinutes: number | null; // Sleep time BEFORE this wake (auto-calculated)
+  awakeMinutes: number | null; // Time awake during this wake event
 }
 
 export interface SleepSession {
@@ -386,14 +387,16 @@ export async function createAdHocSession(
   );
 }
 
-// Sleep Cycle API (retroactive editing)
+// Sleep Cycle API (wake event editing)
+// Add a wake event - when baby woke up during the session.
+// Sleep periods are auto-calculated from the timeline.
 export async function createSleepCycle(
   accessToken: string,
   childId: string,
   sessionId: string,
   data: {
-    asleepAt: string;
-    wokeUpAt?: string;
+    wokeUpAt: string; // When baby woke up (required)
+    fellBackAsleepAt?: string; // When baby fell back asleep (optional)
     wakeType?: WakeType;
   }
 ): Promise<ApiResponse<SleepCycle>> {
@@ -413,8 +416,8 @@ export async function updateSleepCycle(
   sessionId: string,
   cycleId: string,
   data: {
-    asleepAt?: string;
-    wokeUpAt?: string | null;
+    wokeUpAt?: string;
+    fellBackAsleepAt?: string | null;
     wakeType?: WakeType;
   }
 ): Promise<ApiResponse<SleepCycle>> {
