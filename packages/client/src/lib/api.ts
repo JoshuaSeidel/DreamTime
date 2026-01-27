@@ -11,6 +11,15 @@ interface ApiResponse<T> {
   };
 }
 
+// Get device timezone (e.g., "America/New_York", "Europe/London")
+function getDeviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return 'America/New_York'; // Fallback
+  }
+}
+
 async function fetchWithAuth<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -30,6 +39,10 @@ async function fetchWithAuth<T>(
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
   }
+
+  // Always send device timezone so server uses current location, not stored profile
+  // This ensures the app works correctly when traveling
+  headers['X-Timezone'] = getDeviceTimezone();
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,

@@ -26,12 +26,30 @@ import { publishState, isMqttEnabled } from '../services/mqtt.service.js';
 import { prisma } from '../config/database.js';
 
 // Helper to get user timezone
-async function getUserTimezone(userId: string): Promise<string> {
+// Prefers X-Timezone header (device timezone) over stored profile timezone
+// This allows the app to work correctly when traveling
+async function getUserTimezone(userId: string, headerTimezone?: string): Promise<string> {
+  // If client sent device timezone, use it (supports traveling)
+  if (headerTimezone && isValidTimezone(headerTimezone)) {
+    return headerTimezone;
+  }
+
+  // Fall back to stored user preference
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { timezone: true },
   });
   return user?.timezone ?? 'America/New_York';
+}
+
+// Validate timezone string is a valid IANA timezone
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function sessionRoutes(app: FastifyInstance): Promise<void> {
@@ -435,7 +453,8 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
         const { userId } = request.user;
         const { childId } = request.params;
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const result = await recalculateTodaySessions(userId, childId, timezone);
 
         return reply.send(successResponse(result));

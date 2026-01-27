@@ -35,12 +35,30 @@ const calculateBedtimeSchema = z.object({
 type CalculateBedtimeInput = z.infer<typeof calculateBedtimeSchema>;
 
 // Helper to get user timezone
-async function getUserTimezone(userId: string): Promise<string> {
+// Prefers X-Timezone header (device timezone) over stored profile timezone
+// This allows the app to work correctly when traveling
+async function getUserTimezone(userId: string, headerTimezone?: string): Promise<string> {
+  // If client sent device timezone, use it (supports traveling)
+  if (headerTimezone && isValidTimezone(headerTimezone)) {
+    return headerTimezone;
+  }
+
+  // Fall back to stored user preference
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { timezone: true },
   });
   return user?.timezone ?? 'America/New_York';
+}
+
+// Validate timezone string is a valid IANA timezone
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Helper to verify child access
@@ -95,11 +113,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const input = calculateDaySchema.parse(request.body);
 
+        // Get device timezone from header (for traveling support)
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+
         // Get schedule and transition
         const [schedule, transition, timezone] = await Promise.all([
           getActiveSchedule(userId, childId),
           getActiveTransition(userId, childId),
-          getUserTimezone(userId),
+          getUserTimezone(userId, headerTimezone),
         ]);
 
         if (!schedule) {
@@ -152,11 +173,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const { userId } = request.user;
         const { childId } = request.params;
 
+        // Get device timezone from header (for traveling support)
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+
         // Get schedule and today's sessions
         const [schedule, transition, timezone] = await Promise.all([
           getActiveSchedule(userId, childId),
           getActiveTransition(userId, childId),
-          getUserTimezone(userId),
+          getUserTimezone(userId, headerTimezone),
         ]);
 
         if (!schedule) {
@@ -329,11 +353,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const { userId } = request.user;
         const { childId } = request.params;
 
+        // Get device timezone from header (for traveling support)
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+
         // Get schedule and today's sessions
         const [schedule, transition, timezone] = await Promise.all([
           getActiveSchedule(userId, childId),
           getActiveTransition(userId, childId),
-          getUserTimezone(userId),
+          getUserTimezone(userId, headerTimezone),
         ]);
 
         if (!schedule) {
@@ -618,9 +645,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const input = calculateBedtimeSchema.parse(request.body);
 
+        // Get device timezone from header (for traveling support)
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+
         const [schedule, timezone] = await Promise.all([
           getActiveSchedule(userId, childId),
-          getUserTimezone(userId),
+          getUserTimezone(userId, headerTimezone),
         ]);
 
         if (!schedule) {

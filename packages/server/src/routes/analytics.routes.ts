@@ -12,12 +12,30 @@ import { successResponse, errorResponse } from '../types/api.js';
 import { InviteStatus } from '../types/enums.js';
 
 // Helper to get user timezone
-async function getUserTimezone(userId: string): Promise<string> {
+// Prefers X-Timezone header (device timezone) over stored profile timezone
+// This allows the app to work correctly when traveling
+async function getUserTimezone(userId: string, headerTimezone?: string): Promise<string> {
+  // If client sent device timezone, use it (supports traveling)
+  if (headerTimezone && isValidTimezone(headerTimezone)) {
+    return headerTimezone;
+  }
+
+  // Fall back to stored user preference
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { timezone: true },
   });
   return user?.timezone ?? 'America/New_York';
+}
+
+// Validate timezone string is a valid IANA timezone
+function isValidTimezone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Helper to verify child access
@@ -79,7 +97,8 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const { date } = request.query;
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const summary = await getDailySummary(userId, childId, date, timezone);
 
         return reply.send(successResponse(summary));
@@ -128,7 +147,8 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const { weekOf } = request.query;
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const summary = await getWeeklySummary(userId, childId, weekOf, timezone);
 
         return reply.send(successResponse(summary));
@@ -177,7 +197,8 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const { period } = request.query;
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const trends = await getSleepTrends(userId, childId, period, timezone);
 
         return reply.send(successResponse(trends));
@@ -226,7 +247,8 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const { date } = request.query;
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const summary = await getAnalyticsSummary(userId, childId, date, timezone);
 
         return reply.send(successResponse(summary));
@@ -278,7 +300,8 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
         const { childId } = request.params;
         const input = comparisonSchema.parse(request.body);
 
-        const timezone = await getUserTimezone(userId);
+        const headerTimezone = request.headers['x-timezone'] as string | undefined;
+        const timezone = await getUserTimezone(userId, headerTimezone);
         const comparison = await getComparison(
           userId,
           childId,
