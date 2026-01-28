@@ -1077,6 +1077,7 @@ async function recalculateSessionFromCycles(
   }
 
   // Check for final sleep after last cycle
+  // This handles the case where the last fellBackAsleepAt leads to sleep until session.wokeUpAt
   const lastCycle = cycles[cycles.length - 1];
   if (lastCycle && lastCycle.fellBackAsleepAt && session.wokeUpAt) {
     // There's sleep from fellBackAsleepAt to final wokeUpAt
@@ -1087,8 +1088,9 @@ async function recalculateSessionFromCycles(
     totalSleepMinutes += finalSleepMinutes;
   }
 
-  // If no cycles resulted in sleep but we have asleepAt and wokeUpAt,
+  // If no cycles resulted in sleep but we have firstAsleepAt and wokeUpAt,
   // calculate total sleep from those (minus any awake time from cycles)
+  // This handles cases where there's no wake event after the first sleep
   if (totalSleepMinutes === 0 && firstAsleepAt && session.wokeUpAt) {
     const grossSleepMinutes = Math.max(
       0,
@@ -1096,6 +1098,32 @@ async function recalculateSessionFromCycles(
     );
     // Subtract awake time from cycles that fall within the sleep period
     totalSleepMinutes = Math.max(0, grossSleepMinutes - totalWakeEventAwakeMinutes);
+  }
+
+  // IMPORTANT: If the ONLY wake event's wokeUpAt is BEFORE firstAsleepAt (i.e., crying during settling),
+  // and that event has fellBackAsleepAt, then firstAsleepAt should be the fellBackAsleepAt.
+  // In this case, sleep = fellBackAsleepAt to session.wokeUpAt was already calculated above.
+  // But we need to make sure we counted it - let's double-check the scenario:
+  // - If session.asleepAt is null AND first cycle's fellBackAsleepAt is the firstAsleepAt
+  // - AND the first cycle's wokeUpAt < firstAsleepAt (it's a pre-sleep event)
+  // - Then the sleep from firstAsleepAt to session.wokeUpAt hasn't been counted in the loop
+  //   because the loop only counts sleep BEFORE each cycle's wokeUpAt
+  //
+  // Let's handle this explicitly:
+  if (totalSleepMinutes === 0 && !session.asleepAt && firstAsleepAt && session.wokeUpAt) {
+    // firstAsleepAt came from a cycle's fellBackAsleepAt
+    // Sleep is from firstAsleepAt to session.wokeUpAt (or next wake if any)
+    // Check if there are any wake events AFTER firstAsleepAt
+    const wakesAfterFirstSleep = cycles.filter(c => c.wokeUpAt.getTime() > firstAsleepAt!.getTime());
+
+    if (wakesAfterFirstSleep.length === 0) {
+      // No wakes after first sleep - sleep is from firstAsleepAt to session.wokeUpAt
+      totalSleepMinutes = Math.max(
+        0,
+        Math.round((session.wokeUpAt.getTime() - firstAsleepAt.getTime()) / 60000)
+      );
+    }
+    // If there are wakes after first sleep, they should have been counted in the loop
   }
 
   // Settling time: putDown to firstAsleepAt
