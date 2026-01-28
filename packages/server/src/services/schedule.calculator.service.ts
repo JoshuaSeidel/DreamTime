@@ -1,4 +1,4 @@
-import { addMinutes, setHours, setMinutes, isAfter, isBefore, differenceInMinutes, format, parse, startOfDay } from 'date-fns';
+import { addMinutes, addDays, setHours, setMinutes, isAfter, isBefore, differenceInMinutes, format, parse, startOfDay } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import type { SleepScheduleResponse, TransitionResponse } from '../schemas/schedule.schema.js';
 import { ScheduleType } from '../types/enums.js';
@@ -768,7 +768,8 @@ export function calculateNextAction(
   currentlyAsleep: boolean,
   timezone: string,
   isNightSleep?: boolean,
-  mustWakeBy?: string // HH:mm format
+  mustWakeBy?: string, // HH:mm format
+  asleepAt?: Date // When the current sleep session started
 ): NextActionRecommendation {
   const notes: string[] = [];
 
@@ -781,9 +782,57 @@ export function calculateNextAction(
       // Convert current time to user's timezone to properly compare with wake deadline
       const currentTimeInTz = toZonedTime(currentTime, timezone);
 
-      // Create wake deadline in user's timezone, then convert back to UTC for comparison
+      // Create wake deadline in user's timezone
       const wakeDeadlineInTz = new Date(currentTimeInTz);
       wakeDeadlineInTz.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+
+      // If asleepAt is provided and is in the evening/night,
+      // the wake deadline should be the next morning after falling asleep
+      if (asleepAt) {
+        const asleepAtInTz = toZonedTime(asleepAt, timezone);
+        const asleepHour = asleepAtInTz.getHours();
+
+        // If child fell asleep in the evening/night (5pm or later),
+        // calculate wake deadline as the morning after they fell asleep
+        // e.g., asleep at 7pm Jan 15, deadline is 7:30am Jan 16
+        if (asleepHour >= 17) {
+          // Create deadline based on asleepAt date + 1 day at the deadline hour
+          const nextMorningDeadline = new Date(asleepAtInTz);
+          nextMorningDeadline.setDate(nextMorningDeadline.getDate() + 1);
+          nextMorningDeadline.setHours(hours ?? 7, minutes ?? 30, 0, 0);
+          const wakeDeadline = fromZonedTime(nextMorningDeadline, timezone);
+
+          if (currentTime >= wakeDeadline) {
+            const minutesPast = differenceInMinutes(currentTime, wakeDeadline);
+            return {
+              action: 'WAKE',
+              description: `Wake deadline passed by ${minutesPast} minutes`,
+              timeWindow: null,
+              notes: ['Wake child now to preserve schedule!'],
+            };
+          } else {
+            const minutesUntil = differenceInMinutes(wakeDeadline, currentTime);
+            if (minutesUntil <= 30) {
+              return {
+                action: 'WAIT',
+                description: `Child is sleeping - wake by ${mustWakeBy}`,
+                timeWindow: null,
+                minutesUntilEarliest: minutesUntil,
+                notes: [`Wake deadline in ${minutesUntil} minutes`],
+              };
+            }
+            // Night sleep with deadline > 30 min away - just show sleeping status
+            return {
+              action: 'WAIT',
+              description: 'Child is currently sleeping',
+              timeWindow: null,
+              notes: ['Monitor for wake signs'],
+            };
+          }
+        }
+      }
+
+      // Original logic for morning/day sleep or when asleepAt not provided
       const wakeDeadline = fromZonedTime(wakeDeadlineInTz, timezone);
 
       // If deadline is in the past today (e.g., it's after 7:30am), check if we're past it

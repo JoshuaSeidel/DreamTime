@@ -315,7 +315,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           currentlyAsleep,
           timezone,
           isNightSleep,
-          schedule.mustWakeBy ?? undefined
+          schedule.mustWakeBy ?? undefined,
+          asleepSession?.asleepAt ?? undefined
         );
 
         return reply.send(successResponse(nextAction));

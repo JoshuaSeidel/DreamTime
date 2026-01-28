@@ -306,6 +306,79 @@ describe('Schedule Calculator Service', () => {
       expect(result.action).toBe('WAIT');
       expect(result.description).toContain('Bedtime');
     });
+
+    describe('night sleep wake deadline handling', () => {
+      it('does not show wake deadline warning for evening night sleep with tomorrow deadline', () => {
+        // Child fell asleep at 7pm, currently 8pm, wake deadline is 7:30am tomorrow
+        const currentTime = new Date('2024-01-15T20:00:00-05:00'); // 8pm
+        const asleepAt = new Date('2024-01-15T19:00:00-05:00'); // 7pm
+        const mustWakeBy = '07:30';
+
+        const result = calculateNextAction(
+          currentTime, daySchedule, 2, true, TIMEZONE,
+          true, // isNightSleep
+          mustWakeBy,
+          asleepAt
+        );
+
+        // Should NOT show "Wake deadline passed" - deadline is tomorrow
+        expect(result.action).toBe('WAIT');
+        expect(result.description).not.toContain('Wake deadline passed');
+      });
+
+      it('shows wake deadline warning when past morning deadline', () => {
+        // Child fell asleep at 7pm yesterday, currently 8am next day (past 7:30 deadline)
+        const asleepAt = new Date('2024-01-15T19:00:00-05:00'); // 7pm Jan 15
+        const currentTime = new Date('2024-01-16T08:00:00-05:00'); // 8am Jan 16
+        const mustWakeBy = '07:30';
+
+        const result = calculateNextAction(
+          currentTime, daySchedule, 0, true, TIMEZONE,
+          true, // isNightSleep
+          mustWakeBy,
+          asleepAt
+        );
+
+        expect(result.action).toBe('WAKE');
+        expect(result.description).toContain('Wake deadline passed');
+        expect(result.description).toContain('30 minutes'); // 8:00 - 7:30 = 30 min
+      });
+
+      it('shows countdown when close to morning wake deadline', () => {
+        // Child fell asleep at 7pm, currently 7:10am (20 min until 7:30 deadline)
+        const asleepAt = new Date('2024-01-15T19:00:00-05:00'); // 7pm Jan 15
+        const currentTime = new Date('2024-01-16T07:10:00-05:00'); // 7:10am Jan 16
+        const mustWakeBy = '07:30';
+
+        const result = calculateNextAction(
+          currentTime, daySchedule, 0, true, TIMEZONE,
+          true, // isNightSleep
+          mustWakeBy,
+          asleepAt
+        );
+
+        expect(result.action).toBe('WAIT');
+        expect(result.description).toContain('wake by 07:30');
+        expect(result.minutesUntilEarliest).toBe(20);
+      });
+
+      it('handles night sleep without asleepAt gracefully (backwards compatibility)', () => {
+        // If asleepAt not provided, use original logic
+        const currentTime = new Date('2024-01-15T08:00:00-05:00'); // 8am
+        const mustWakeBy = '07:30';
+
+        const result = calculateNextAction(
+          currentTime, daySchedule, 0, true, TIMEZONE,
+          true, // isNightSleep
+          mustWakeBy
+          // asleepAt not provided
+        );
+
+        // Original logic: 8am is past 7:30am, so should show warning
+        expect(result.action).toBe('WAKE');
+        expect(result.description).toContain('Wake deadline passed');
+      });
+    });
   });
 
   describe('calculateAdjustedBedtime', () => {
