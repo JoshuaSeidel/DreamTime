@@ -843,4 +843,348 @@ describe('Session Routes Integration Tests', () => {
       expect(response.statusCode).toBe(404);
     });
   });
+
+  describe('Wake Event Calculations (Sleep Cycles)', () => {
+    /**
+     * Critical test for the wake event calculation fix.
+     *
+     * Scenario (from user):
+     * - Put down: 8:55am
+     * - Baby cries at 9:21am (wake event BEFORE session.asleepAt)
+     * - Baby falls asleep: 9:36am (this is both session.asleepAt AND fellBackAsleepAt on wake event)
+     * - Baby wakes: 9:50am (session.wokeUpAt)
+     * - Out of crib: 10:21am
+     *
+     * Expected results:
+     * - Settling time: 41 min (8:55 → 9:36)
+     * - Sleep: 14 min (9:36 → 9:50)
+     * - Post-wake: 31 min (9:50 → 10:21)
+     * - Total: 86 min (8:55 → 10:21)
+     *
+     * The bug was: when a wake event has wokeUpAt < session.asleepAt,
+     * the awake time from that event was incorrectly subtracted from sleep time.
+     */
+    it('should correctly calculate sleep when wake event is before session.asleepAt', async () => {
+      const { accessToken } = await createUserAndGetToken();
+      const childId = await createTestChild(accessToken);
+
+      // Base time - 8:55am today
+      const baseDate = new Date();
+      baseDate.setHours(8, 55, 0, 0);
+
+      const putDownAt = baseDate.toISOString();
+      const wakeEventAt = new Date(baseDate.getTime() + 26 * 60000).toISOString(); // 9:21am (+26 min)
+      const asleepAt = new Date(baseDate.getTime() + 41 * 60000).toISOString(); // 9:36am (+41 min)
+      const wokeUpAt = new Date(baseDate.getTime() + 55 * 60000).toISOString(); // 9:50am (+55 min)
+      const outOfCribAt = new Date(baseDate.getTime() + 86 * 60000).toISOString(); // 10:21am (+86 min)
+
+      // Create session with all timestamps (simulating a completed session)
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          sessionType: 'NAP',
+          napNumber: 1,
+          putDownAt,
+        },
+      });
+
+      const sessionId = JSON.parse(createResponse.body).data.id;
+
+      // Transition through states with specific times
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'fell_asleep', asleepAt },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'woke_up', wokeUpAt },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'out_of_crib', outOfCribAt },
+      });
+
+      // Now add a wake event that occurred BEFORE asleepAt (crying during settling)
+      const cycleResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          wokeUpAt: wakeEventAt, // 9:21am - before asleepAt of 9:36am
+          fellBackAsleepAt: asleepAt, // 9:36am - same as session.asleepAt
+          wakeType: 'CRYING',
+        },
+      });
+
+      expect(cycleResponse.statusCode).toBe(201);
+
+      // Get the updated session
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const session = JSON.parse(getResponse.body).data;
+
+      // Verify the calculations
+      expect(session.totalMinutes).toBe(86); // 8:55 → 10:21 = 86 min
+      expect(session.settlingMinutes).toBe(41); // 8:55 → 9:36 = 41 min
+      expect(session.sleepMinutes).toBe(14); // 9:36 → 9:50 = 14 min (THIS IS THE CRITICAL CHECK)
+      expect(session.postWakeMinutes).toBe(31); // 9:50 → 10:21 = 31 min
+
+      // Sleep should NOT be 0 or negative (the bug we fixed)
+      expect(session.sleepMinutes).toBeGreaterThan(0);
+    });
+
+    it('should correctly calculate sleep with multiple wake events including pre-sleep events', async () => {
+      const { accessToken } = await createUserAndGetToken();
+      const childId = await createTestChild(accessToken);
+
+      // Timeline:
+      // 8:00 - Put down
+      // 8:10 - Cry event 1 (pre-sleep, CRYING)
+      // 8:20 - Fell asleep (first real sleep)
+      // 8:40 - Woke up (wake event 2, QUIET)
+      // 8:45 - Fell back asleep
+      // 9:00 - Final woke up
+      // 9:10 - Out of crib
+
+      const baseDate = new Date();
+      baseDate.setHours(8, 0, 0, 0);
+
+      const putDownAt = baseDate.toISOString();
+      const preSleepCry = new Date(baseDate.getTime() + 10 * 60000).toISOString(); // 8:10
+      const firstAsleep = new Date(baseDate.getTime() + 20 * 60000).toISOString(); // 8:20
+      const midWake = new Date(baseDate.getTime() + 40 * 60000).toISOString(); // 8:40
+      const backAsleep = new Date(baseDate.getTime() + 45 * 60000).toISOString(); // 8:45
+      const finalWoke = new Date(baseDate.getTime() + 60 * 60000).toISOString(); // 9:00
+      const outOfCrib = new Date(baseDate.getTime() + 70 * 60000).toISOString(); // 9:10
+
+      // Create session
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { sessionType: 'NAP', putDownAt },
+      });
+      const sessionId = JSON.parse(createResponse.body).data.id;
+
+      // Progress through states
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'fell_asleep', asleepAt: firstAsleep },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'woke_up', wokeUpAt: finalWoke },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'out_of_crib', outOfCribAt: outOfCrib },
+      });
+
+      // Add pre-sleep cry event (CRYING - 0% credit)
+      await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          wokeUpAt: preSleepCry, // 8:10 - before firstAsleep
+          fellBackAsleepAt: firstAsleep, // 8:20
+          wakeType: 'CRYING',
+        },
+      });
+
+      // Add mid-sleep wake event (QUIET - 50% credit)
+      await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          wokeUpAt: midWake, // 8:40
+          fellBackAsleepAt: backAsleep, // 8:45
+          wakeType: 'QUIET',
+        },
+      });
+
+      // Get final session
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const session = JSON.parse(getResponse.body).data;
+
+      // Verify calculations
+      // Total: 70 min (8:00 → 9:10)
+      expect(session.totalMinutes).toBe(70);
+
+      // Settling: 20 min (8:00 → 8:20)
+      expect(session.settlingMinutes).toBe(20);
+
+      // Sleep: should be (8:20 → 8:40) + (8:45 → 9:00) = 20 + 15 = 35 min
+      // The mid-sleep awake time (8:40 → 8:45 = 5 min) should NOT be counted as sleep
+      expect(session.sleepMinutes).toBe(35);
+
+      // Post-wake: 10 min (9:00 → 9:10)
+      expect(session.postWakeMinutes).toBe(10);
+
+      // Verify sleep cycles
+      expect(session.sleepCycles).toHaveLength(2);
+
+      // First cycle (pre-sleep cry) should have 0 sleepMinutes since it's before first sleep
+      const preSleepCycle = session.sleepCycles.find(
+        (c: { wokeUpAt: string }) => new Date(c.wokeUpAt).getTime() === new Date(preSleepCry).getTime()
+      );
+      expect(preSleepCycle).toBeDefined();
+      expect(preSleepCycle.awakeMinutes).toBe(10); // 8:10 → 8:20
+      expect(preSleepCycle.wakeType).toBe('CRYING');
+
+      // Second cycle (mid-sleep wake) should have sleep before it
+      const midCycle = session.sleepCycles.find(
+        (c: { wokeUpAt: string }) => new Date(c.wokeUpAt).getTime() === new Date(midWake).getTime()
+      );
+      expect(midCycle).toBeDefined();
+      expect(midCycle.sleepMinutes).toBe(20); // 8:20 → 8:40
+      expect(midCycle.awakeMinutes).toBe(5); // 8:40 → 8:45
+      expect(midCycle.wakeType).toBe('QUIET');
+    });
+
+    it('should give 0% credit for CRYING wake events in qualifiedRestMinutes', async () => {
+      const { accessToken } = await createUserAndGetToken();
+      const childId = await createTestChild(accessToken);
+
+      const baseDate = new Date();
+      baseDate.setHours(14, 0, 0, 0);
+
+      // Simple scenario:
+      // 14:00 - Put down
+      // 14:10 - Fell asleep
+      // 14:30 - Woke up crying
+      // 14:40 - Fell back asleep
+      // 15:00 - Final wake
+      // 15:10 - Out of crib
+
+      const putDownAt = baseDate.toISOString();
+      const asleepAt = new Date(baseDate.getTime() + 10 * 60000).toISOString();
+      const wokeUpCrying = new Date(baseDate.getTime() + 30 * 60000).toISOString();
+      const backAsleep = new Date(baseDate.getTime() + 40 * 60000).toISOString();
+      const finalWoke = new Date(baseDate.getTime() + 60 * 60000).toISOString();
+      const outOfCrib = new Date(baseDate.getTime() + 70 * 60000).toISOString();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { sessionType: 'NAP', putDownAt },
+      });
+      const sessionId = JSON.parse(createResponse.body).data.id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'fell_asleep', asleepAt },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'woke_up', wokeUpAt: finalWoke },
+      });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { event: 'out_of_crib', outOfCribAt: outOfCrib },
+      });
+
+      // Add CRYING wake event
+      await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          wokeUpAt: wokeUpCrying,
+          fellBackAsleepAt: backAsleep,
+          wakeType: 'CRYING',
+        },
+      });
+
+      const getResponse = await app.inject({
+        method: 'GET',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const session = JSON.parse(getResponse.body).data;
+
+      // Sleep: (14:10 → 14:30) + (14:40 → 15:00) = 20 + 20 = 40 min
+      expect(session.sleepMinutes).toBe(40);
+
+      // Awake time during CRYING: 10 min (14:30 → 14:40) - gets 0% credit
+      // Settling time: 10 min (14:00 → 14:10) - gets 50% credit (no wake events here)
+      // Post-wake time: 10 min (15:00 → 15:10) - gets 50% credit
+
+      // Qualified rest = sleep + (quiet awake time * 0.5)
+      // = 40 + (10 settling * 0.5) + (10 post-wake * 0.5) + (0 crying credit)
+      // = 40 + 5 + 5 + 0 = 50
+      expect(session.qualifiedRestMinutes).toBe(50);
+
+      // Now let's test with QUIET wake type - should get 50% credit
+      // Delete the CRYING event and add a QUIET one
+      const cycle = session.sleepCycles[0];
+      await app.inject({
+        method: 'DELETE',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles/${cycle.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions/${sessionId}/cycles`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          wokeUpAt: wokeUpCrying,
+          fellBackAsleepAt: backAsleep,
+          wakeType: 'QUIET',
+        },
+      });
+
+      const quietResponse = await app.inject({
+        method: 'GET',
+        url: `/api/children/${childId}/sessions/${sessionId}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      const quietSession = JSON.parse(quietResponse.body).data;
+
+      // Now QUIET wake gets 50% credit
+      // Qualified rest = 40 + (10 settling * 0.5) + (10 post-wake * 0.5) + (10 quiet * 0.5)
+      // = 40 + 5 + 5 + 5 = 55
+      expect(quietSession.qualifiedRestMinutes).toBe(55);
+    });
+  });
 });

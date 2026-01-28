@@ -1005,18 +1005,23 @@ async function recalculateSessionFromCycles(
   }
 
   let totalSleepMinutes = 0;
-  let totalWakeEventAwakeMinutes = 0;
+  let totalWakeEventAwakeMinutes = 0;  // Awake time from wake events DURING sleep period only
+  let totalSettlingWakeMinutes = 0;    // Awake time from wake events BEFORE first sleep
 
   // Process each cycle chronologically
   for (let i = 0; i < cycles.length; i++) {
     const cycle = cycles[i];
     if (!cycle) continue;
 
+    // Determine if this wake event is before or after first sleep
+    const isBeforeFirstSleep = firstAsleepAt && cycle.wokeUpAt.getTime() < firstAsleepAt.getTime();
+
     // Calculate how long baby was awake during this event
     // Awake period ends when:
     // 1. fellBackAsleepAt (explicit)
     // 2. Next cycle's wokeUpAt (if no fellBackAsleepAt but another wake follows)
     // 3. session.wokeUpAt (if this is last cycle and no fellBackAsleepAt)
+    // 4. firstAsleepAt (if this is a settling event and leads to first sleep)
     let awakeEndTime: Date | null = null;
 
     if (cycle.fellBackAsleepAt) {
@@ -1026,6 +1031,9 @@ async function recalculateSessionFromCycles(
       if (nextCycle) {
         awakeEndTime = nextCycle.wokeUpAt;
       }
+    } else if (isBeforeFirstSleep && firstAsleepAt) {
+      // This is a settling event - awake period ends when baby first fell asleep
+      awakeEndTime = firstAsleepAt;
     } else if (session.wokeUpAt && cycle.wokeUpAt.getTime() < session.wokeUpAt.getTime()) {
       // Last cycle, no fellBackAsleepAt, but session has later wokeUpAt
       // This means there's still sleep to count - but we don't know when baby fell asleep
@@ -1039,7 +1047,12 @@ async function recalculateSessionFromCycles(
       : null;
 
     if (awakeMinutes !== null) {
-      totalWakeEventAwakeMinutes += awakeMinutes;
+      // Track settling vs sleep period awake time separately
+      if (isBeforeFirstSleep) {
+        totalSettlingWakeMinutes += awakeMinutes;
+      } else {
+        totalWakeEventAwakeMinutes += awakeMinutes;
+      }
     }
 
     // Calculate sleep that occurred BEFORE this wake event
@@ -1149,18 +1162,11 @@ async function recalculateSessionFromCycles(
   });
 
   // Calculate how much settling time is NOT covered by wake events
-  // (Wake events during settling already have their awakeMinutes counted,
-  //  so we subtract them from total settling to get "quiet" settling time)
-  let settlingWakeEventMinutes = 0;
-  for (const cycle of updatedCycles) {
-    // A wake event is in settling period if it's before firstAsleepAt
-    if (firstAsleepAt && cycle.wokeUpAt.getTime() < firstAsleepAt.getTime()) {
-      settlingWakeEventMinutes += cycle.awakeMinutes ?? 0;
-    }
-  }
-  const quietRestfulMinutes = Math.max(0, settlingMinutes - settlingWakeEventMinutes);
+  // totalSettlingWakeMinutes = awake time from wake events before first sleep (already tracked)
+  // The "quiet" settling time is the remaining settling time (gets 50% credit)
+  const quietRestfulMinutes = Math.max(0, settlingMinutes - totalSettlingWakeMinutes);
 
-  // Calculate total awake time in crib
+  // Calculate total awake time in crib (settling + sleep period wakes + post-wake)
   const awakeCribMinutes = settlingMinutes + postWakeMinutes + totalWakeEventAwakeMinutes;
 
   // Calculate qualified rest with wakeType consideration
