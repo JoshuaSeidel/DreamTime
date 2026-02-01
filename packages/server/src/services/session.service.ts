@@ -218,6 +218,22 @@ function calculateDurations(
     const actualSleep = sleepMinutes ?? 0;
     const awakeCrib = awakeCribMinutes ?? 0; // Don't guess - only use tracked time
     qualifiedRestMinutes = Math.round((awakeCrib / 2) + actualSleep);
+
+    // Debug logging for crib time calculation
+    console.log('[calculateDurations] Input:', {
+      putDownAt: putDownAt?.toISOString(),
+      asleepAt: asleepAt?.toISOString(),
+      wokeUpAt: wokeUpAt?.toISOString(),
+      outOfCribAt: outOfCribAt?.toISOString(),
+      isAdHoc,
+    });
+    console.log('[calculateDurations] Output:', {
+      settlingMinutes,
+      postWakeMinutes,
+      awakeCribMinutes,
+      sleepMinutes,
+      qualifiedRestMinutes,
+    });
   }
 
   return {
