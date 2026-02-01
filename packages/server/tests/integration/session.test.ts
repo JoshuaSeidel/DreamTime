@@ -1187,4 +1187,84 @@ describe('Session Routes Integration Tests', () => {
       expect(quietSession.qualifiedRestMinutes).toBe(55);
     });
   });
+
+  describe('Crib time without falling asleep', () => {
+    it('should count crib time as 50% rest credit when baby never falls asleep', async () => {
+      const { accessToken } = await createUserAndGetToken();
+      const childId = await createTestChild(accessToken);
+
+      // Scenario: Baby put in crib but never fell asleep
+      // Put down at 2:00pm, out of crib at 2:30pm (30 min crib time, no sleep)
+      // Expected: qualifiedRestMinutes = 30 / 2 = 15
+
+      // Create session with putDownAt
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          sessionType: 'NAP',
+          putDownAt: '2024-01-15T14:00:00Z',
+        },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const session = JSON.parse(createResponse.body).data;
+
+      // Skip directly to out of crib (baby never fell asleep)
+      const outResponse = await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${session.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          event: 'out_of_crib',
+          outOfCribAt: '2024-01-15T14:30:00Z',
+        },
+      });
+      expect(outResponse.statusCode).toBe(200);
+      const completedSession = JSON.parse(outResponse.body).data;
+
+      // Verify calculations
+      expect(completedSession.sleepMinutes).toBeNull(); // No sleep
+      expect(completedSession.settlingMinutes).toBe(30); // All 30 min as settling
+      expect(completedSession.awakeCribMinutes).toBe(30);
+      expect(completedSession.qualifiedRestMinutes).toBe(15); // 30 / 2 = 15
+      expect(completedSession.totalMinutes).toBe(30);
+    });
+
+    it('should count longer crib time without sleep correctly', async () => {
+      const { accessToken } = await createUserAndGetToken();
+      const childId = await createTestChild(accessToken);
+
+      // Scenario: Baby in crib for 60 minutes but never sleeps
+      // Expected: qualifiedRestMinutes = 60 / 2 = 30
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: `/api/children/${childId}/sessions`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          sessionType: 'NAP',
+          putDownAt: '2024-01-15T15:00:00Z',
+        },
+      });
+      expect(createResponse.statusCode).toBe(201);
+      const session = JSON.parse(createResponse.body).data;
+
+      const outResponse = await app.inject({
+        method: 'PATCH',
+        url: `/api/children/${childId}/sessions/${session.id}`,
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          event: 'out_of_crib',
+          outOfCribAt: '2024-01-15T16:00:00Z',
+        },
+      });
+      expect(outResponse.statusCode).toBe(200);
+      const completedSession = JSON.parse(outResponse.body).data;
+
+      expect(completedSession.sleepMinutes).toBeNull();
+      expect(completedSession.settlingMinutes).toBe(60);
+      expect(completedSession.qualifiedRestMinutes).toBe(30); // 60 / 2 = 30
+    });
+  });
 });

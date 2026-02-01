@@ -197,6 +197,9 @@ function calculateDurations(
     // Settling time (put down to fell asleep)
     if (putDownAt && asleepAt) {
       settlingMinutes = Math.max(0, Math.round((asleepAt.getTime() - putDownAt.getTime()) / 60000));
+    } else if (putDownAt && outOfCribAt && !asleepAt) {
+      // Baby never fell asleep - entire crib time counts as settling/rest time
+      settlingMinutes = Math.max(0, Math.round((outOfCribAt.getTime() - putDownAt.getTime()) / 60000));
     }
 
     // Post-wake time (woke up to out of crib)
