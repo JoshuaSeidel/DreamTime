@@ -131,6 +131,9 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    networks:
+      - default  # dreamtime-network (for server communication)
+      - swag     # SWAG network (for reverse proxy)
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
       interval: 30s
@@ -145,3 +148,7 @@ networks:
       com.docker.network.bridge.enable_icc: "true"
       com.docker.network.bridge.enable_ip_masquerade: "true"
       com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
+  # Connect to SWAG's network for reverse proxy access
+  swag:
+    external: true
+    name: swag_default  # Change this to match your SWAG network name
