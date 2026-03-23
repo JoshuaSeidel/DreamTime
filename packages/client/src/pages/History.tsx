@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { getSessions, updateSession, createSleepCycle, updateSleepCycle, deleteSleepCycle, type SleepSession, type WakeType } from '@/lib/api';
+import { getSessions, updateSession, createSleepCycle, updateSleepCycle, deleteSleepCycle, deleteSession, type SleepSession, type WakeType } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/toaster';
 
@@ -30,6 +30,7 @@ export default function History() {
   const [eventType, setEventType] = useState<'wake' | 'sleep'>('wake');
   const [eventTime, setEventTime] = useState('');
   const [newWakeType, setNewWakeType] = useState<WakeType>('QUIET');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Get child ID from localStorage
   useEffect(() => {
@@ -377,6 +378,35 @@ export default function History() {
     }
   };
 
+  // Delete an entire session
+  const handleDeleteSession = async () => {
+    if (!selectedSession || !accessToken || !selectedChildId) return;
+
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const result = await deleteSession(accessToken, selectedChildId, selectedSession.id);
+
+      if (result.success) {
+        setSelectedSession(null);
+        setConfirmingDelete(false);
+        await loadSessions();
+        toast.success('Session deleted', 'Sleep session has been removed');
+      } else {
+        toast.error('Failed to delete', result.error?.message || 'Please try again');
+      }
+    } catch (err) {
+      console.error('Failed to delete session:', err);
+      toast.error('Error', 'Failed to delete session');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-0">
@@ -498,7 +528,7 @@ export default function History() {
         <div
           className="fixed inset-0 z-50 bg-black/50 overflow-y-auto"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedSession(null);
+            if (e.target === e.currentTarget) { setSelectedSession(null); setConfirmingDelete(false); }
           }}
         >
           <div className="min-h-full flex items-start justify-center p-4 pt-16 pb-20">
@@ -514,14 +544,39 @@ export default function History() {
                     ? 'Night Sleep'
                     : `Nap ${selectedSession.napNumber || ''}`}
                 </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedSession(null)}
-                >
-                  <X className="w-5 h-5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleDeleteSession}
+                    disabled={isSaving}
+                    className={cn(confirmingDelete && "text-destructive")}
+                    title={confirmingDelete ? "Tap again to confirm delete" : "Delete session"}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => { setSelectedSession(null); setConfirmingDelete(false); }}
+                  >
+                    <X className="w-5 h-5" />
+                  </Button>
+                </div>
               </CardHeader>
+              {confirmingDelete && (
+                <div className="mx-6 mb-2 flex items-center justify-between p-3 bg-destructive/10 rounded-lg">
+                  <span className="text-sm text-destructive font-medium">Delete this session?</span>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(false)} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button size="sm" variant="destructive" onClick={handleDeleteSession} disabled={isSaving}>
+                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              )}
               <CardContent className="space-y-4">
                 {/* Status */}
                 <div className="flex items-center justify-between">
@@ -938,7 +993,7 @@ export default function History() {
                 <Button
                   className="w-full mt-4"
                   variant="outline"
-                  onClick={() => setSelectedSession(null)}
+                  onClick={() => { setSelectedSession(null); setConfirmingDelete(false); }}
                 >
                   Close
                 </Button>

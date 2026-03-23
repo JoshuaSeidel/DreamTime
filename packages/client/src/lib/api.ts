@@ -444,6 +444,18 @@ export async function deleteSleepCycle(
   );
 }
 
+export async function deleteSession(
+  accessToken: string,
+  childId: string,
+  sessionId: string
+): Promise<ApiResponse<{ message: string }>> {
+  return fetchWithAuth<{ message: string }>(
+    `/children/${childId}/sessions/${sessionId}`,
+    { method: 'DELETE' },
+    accessToken
+  );
+}
+
 // Recalculate today's sessions (fix durations after bug fixes)
 export interface RecalculateResult {
   recalculated: number;
