@@ -16,8 +16,8 @@ const envSchema = z.object({
   PORT: z.string().transform(Number).default('3000'),
   DB_TYPE: DB_TYPE_ENUM.default('sqlite'),
   DATABASE_URL: z.string().optional(),
-  JWT_EXPIRES_IN: z.string().default('15m'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  JWT_EXPIRES_IN: z.string().default('1h'),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('90d'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
   DATA_DIR: z.string().default('./data'),
   // MQTT Configuration

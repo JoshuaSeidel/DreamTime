@@ -45,12 +45,28 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 function App() {
   const { isEnabled, lockApp } = useBiometricStore();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const refreshAccessToken = useAuthStore((state) => state.refreshAccessToken);
 
-  // Lock app when it goes to background (visibility change)
+  // Proactively refresh tokens on startup and when the PWA becomes visible
+  // again. Without this, a stored access token that expired while the app was
+  // closed would force a 401 on the first API call, and any race during the
+  // refresh dance can manifest as a logout.
+  useEffect(() => {
+    const refreshToken = useAuthStore.getState().refreshToken;
+    if (refreshToken) {
+      void refreshAccessToken();
+    }
+  }, [refreshAccessToken]);
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && isEnabled && isAuthenticated) {
         lockApp();
+      } else if (document.visibilityState === 'visible' && isAuthenticated) {
+        const refreshToken = useAuthStore.getState().refreshToken;
+        if (refreshToken) {
+          void refreshAccessToken();
+        }
       }
     };
 
@@ -58,7 +74,7 @@ function App() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isEnabled, isAuthenticated, lockApp]);
+  }, [isEnabled, isAuthenticated, lockApp, refreshAccessToken]);
 
   return (
     <div className="min-h-screen bg-background text-foreground w-full max-w-full overflow-x-hidden">

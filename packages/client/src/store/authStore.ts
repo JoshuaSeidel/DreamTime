@@ -80,8 +80,12 @@ export const useAuthStore = create<AuthState>()(
             });
 
             if (!response.ok) {
-              // Refresh token is invalid, log out
-              get().logout();
+              // Only log out when the server definitively rejects the refresh
+              // token (401/403). Transient errors (5xx, gateway timeouts) should
+              // leave the user signed in so the next attempt can succeed.
+              if (response.status === 401 || response.status === 403) {
+                get().logout();
+              }
               return false;
             }
 

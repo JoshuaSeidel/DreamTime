@@ -12,9 +12,12 @@ precacheAndRoute(self.__WB_MANIFEST);
 // Clean up old caches
 cleanupOutdatedCaches();
 
-// Cache API calls with NetworkFirst strategy
+// Cache API calls with NetworkFirst strategy.
+// Auth endpoints are NEVER cached — caching token responses would log users out
+// (or worse, replay stale tokens) when offline or after the cache TTL.
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/'),
+  ({ url }) =>
+    url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/'),
   new NetworkFirst({
     cacheName: 'api-cache',
     plugins: [
