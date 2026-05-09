@@ -252,7 +252,8 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const scheduledNaps = napSessions.filter(s => !s.isAdHoc);
         const adHocNaps = napSessions.filter(s => s.isAdHoc && s.state === SessionState.COMPLETED);
 
-        // Count completed SCHEDULED naps only (ad-hoc don't count toward nap 1/2)
+        // Count completed SCHEDULED naps only (ad-hoc don't count toward nap 1/2).
+        // Missed naps DO count here so the schedule advances past the skipped slot.
         const completedNaps = scheduledNaps.filter(
           s => s.state === SessionState.COMPLETED
         ).length;
@@ -265,8 +266,11 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         // Calculate day schedule using qualified rest
         // Scheduled naps count as nap 1/2 for sequence timing
         // Ad-hoc naps contribute to total rest credit for sleep debt/bedtime calculation
-        // IMPORTANT: Must match today-summary logic exactly - include all completed naps
-        const completedScheduledNaps = scheduledNaps.filter(s => s.state === SessionState.COMPLETED);
+        // IMPORTANT: Must match today-summary logic exactly - include all completed naps.
+        // Missed naps are excluded from rest credit math (no sleep happened).
+        const completedScheduledNaps = scheduledNaps.filter(
+          s => s.state === SessionState.COMPLETED && !s.isMissed
+        );
         const scheduledNapDurations = completedScheduledNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
         // Get actual nap end times (wokeUpAt) for precise timing calculations
         const scheduledNapEndTimes = completedScheduledNaps
@@ -423,7 +427,12 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const napSessions = todaySessions.filter(s => s.sessionType === SessionType.NAP);
         const scheduledNaps = napSessions.filter(s => !s.isAdHoc);
         const adHocNaps = napSessions.filter(s => s.isAdHoc && s.state === SessionState.COMPLETED);
+        // completedNaps: every finished slot (including missed) — used to advance the
+        // schedule and to render each slot's status badge.
+        // restCreditingNaps: only naps where sleep actually occurred — used for sleep
+        // debt, bedtime adjustment, and total-sleep displays.
         const completedNaps = scheduledNaps.filter(s => s.state === SessionState.COMPLETED);
+        const restCreditingNaps = completedNaps.filter(s => !s.isMissed);
         const inProgressNap = scheduledNaps.find(s => s.state === SessionState.ASLEEP || s.state === SessionState.PENDING);
 
         // Determine current state
@@ -437,17 +446,18 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         // Build nap durations for bedtime calculation
         // Use qualifiedRestMinutes which accounts for awake crib time:
         // Qualified Rest = (Awake Crib Time ÷ 2) + Actual Sleep Time
-        // This gives credit for rest even when baby doesn't sleep
-        const scheduledNapDurations = completedNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
+        // This gives credit for rest even when baby doesn't sleep.
+        // Missed naps are excluded — no rest happened, so they shouldn't shift bedtime.
+        const scheduledNapDurations = restCreditingNaps.map(s => s.qualifiedRestMinutes ?? s.sleepMinutes ?? 0);
         // Get actual nap end times (wokeUpAt) for precise timing calculations
-        const scheduledNapEndTimes = completedNaps
+        const scheduledNapEndTimes = restCreditingNaps
           .map(s => s.wokeUpAt)
           .filter((t): t is Date => t !== null);
         const adHocNapDurations = adHocNaps.map(s => s.qualifiedRestMinutes ?? 0);
         const napDurations = [...scheduledNapDurations, ...adHocNapDurations];
         const totalQualifiedRestMinutes = napDurations.reduce((sum, d) => sum + d, 0);
         // Also track actual sleep for display (includes both scheduled and ad-hoc)
-        const scheduledActualSleepMinutes = completedNaps.reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
+        const scheduledActualSleepMinutes = restCreditingNaps.reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
         const adHocActualSleepMinutes = adHocNaps.reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
         const totalActualSleepMinutes = scheduledActualSleepMinutes + adHocActualSleepMinutes;
 
@@ -512,10 +522,10 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
           if (completedNap) {
             naps.push({
               napNumber: napNum,
-              duration: completedNap.sleepMinutes,
-              asleepAt: completedNap.asleepAt,
-              wokeUpAt: completedNap.wokeUpAt,
-              status: 'completed' as const,
+              duration: completedNap.isMissed ? null : completedNap.sleepMinutes,
+              asleepAt: completedNap.isMissed ? null : completedNap.asleepAt,
+              wokeUpAt: completedNap.isMissed ? null : completedNap.wokeUpAt,
+              status: completedNap.isMissed ? ('missed' as const) : ('completed' as const),
             });
           } else if (isInProgress) {
             naps.push({

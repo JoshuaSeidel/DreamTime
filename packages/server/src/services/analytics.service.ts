@@ -158,6 +158,12 @@ export async function getDailySummary(
   let wakeTime: Date | null = null;
 
   for (const session of sessions) {
+    // Missed naps are bookkeeping only — no sleep happened, so they shouldn't
+    // skew totals, averages, or counts.
+    if (session.sessionType === SessionType.NAP && session.isMissed) {
+      continue;
+    }
+
     const sleepMins = session.sleepMinutes ?? 0;
     totalSleepMinutes += sleepMins;
 

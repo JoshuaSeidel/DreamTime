@@ -267,6 +267,8 @@ export interface SleepSession {
   napNumber: number | null;
   // Ad-hoc nap tracking
   isAdHoc: boolean;
+  // True when the user marked this nap slot as missed/skipped.
+  isMissed: boolean;
   location: NapLocation;
   putDownAt: string | null;
   asleepAt: string | null;
@@ -313,7 +315,8 @@ export async function createSession(
   data: {
     sessionType: 'NAP' | 'NIGHT_SLEEP';
     napNumber?: number;
-    putDownAt: string;
+    putDownAt?: string;
+    isMissed?: boolean;
   }
 ): Promise<ApiResponse<SleepSession>> {
   return fetchWithAuth<SleepSession>(
@@ -685,7 +688,7 @@ export interface TodaySummaryNap {
   duration: number | null;
   asleepAt: string | null;
   wokeUpAt: string | null;
-  status: 'completed' | 'in_progress' | 'upcoming';
+  status: 'completed' | 'in_progress' | 'upcoming' | 'missed';
 }
 
 export interface TodaySummaryAdHocNap {

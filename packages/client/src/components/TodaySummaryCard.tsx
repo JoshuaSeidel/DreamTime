@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, AlertTriangle, CheckCircle, Loader2, Car } from 'lucide-react';
+import { Moon, Clock, AlertTriangle, CheckCircle, Loader2, Car, SkipForward } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { getTodaySummary, type TodaySummary, type NapLocation } from '@/lib/api';
@@ -137,7 +137,8 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
                   "flex items-center justify-between p-2 rounded-lg",
                   nap.status === 'completed' && "bg-green-500/10",
                   nap.status === 'in_progress' && "bg-blue-500/10",
-                  nap.status === 'upcoming' && "bg-muted/50"
+                  nap.status === 'upcoming' && "bg-muted/50",
+                  nap.status === 'missed' && "bg-muted/30"
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -145,10 +146,15 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
                     <CheckCircle className="w-4 h-4 text-green-500" />
                   ) : nap.status === 'in_progress' ? (
                     <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                  ) : nap.status === 'missed' ? (
+                    <SkipForward className="w-4 h-4 text-muted-foreground" />
                   ) : (
                     <Clock className="w-4 h-4 text-muted-foreground" />
                   )}
-                  <span className="text-sm font-medium">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    nap.status === 'missed' && "text-muted-foreground line-through"
+                  )}>
                     Nap {nap.napNumber}
                   </span>
                 </div>
@@ -163,6 +169,8 @@ export default function TodaySummaryCard({ childId, refreshTrigger }: TodaySumma
                     </span>
                   ) : nap.status === 'in_progress' ? (
                     <span className="text-blue-500">In progress</span>
+                  ) : nap.status === 'missed' ? (
+                    <span>Missed</span>
                   ) : (
                     <span>-</span>
                   )}

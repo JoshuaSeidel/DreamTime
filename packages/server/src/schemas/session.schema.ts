@@ -6,6 +6,10 @@ export const createSessionSchema = z.object({
   napNumber: z.number().int().min(1).max(3).optional(),
   putDownAt: z.string().datetime().optional(),
   notes: z.string().max(500).optional(),
+  // Mark this nap as missed/skipped. When true the session is created in COMPLETED
+  // state with no timestamps and counts toward "this slot is done" without contributing
+  // sleep credit. Only valid for NAP sessions.
+  isMissed: z.boolean().optional(),
 });
 
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
@@ -104,6 +108,8 @@ export interface SleepSessionResponse {
 
   // Ad-hoc nap fields
   isAdHoc: boolean;
+  // True when the user marked this nap slot as missed/skipped.
+  isMissed: boolean;
   location: string;
 
   putDownAt: Date | null;

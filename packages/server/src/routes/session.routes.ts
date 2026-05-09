@@ -278,6 +278,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
             napNumber: { type: 'number', minimum: 1, maximum: 3 },
             putDownAt: { type: 'string', format: 'date-time' },
             notes: { type: 'string', maxLength: 500 },
+            isMissed: { type: 'boolean' },
           },
         },
       },

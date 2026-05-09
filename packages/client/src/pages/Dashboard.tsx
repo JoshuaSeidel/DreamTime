@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, Loader2, Plus, Baby, Car, AlertTriangle } from 'lucide-react';
+import { Moon, Clock, Loader2, Plus, Baby, Car, AlertTriangle, SkipForward } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
@@ -46,7 +46,10 @@ export default function Dashboard() {
   const [activeSession, setActiveSession] = useState<SleepSession | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [todaySummary, setTodaySummary] = useState({ totalMinutes: 0, napCount: 0 });
+  // napCount excludes missed naps (used for the "Naps" stat).
+  // napSlotCount includes missed naps and represents how many slots are done
+  // (used to default the next napNumber in the SleepTypeDialog).
+  const [todaySummary, setTodaySummary] = useState({ totalMinutes: 0, napCount: 0, napSlotCount: 0 });
   const [showSleepTypeDialog, setShowSleepTypeDialog] = useState(false);
   const [nextAction, setNextAction] = useState<NextActionRecommendation | null>(null);
   const [hasSchedule, setHasSchedule] = useState(false);
@@ -109,9 +112,13 @@ export default function Dashboard() {
         });
 
         const totalMinutes = todaySessions.reduce((sum, s) => sum + (s.sleepMinutes || 0), 0);
-        const napCount = todaySessions.filter((s) => s.sessionType === 'NAP').length;
+        const napSessionsToday = todaySessions.filter((s) => s.sessionType === 'NAP');
+        // Display stat: only naps where sleep actually happened.
+        const napCount = napSessionsToday.filter((s) => !s.isMissed).length;
+        // Slot count includes missed naps so the next-nap dialog default is correct.
+        const napSlotCount = napSessionsToday.length;
 
-        setTodaySummary({ totalMinutes, napCount });
+        setTodaySummary({ totalMinutes, napCount, napSlotCount });
       }
 
       // Get schedule for crib time settings
@@ -349,6 +356,37 @@ export default function Dashboard() {
     } finally {
       setIsActionLoading(false);
       setPendingPutDownTime(null); // Clear the pending time
+    }
+  };
+
+  const handleSkipNap = async () => {
+    if (!accessToken || !selectedChildId) return;
+    if (!nextAction || nextAction.action !== 'NAP' || !nextAction.napNumber) return;
+
+    const napNumber = nextAction.napNumber;
+    setIsActionLoading(true);
+    try {
+      const result = await createSession(accessToken, selectedChildId, {
+        sessionType: 'NAP',
+        napNumber,
+        isMissed: true,
+      });
+
+      if (result.success) {
+        toast.success(
+          `Nap ${napNumber} skipped`,
+          'Schedule moved on; no rest credit added'
+        );
+        loadSessionData();
+        setSummaryRefreshTrigger(prev => prev + 1);
+      } else {
+        toast.error('Failed to skip', result.error?.message || 'Try again');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Skip nap error:', err);
+      toast.error('Error', 'Something went wrong');
+    } finally {
+      setIsActionLoading(false);
     }
   };
 
@@ -658,6 +696,21 @@ export default function Dashboard() {
                         ))}
                       </ul>
                     )}
+                    {hasSchedule &&
+                      nextAction?.action === 'NAP' &&
+                      nextAction.napNumber &&
+                      !activeSession && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-3 h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={handleSkipNap}
+                          disabled={isActionLoading}
+                        >
+                          <SkipForward className="w-3 h-3 mr-1" />
+                          Skip Nap {nextAction.napNumber}
+                        </Button>
+                      )}
                   </div>
                 </div>
               </CardContent>
@@ -671,7 +724,7 @@ export default function Dashboard() {
         open={showSleepTypeDialog}
         onOpenChange={setShowSleepTypeDialog}
         onSelect={handleSleepTypeSelect}
-        currentNapCount={todaySummary.napCount}
+        currentNapCount={todaySummary.napSlotCount}
         scheduleType={schedule?.type}
       />
 

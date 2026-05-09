@@ -4,6 +4,7 @@ import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import {
   Role,
   SessionState,
+  SessionType,
   InviteStatus,
   WakeType,
   isValidStateTransition,
@@ -67,6 +68,7 @@ interface SessionWithUserInfo {
   state: string;
   napNumber: number | null;
   isAdHoc: boolean;
+  isMissed: boolean;
   location: string;
   putDownAt: Date | null;
   asleepAt: Date | null;
@@ -340,6 +342,54 @@ export async function createSession(
   timezone?: string
 ): Promise<SleepSessionResponse> {
   await verifyChildAccess(userId, childId, true);
+
+  // Missed nap: marks a scheduled nap slot as skipped without recording any sleep.
+  // The session goes straight to COMPLETED with zeroed durations so the schedule
+  // calculator advances past this slot without crediting any rest.
+  if (input.isMissed) {
+    if (input.sessionType !== SessionType.NAP) {
+      throw new SessionServiceError(
+        'Only naps can be marked as missed',
+        'INVALID_MISSED_SESSION',
+        400
+      );
+    }
+    if (!input.napNumber) {
+      throw new SessionServiceError(
+        'napNumber is required when marking a nap as missed',
+        'INVALID_MISSED_SESSION',
+        400
+      );
+    }
+
+    const session = await prisma.sleepSession.create({
+      data: {
+        childId,
+        sessionType: SessionType.NAP,
+        state: SessionState.COMPLETED,
+        napNumber: input.napNumber,
+        isMissed: true,
+        putDownAt: null,
+        notes: input.notes ?? null,
+        timezone: timezone ?? null,
+        totalMinutes: 0,
+        sleepMinutes: 0,
+        settlingMinutes: 0,
+        postWakeMinutes: 0,
+        awakeCribMinutes: 0,
+        qualifiedRestMinutes: 0,
+        createdByUserId: userId,
+        lastUpdatedByUserId: userId,
+      },
+      include: {
+        createdByUser: { select: { id: true, name: true, email: true } },
+        lastUpdatedByUser: { select: { id: true, name: true, email: true } },
+        sleepCycles: { orderBy: { cycleNumber: 'asc' } },
+      },
+    });
+
+    return formatSession(session);
+  }
 
   const putDownAt = input.putDownAt ? new Date(input.putDownAt) : new Date();
 

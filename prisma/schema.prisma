@@ -277,6 +277,10 @@ model SleepSession {
   // - Under 15 min: 0 credit (just lowers sleep pressure slightly)
   // - 15+ min: sleepMinutes / 2 (half credit)
   isAdHoc       Boolean  @default(false)
+  // Missed nap - baby was supposed to nap but never put in crib (e.g., out at appointment).
+  // Missed naps stop the schedule from recommending this slot again, but contribute zero
+  // qualified rest so sleep debt naturally rises.
+  isMissed      Boolean  @default(false)
   // NapLocation: CRIB, CAR, STROLLER, CARRIER, SWING, PLAYPEN, OTHER
   location      String   @default("CRIB")
 

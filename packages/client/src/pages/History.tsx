@@ -163,7 +163,10 @@ export default function History() {
     return type === 'NIGHT_SLEEP' ? Moon : Sun;
   };
 
-  const getStateBadge = (state: string) => {
+  const getStateBadge = (state: string, isMissed?: boolean) => {
+    if (isMissed) {
+      return <Badge variant="secondary">Missed</Badge>;
+    }
     switch (state) {
       case 'COMPLETED':
         return <Badge variant="success">Completed</Badge>;
@@ -490,7 +493,7 @@ export default function History() {
                                 ? 'Night Sleep'
                                 : `Nap${session.napNumber ? ` ${session.napNumber}` : ''}`}
                             </span>
-                            {getStateBadge(session.state)}
+                            {getStateBadge(session.state, session.isMissed)}
                           </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                             <Calendar className="w-3 h-3" />
@@ -581,7 +584,7 @@ export default function History() {
                 {/* Status */}
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  {getStateBadge(selectedSession.state)}
+                  {getStateBadge(selectedSession.state, selectedSession.isMissed)}
                 </div>
 
                 {/* Date */}
