@@ -630,6 +630,20 @@ function calculateBedtime(
   };
 }
 
+// Returns the schedule type that should drive nap-count / bedtime decisions.
+// An active (uncompleted) 2-to-1 transition flips a TWO_NAP schedule to TRANSITION
+// so the day is calculated as a single longer nap. Once the transition completes,
+// the schedule type is updated to ONE_NAP elsewhere and this falls through.
+export function getEffectiveScheduleType(
+  schedule: { type: string },
+  transition?: { completedAt: Date | string | null } | null
+): ScheduleType {
+  if (transition && !transition.completedAt && schedule.type === ScheduleType.TWO_NAP) {
+    return ScheduleType.TRANSITION;
+  }
+  return schedule.type as ScheduleType;
+}
+
 // Main function to calculate full day schedule
 export function calculateDaySchedule(
   wakeTime: Date,
@@ -643,7 +657,7 @@ export function calculateDaySchedule(
   const warnings: string[] = [];
   const naps: NapRecommendation[] = [];
 
-  const scheduleType = schedule.type as ScheduleType;
+  const scheduleType = getEffectiveScheduleType(schedule, transition);
 
   if (scheduleType === ScheduleType.TWO_NAP) {
     // Calculate 2-nap schedule

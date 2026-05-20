@@ -6,6 +6,7 @@ import {
   calculateDaySchedule,
   calculateNextAction,
   calculateAdjustedBedtime,
+  getEffectiveScheduleType,
 } from '../services/schedule.calculator.service.js';
 import { getActiveSchedule, getActiveTransition, ScheduleServiceError } from '../services/schedule.service.js';
 import {
@@ -461,8 +462,9 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const adHocActualSleepMinutes = adHocNaps.reduce((sum, s) => sum + (s.sleepMinutes ?? 0), 0);
         const totalActualSleepMinutes = scheduledActualSleepMinutes + adHocActualSleepMinutes;
 
-        // Determine schedule type
-        const scheduleType = schedule.type;
+        // Determine effective schedule type. During an active 2-to-1 transition,
+        // schedule.type stays 'TWO_NAP' but we treat the day as a single nap.
+        const scheduleType = getEffectiveScheduleType(schedule, transition);
         const isOnOneNapSchedule = scheduleType === 'ONE_NAP' || scheduleType === 'TRANSITION';
 
         // Calculate expected nap goal

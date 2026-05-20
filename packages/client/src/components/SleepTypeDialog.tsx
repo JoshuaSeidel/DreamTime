@@ -27,10 +27,9 @@ function getMaxNaps(scheduleType: ScheduleType): number {
     case 'TWO_NAP':
       return 2;
     case 'ONE_NAP':
-      return 1;
     case 'TRANSITION':
-      // During transition, could be 1 or 2 naps - allow up to 2
-      return 2;
+      // Transition (2-to-1) is calculated as a single nap day per consultant rules.
+      return 1;
     default:
       // No schedule set - allow up to 3 naps
       return 3;

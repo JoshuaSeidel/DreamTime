@@ -56,6 +56,10 @@ export default function Dashboard() {
   const [schedule, setSchedule] = useState<SleepSchedule | null>(null);
   const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
   const [sleepDebt, setSleepDebt] = useState<{ minutes: number; note: string | null }>({ minutes: 0, note: null });
+  // Effective schedule type from the today-summary response. This reflects an
+  // active 2-to-1 transition (TWO_NAP → TRANSITION) so the nap dialog and any
+  // type-driven UI behave as 1-nap during the transition window.
+  const [effectiveScheduleType, setEffectiveScheduleType] = useState<SleepSchedule['type'] | null>(null);
 
   // Onboarding wizard state - show automatically for new users
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -140,12 +144,16 @@ export default function Dashboard() {
             minutes: summaryResult.data.sleepDebtMinutes,
             note: summaryResult.data.sleepDebtNote,
           });
+          setEffectiveScheduleType(
+            summaryResult.data.scheduleType as SleepSchedule['type']
+          );
         }
       } else {
         setSchedule(null);
         setNextAction(null);
         setHasSchedule(false);
         setSleepDebt({ minutes: 0, note: null });
+        setEffectiveScheduleType(null);
       }
     } catch (err) {
       console.error('[Dashboard] Failed to load session data:', err);
@@ -725,7 +733,7 @@ export default function Dashboard() {
         onOpenChange={setShowSleepTypeDialog}
         onSelect={handleSleepTypeSelect}
         currentNapCount={todaySummary.napSlotCount}
-        scheduleType={schedule?.type}
+        scheduleType={effectiveScheduleType ?? schedule?.type}
       />
 
       {/* Onboarding Wizard - shows automatically for new users */}
