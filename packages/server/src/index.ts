@@ -9,6 +9,7 @@ import { registerErrorHandler } from './plugins/errorHandler.js';
 import { registerRoutes } from './routes/index.js';
 import { startReminderScheduler, stopReminderScheduler } from './services/reminder.scheduler.service.js';
 import { initializeMqtt, disconnectMqtt } from './services/mqtt.service.js';
+import { backfillTransitionScheduleTypes } from './services/schedule.service.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -50,6 +51,17 @@ async function start() {
 
   // Connect to database
   await connectDatabase();
+
+  // Idempotent backfill: flip any active TWO_NAP schedule with an open
+  // 2-to-1 transition to TRANSITION so calculators treat it as a 1-nap day.
+  try {
+    const fixed = await backfillTransitionScheduleTypes();
+    if (fixed > 0) {
+      console.log(`Backfilled ${fixed} schedule(s) to TRANSITION type`);
+    }
+  } catch (error) {
+    console.error('Transition schedule-type backfill failed:', error);
+  }
 
   // Start the reminder scheduler for push notifications
   startReminderScheduler();

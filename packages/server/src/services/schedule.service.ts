@@ -424,3 +424,36 @@ export async function getTransitionHistory(
 
   return transitions.map(formatTransition);
 }
+
+// One-time idempotent backfill: any active SleepSchedule whose type is still
+// TWO_NAP while there's an open (uncompleted) ScheduleTransition for the same
+// child gets flipped to TRANSITION. This corrects schedules left in TWO_NAP
+// by transitions started before startTransition() was updated to flip the
+// schedule type, and any other drift between the two records.
+//
+// Safe to run on every server boot — it only touches the affected rows.
+export async function backfillTransitionScheduleTypes(): Promise<number> {
+  const openTransitions = await prisma.scheduleTransition.findMany({
+    where: { completedAt: null },
+    select: { childId: true },
+  });
+
+  if (openTransitions.length === 0) {
+    return 0;
+  }
+
+  const childIds = openTransitions.map(t => t.childId);
+
+  const result = await prisma.sleepSchedule.updateMany({
+    where: {
+      childId: { in: childIds },
+      isActive: true,
+      type: ScheduleType.TWO_NAP,
+    },
+    data: {
+      type: ScheduleType.TRANSITION,
+    },
+  });
+
+  return result.count;
+}
