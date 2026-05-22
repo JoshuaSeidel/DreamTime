@@ -7,6 +7,7 @@ import {
   calculateNextAction,
   calculateAdjustedBedtime,
   getEffectiveScheduleType,
+  getOneNapGoalMinutes,
 } from '../services/schedule.calculator.service.js';
 import { getActiveSchedule, getActiveTransition, ScheduleServiceError } from '../services/schedule.service.js';
 import {
@@ -476,12 +477,14 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const isOnOneNapSchedule = scheduleType === 'ONE_NAP' || scheduleType === 'TRANSITION';
 
         // Calculate expected nap goal. Consultant target for a 1-nap day is a
-        // single 150-min nap (2.5 hr); 2-nap days target 60 min per nap.
-        // The 1-nap number must match calculateBedtime's oneNapGoalMinutes so
-        // the displayed sleep debt and the recommended bedtime tell the same
-        // story.
-        const napGoalMinutes = isOnOneNapSchedule ? 150 : 60;
-        const expectedTotalNapMinutes = isOnOneNapSchedule ? 150 : 120;
+        // single 150-min nap (2.5 hr) once fully transitioned, ramping up from
+        // 90 min during the early weeks of an active 2-to-1 transition. 2-nap
+        // days target 60 min per nap. The 1-nap number must match
+        // calculateBedtime's oneNapGoalMinutes so the displayed sleep debt and
+        // the recommended bedtime tell the same story.
+        const oneNapGoal = getOneNapGoalMinutes(transition);
+        const napGoalMinutes = isOnOneNapSchedule ? oneNapGoal : 60;
+        const expectedTotalNapMinutes = isOnOneNapSchedule ? oneNapGoal : 120;
 
         // Sleep debt calculation - use qualified rest for debt calculation
         let sleepDebtMinutes = 0;

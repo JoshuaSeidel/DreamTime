@@ -436,7 +436,8 @@ function calculateBedtime(
   totalNapMinutes: number,
   expectedNapMinutes: number,
   scheduleType?: ScheduleType,
-  napDurations?: number[]
+  napDurations?: number[],
+  transition?: TransitionResponse | null
 ): BedtimeRecommendation {
   const notes: string[] = [];
 
@@ -465,14 +466,16 @@ function calculateBedtime(
   if (type === ScheduleType.ONE_NAP || type === ScheduleType.TRANSITION) {
     // 1-nap schedule bedtime calculation.
     //
-    // Consultant target for a 1-nap day is a 150-min nap (2.5 hr). Bedtime is
+    // Goal is a 150-min nap when fully transitioned, ramping up from 90 min
+    // during the early weeks of an active transition so bedtime isn't slammed
+    // unrealistically early in week 1. Bedtime is
     //   recommended = goalBedtime − max(0, goal − napDuration)
     // capped by the wake-window ceiling from nap end so it can't overshoot
     // what baby can physically stay awake for.
     //
     // Callers signal "no nap yet" by omitting napDurations entirely and
     // "nap is done (or was missed)" by passing a value (zero for missed).
-    const oneNapGoalMinutes = 150;
+    const oneNapGoalMinutes = getOneNapGoalMinutes(transition);
     const napHasOccurred = napDurations !== undefined && napDurations.length > 0;
     const napDuration = napDurations?.[0] ?? totalNapMinutes;
 
@@ -649,6 +652,29 @@ export function getEffectiveScheduleType(
   return schedule.type as ScheduleType;
 }
 
+// Returns the expected single-nap goal in minutes.
+//
+// Fully transitioned 1-nap days target 150 min (consultant 2.5 hr). During an
+// active 2-to-1 transition the baby is still learning to consolidate into one
+// nap and can't realistically hit 150 min from day one, so we ramp the goal
+// linearly from 90 min (week 1) to 150 min (final week). Used by both the
+// bedtime calculator and the today-summary sleep-debt display so they tell
+// the same story.
+export function getOneNapGoalMinutes(
+  transition?: { currentWeek: number; targetWeeks: number; completedAt: Date | string | null } | null
+): number {
+  const startGoal = 90;
+  const endGoal = 150;
+
+  if (!transition || transition.completedAt) {
+    return endGoal;
+  }
+
+  const totalWeeks = Math.max(2, transition.targetWeeks);
+  const progress = Math.max(0, Math.min(1, (transition.currentWeek - 1) / (totalWeeks - 1)));
+  return Math.round(startGoal + (endGoal - startGoal) * progress);
+}
+
 // Main function to calculate full day schedule
 export function calculateDaySchedule(
   wakeTime: Date,
@@ -707,7 +733,8 @@ export function calculateDaySchedule(
       actualNapMinutes,
       expectedNapMinutes,
       ScheduleType.TWO_NAP,
-      actualNapDurations
+      actualNapDurations,
+      transition
     );
 
     return {
@@ -739,7 +766,8 @@ export function calculateDaySchedule(
       actualNapMinutes,
       expectedNapMinutes,
       scheduleType,
-      actualNapDurations
+      actualNapDurations,
+      transition
     );
 
     return {
