@@ -433,35 +433,72 @@ export async function getTransitionHistory(
   return transitions.map(formatTransition);
 }
 
-// One-time idempotent backfill: any active SleepSchedule whose type is still
-// TWO_NAP while there's an open (uncompleted) ScheduleTransition for the same
-// child gets flipped to TRANSITION. This corrects schedules left in TWO_NAP
-// by transitions started before startTransition() was updated to flip the
-// schedule type, and any other drift between the two records.
+// Idempotent startup hook for the 2-to-1 transition state machine.
+// Runs two passes:
 //
-// Safe to run on every server boot — it only touches the affected rows.
-export async function backfillTransitionScheduleTypes(): Promise<number> {
-  const openTransitions = await prisma.scheduleTransition.findMany({
+// 1. Auto-completes any open transition whose calendar duration
+//    (startedAt + targetWeeks * 7 days) has elapsed. The matching schedule
+//    is flipped to ONE_NAP so calculators stop treating it as a transition.
+//
+// 2. For every still-open transition, flips its active schedule from
+//    TWO_NAP to TRANSITION if it's drifted out of sync (e.g. transitions
+//    started before startTransition() began updating the schedule row).
+//
+// Safe to run on every server boot — it only touches affected rows.
+export async function backfillTransitionScheduleTypes(): Promise<{
+  schedulesFlipped: number;
+  transitionsAutoCompleted: number;
+}> {
+  // ---- Pass 1: auto-complete expired transitions ----
+  const candidates = await prisma.scheduleTransition.findMany({
+    where: { completedAt: null },
+    select: { id: true, childId: true, startedAt: true, targetWeeks: true },
+  });
+
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const now = new Date();
+  let autoCompleted = 0;
+
+  for (const t of candidates) {
+    const targetWeeks = t.targetWeeks ?? 6;
+    const expectedEnd = t.startedAt.getTime() + targetWeeks * msPerWeek;
+    if (expectedEnd > now.getTime()) continue;
+
+    await prisma.$transaction([
+      prisma.scheduleTransition.update({
+        where: { id: t.id },
+        data: { completedAt: now },
+      }),
+      prisma.sleepSchedule.updateMany({
+        where: { childId: t.childId, isActive: true },
+        data: { type: ScheduleType.ONE_NAP },
+      }),
+    ]);
+    autoCompleted += 1;
+  }
+
+  // ---- Pass 2: flip TWO_NAP schedules under any still-open transition ----
+  const stillOpen = await prisma.scheduleTransition.findMany({
     where: { completedAt: null },
     select: { childId: true },
   });
 
-  if (openTransitions.length === 0) {
-    return 0;
+  if (stillOpen.length === 0) {
+    return { schedulesFlipped: 0, transitionsAutoCompleted: autoCompleted };
   }
 
-  const childIds = openTransitions.map(t => t.childId);
-
-  const result = await prisma.sleepSchedule.updateMany({
+  const childIds = stillOpen.map(t => t.childId);
+  const flipResult = await prisma.sleepSchedule.updateMany({
     where: {
       childId: { in: childIds },
       isActive: true,
       type: ScheduleType.TWO_NAP,
     },
-    data: {
-      type: ScheduleType.TRANSITION,
-    },
+    data: { type: ScheduleType.TRANSITION },
   });
 
-  return result.count;
+  return {
+    schedulesFlipped: flipResult.count,
+    transitionsAutoCompleted: autoCompleted,
+  };
 }

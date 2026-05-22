@@ -52,15 +52,21 @@ async function start() {
   // Connect to database
   await connectDatabase();
 
-  // Idempotent backfill: flip any active TWO_NAP schedule with an open
-  // 2-to-1 transition to TRANSITION so calculators treat it as a 1-nap day.
+  // Idempotent transition maintenance: auto-complete expired transitions
+  // (startedAt + targetWeeks elapsed → schedule flipped to ONE_NAP) and
+  // re-sync any drift between active transitions and schedule type.
   try {
-    const fixed = await backfillTransitionScheduleTypes();
-    if (fixed > 0) {
-      console.log(`Backfilled ${fixed} schedule(s) to TRANSITION type`);
+    const result = await backfillTransitionScheduleTypes();
+    if (result.transitionsAutoCompleted > 0) {
+      console.log(
+        `Auto-completed ${result.transitionsAutoCompleted} expired transition(s) → ONE_NAP`
+      );
+    }
+    if (result.schedulesFlipped > 0) {
+      console.log(`Flipped ${result.schedulesFlipped} schedule(s) to TRANSITION type`);
     }
   } catch (error) {
-    console.error('Transition schedule-type backfill failed:', error);
+    console.error('Transition maintenance pass failed:', error);
   }
 
   // Start the reminder scheduler for push notifications
