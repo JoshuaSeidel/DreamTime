@@ -467,9 +467,13 @@ export async function calculatorRoutes(app: FastifyInstance): Promise<void> {
         const scheduleType = getEffectiveScheduleType(schedule, transition);
         const isOnOneNapSchedule = scheduleType === 'ONE_NAP' || scheduleType === 'TRANSITION';
 
-        // Calculate expected nap goal
-        const napGoalMinutes = isOnOneNapSchedule ? 90 : 60; // 90 min for 1-nap, 60 min per nap for 2-nap
-        const expectedTotalNapMinutes = isOnOneNapSchedule ? 90 : 120; // Single 90min nap or 2x60min naps
+        // Calculate expected nap goal. Consultant target for a 1-nap day is a
+        // single 150-min nap (2.5 hr); 2-nap days target 60 min per nap.
+        // The 1-nap number must match calculateBedtime's oneNapGoalMinutes so
+        // the displayed sleep debt and the recommended bedtime tell the same
+        // story.
+        const napGoalMinutes = isOnOneNapSchedule ? 150 : 60;
+        const expectedTotalNapMinutes = isOnOneNapSchedule ? 150 : 120;
 
         // Sleep debt calculation - use qualified rest for debt calculation
         let sleepDebtMinutes = 0;

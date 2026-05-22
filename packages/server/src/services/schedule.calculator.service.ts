@@ -463,35 +463,37 @@ function calculateBedtime(
   let recommended: Date;
 
   if (type === ScheduleType.ONE_NAP || type === ScheduleType.TRANSITION) {
-    // 1-nap schedule bedtime calculation
+    // 1-nap schedule bedtime calculation.
+    //
+    // Consultant target for a 1-nap day is a 150-min nap (2.5 hr). The old
+    // implementation treated 90 min as "good enough" and tied recommendations
+    // to hardcoded clock times, which produced ~7pm bedtimes even when baby
+    // was crashing by 6pm. We now compute bedtime as:
+    //   recommended = goalBedtime − (goal − napDuration)
+    // and clamp to the wake-window ceiling from nap end so the recommendation
+    // can never overshoot what baby can physically stay awake for.
     const napDuration = napDurations?.[0] ?? totalNapMinutes;
-    const baselineBedtime = parseTimeString('19:15', baseDate, timezone); // 7:15pm baseline
+    const oneNapGoalMinutes = 150;
 
-    if (napDuration >= 120) {
-      // 2+ hour nap: 7:15/7:30pm
-      recommended = parseTimeString('19:22', baseDate, timezone); // 7:22pm (middle of 7:15-7:30)
-      notes.push('Great nap (2+ hrs)! Standard bedtime');
-    } else if (napDuration >= 90) {
-      // ~1.5 hour nap: 7/7:15pm
-      recommended = parseTimeString('19:07', baseDate, timezone); // 7:07pm
-      notes.push('Good nap (90+ min), slightly earlier bedtime');
-    } else if (napDuration >= 60) {
-      // ~1 hour nap: 6:45/7pm
-      recommended = parseTimeString('18:52', baseDate, timezone); // 6:52pm
-      const sleepDebt = 90 - napDuration;
-      notes.push(`1-hour nap: ${sleepDebt} min sleep debt, earlier bedtime`);
-    } else if (napDuration >= 30) {
-      // 30-45 min nap: 6:15-6:45pm
-      const sleepDebt = 90 - napDuration;
-      recommended = addMinutes(baselineBedtime, -sleepDebt);
-      notes.push(`Short nap (${napDuration}m): ${sleepDebt} min sleep debt`);
-    } else if (napDuration > 0) {
-      // Very short nap: earliest reasonable bedtime
-      recommended = parseTimeString('18:15', baseDate, timezone);
-      notes.push('Very short nap - early bedtime to catch up');
-    } else {
-      // No nap data yet - use goal
+    if (napDuration <= 0) {
+      // No nap data yet — fall back to the goal time.
       recommended = goalBedtime;
+    } else {
+      const sleepDebt = Math.max(0, oneNapGoalMinutes - napDuration);
+      recommended = addMinutes(goalBedtime, -sleepDebt);
+
+      if (sleepDebt > 0) {
+        notes.push(`${sleepDebt} min nap shortfall vs ${oneNapGoalMinutes}-min goal → earlier bedtime`);
+      } else {
+        notes.push('Nap goal met — standard bedtime');
+      }
+
+      // Ceiling: baby can't stay awake longer than the wake window from nap end.
+      // If the goal-based recommendation overshoots that window, pull it back.
+      if (isAfter(recommended, latestByWakeWindow)) {
+        recommended = latestByWakeWindow;
+        notes.push(`Capped to ${wwMax}-min wake window after nap`);
+      }
     }
 
   } else if (type === ScheduleType.TWO_NAP) {
