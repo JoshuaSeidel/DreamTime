@@ -652,16 +652,50 @@ export function getEffectiveScheduleType(
   return schedule.type as ScheduleType;
 }
 
+// Returns the effective transition week (1-based).
+//
+// The week auto-advances based on how long ago `startedAt` was — one week
+// per 7 calendar days — so parents don't have to bump currentWeek by hand
+// for the nap-goal ramp to progress. Manual advances via progressTransition
+// still win: we return max(stored currentWeek, calendar-derived week) so a
+// parent moving faster than the calendar is honored. Clamped to [1, targetWeeks].
+export function getEffectiveTransitionWeek(transition: {
+  startedAt: Date | string;
+  currentWeek: number;
+  targetWeeks: number;
+  completedAt: Date | string | null;
+}): number {
+  const totalWeeks = Math.max(1, transition.targetWeeks);
+
+  if (transition.completedAt) {
+    return totalWeeks;
+  }
+
+  const startedAt = transition.startedAt instanceof Date
+    ? transition.startedAt
+    : new Date(transition.startedAt);
+  const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+  const calendarWeek = Math.floor((Date.now() - startedAt.getTime()) / msPerWeek) + 1;
+  const effective = Math.max(transition.currentWeek, calendarWeek);
+  return Math.min(totalWeeks, Math.max(1, effective));
+}
+
 // Returns the expected single-nap goal in minutes.
 //
 // Fully transitioned 1-nap days target 150 min (consultant 2.5 hr). During an
 // active 2-to-1 transition the baby is still learning to consolidate into one
 // nap and can't realistically hit 150 min from day one, so we ramp the goal
-// linearly from 90 min (week 1) to 150 min (final week). Used by both the
-// bedtime calculator and the today-summary sleep-debt display so they tell
-// the same story.
+// linearly from 90 min (week 1) to 150 min (final week). The week input comes
+// from getEffectiveTransitionWeek so the ramp auto-advances on the calendar.
+// Used by both the bedtime calculator and the today-summary sleep-debt display
+// so they tell the same story.
 export function getOneNapGoalMinutes(
-  transition?: { currentWeek: number; targetWeeks: number; completedAt: Date | string | null } | null
+  transition?: {
+    startedAt: Date | string;
+    currentWeek: number;
+    targetWeeks: number;
+    completedAt: Date | string | null;
+  } | null
 ): number {
   const startGoal = 90;
   const endGoal = 150;
@@ -671,7 +705,8 @@ export function getOneNapGoalMinutes(
   }
 
   const totalWeeks = Math.max(2, transition.targetWeeks);
-  const progress = Math.max(0, Math.min(1, (transition.currentWeek - 1) / (totalWeeks - 1)));
+  const effectiveWeek = getEffectiveTransitionWeek(transition);
+  const progress = Math.max(0, Math.min(1, (effectiveWeek - 1) / (totalWeeks - 1)));
   return Math.round(startGoal + (endGoal - startGoal) * progress);
 }
 

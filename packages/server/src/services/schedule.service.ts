@@ -1,5 +1,6 @@
 import { prisma } from '../config/database.js';
 import { Role, ScheduleType, InviteStatus } from '../types/enums.js';
+import { getEffectiveTransitionWeek } from './schedule.calculator.service.js';
 import type {
   CreateScheduleInput,
   UpdateScheduleInput,
@@ -128,9 +129,16 @@ function formatTransition(
     updatedAt: Date;
   }
 ): TransitionResponse {
+  const targetWeeks = transition.targetWeeks ?? 6;
   return {
     ...transition,
-    targetWeeks: transition.targetWeeks ?? 6, // Default to 6 if not set
+    targetWeeks,
+    effectiveWeek: getEffectiveTransitionWeek({
+      startedAt: transition.startedAt,
+      currentWeek: transition.currentWeek,
+      targetWeeks,
+      completedAt: transition.completedAt,
+    }),
   };
 }
 

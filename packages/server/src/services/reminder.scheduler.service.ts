@@ -1,6 +1,6 @@
 import { prisma } from '../config/database.js';
 import { sendBedtimeReminder, sendNapReminder, sendWakeDeadlineAlert, sendNapCapExceededAlert, sendDaySleepCapWarningAlert, sendDaySleepCapExceededAlert } from './notification.service.js';
-import { calculateDaySchedule } from './schedule.calculator.service.js';
+import { calculateDaySchedule, getEffectiveTransitionWeek } from './schedule.calculator.service.js';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { startOfDay, format, differenceInMinutes, addMinutes, isAfter, isBefore, parse } from 'date-fns';
 import type { TransitionResponse } from '../schemas/schedule.schema.js';
@@ -122,6 +122,7 @@ async function processChildReminders(
     });
 
     if (activeTransition) {
+      const targetWeeks = activeTransition.targetWeeks ?? 6;
       transition = {
         id: activeTransition.id,
         childId: activeTransition.childId,
@@ -129,14 +130,20 @@ async function processChildReminders(
         toType: activeTransition.toType,
         startedAt: activeTransition.startedAt,
         currentWeek: activeTransition.currentWeek,
-        targetWeeks: activeTransition.targetWeeks ?? 6,
+        effectiveWeek: getEffectiveTransitionWeek({
+          startedAt: activeTransition.startedAt,
+          currentWeek: activeTransition.currentWeek,
+          targetWeeks,
+          completedAt: activeTransition.completedAt,
+        }),
+        targetWeeks,
         currentNapTime: activeTransition.currentNapTime,
         completedAt: activeTransition.completedAt,
         notes: activeTransition.notes,
         createdAt: activeTransition.createdAt,
         updatedAt: activeTransition.updatedAt,
       };
-      console.log(`[ReminderScheduler] ${childName}: Active transition found, targeting nap at ${transition.currentNapTime}`);
+      console.log(`[ReminderScheduler] ${childName}: Active transition found, targeting nap at ${activeTransition.currentNapTime}`);
     }
   }
 

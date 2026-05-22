@@ -155,6 +155,10 @@ export interface TransitionResponse {
   toType: string;
   startedAt: Date;
   currentWeek: number;
+  // Calendar-derived week (1-based, calculated from startedAt). Used by the
+  // calculator for the nap-goal ramp; surfaced here so the UI can show
+  // "you're in week N" without the parent having to bump currentWeek by hand.
+  effectiveWeek: number;
   targetWeeks: number;
   currentNapTime: string;
   completedAt: Date | null;

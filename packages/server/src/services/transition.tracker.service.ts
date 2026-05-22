@@ -2,6 +2,7 @@ import { addMinutes, differenceInDays, parse, format, isAfter, isBefore, addDays
 import { prisma } from '../config/database.js';
 import type { TransitionResponse } from '../schemas/schedule.schema.js';
 import { ScheduleType, InviteStatus } from '../types/enums.js';
+import { getEffectiveTransitionWeek } from './schedule.calculator.service.js';
 
 // Transition configuration based on sleep training guidelines
 export interface TransitionConfig {
@@ -237,6 +238,7 @@ export async function getTransitionProgress(
     };
   }
 
+  const targetWeeksForResponse = transition.targetWeeks ?? 6;
   return {
     transition: {
       id: transition.id,
@@ -245,7 +247,13 @@ export async function getTransitionProgress(
       toType: transition.toType,
       startedAt: transition.startedAt,
       currentWeek: transition.currentWeek,
-      targetWeeks: transition.targetWeeks ?? 6,
+      effectiveWeek: getEffectiveTransitionWeek({
+        startedAt: transition.startedAt,
+        currentWeek: transition.currentWeek,
+        targetWeeks: targetWeeksForResponse,
+        completedAt: transition.completedAt,
+      }),
+      targetWeeks: targetWeeksForResponse,
       currentNapTime: transition.currentNapTime,
       completedAt: transition.completedAt,
       notes: transition.notes,

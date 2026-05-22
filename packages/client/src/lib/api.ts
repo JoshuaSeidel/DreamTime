@@ -534,6 +534,9 @@ export interface ScheduleTransition {
   toType: string;
   startedAt: string;
   currentWeek: number;
+  // Calendar-derived week (auto-advances one per 7 days since startedAt).
+  // Honors manual currentWeek bumps that move faster than the calendar.
+  effectiveWeek: number;
   targetWeeks: number;
   currentNapTime: string;
   completedAt: string | null;
