@@ -465,32 +465,35 @@ function calculateBedtime(
   if (type === ScheduleType.ONE_NAP || type === ScheduleType.TRANSITION) {
     // 1-nap schedule bedtime calculation.
     //
-    // Consultant target for a 1-nap day is a 150-min nap (2.5 hr). The old
-    // implementation treated 90 min as "good enough" and tied recommendations
-    // to hardcoded clock times, which produced ~7pm bedtimes even when baby
-    // was crashing by 6pm. We now compute bedtime as:
-    //   recommended = goalBedtime − (goal − napDuration)
-    // and clamp to the wake-window ceiling from nap end so the recommendation
-    // can never overshoot what baby can physically stay awake for.
-    const napDuration = napDurations?.[0] ?? totalNapMinutes;
+    // Consultant target for a 1-nap day is a 150-min nap (2.5 hr). Bedtime is
+    //   recommended = goalBedtime − max(0, goal − napDuration)
+    // capped by the wake-window ceiling from nap end so it can't overshoot
+    // what baby can physically stay awake for.
+    //
+    // Callers signal "no nap yet" by omitting napDurations entirely and
+    // "nap is done (or was missed)" by passing a value (zero for missed).
     const oneNapGoalMinutes = 150;
+    const napHasOccurred = napDurations !== undefined && napDurations.length > 0;
+    const napDuration = napDurations?.[0] ?? totalNapMinutes;
 
-    if (napDuration <= 0) {
-      // No nap data yet — fall back to the goal time.
+    if (!napHasOccurred) {
+      // Nap hasn't happened yet — use the goal time as an estimate.
       recommended = goalBedtime;
     } else {
       const sleepDebt = Math.max(0, oneNapGoalMinutes - napDuration);
       recommended = addMinutes(goalBedtime, -sleepDebt);
 
-      if (sleepDebt > 0) {
+      if (napDuration === 0) {
+        notes.push(`Nap missed — pulling bedtime ${sleepDebt} min earlier (clamped to bedtime floor)`);
+      } else if (sleepDebt > 0) {
         notes.push(`${sleepDebt} min nap shortfall vs ${oneNapGoalMinutes}-min goal → earlier bedtime`);
       } else {
         notes.push('Nap goal met — standard bedtime');
       }
 
-      // Ceiling: baby can't stay awake longer than the wake window from nap end.
-      // If the goal-based recommendation overshoots that window, pull it back.
-      if (isAfter(recommended, latestByWakeWindow)) {
+      // Wake-window ceiling only makes sense when the nap actually happened
+      // (lastNapEndTime is meaningless for missed naps).
+      if (napDuration > 0 && isAfter(recommended, latestByWakeWindow)) {
         recommended = latestByWakeWindow;
         notes.push(`Capped to ${wwMax}-min wake window after nap`);
       }
