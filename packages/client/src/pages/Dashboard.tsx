@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Moon, Clock, Loader2, Plus, Baby, Car, AlertTriangle, SkipForward } from 'lucide-react';
+import { Moon, Clock, Loader2, Plus, Baby, LifeBuoy, AlertTriangle, SkipForward } from 'lucide-react';
 import QuickActionButtons from '../components/QuickActionButtons';
 import ChildSelector from '../components/ChildSelector';
 import SleepTypeDialog from '../components/SleepTypeDialog';
@@ -399,7 +399,7 @@ export default function Dashboard() {
   };
 
   const handleAdHocNapSubmit = async (data: {
-    location: Exclude<NapLocation, 'CRIB'>;
+    location: NapLocation;
     asleepAt: string;
   }) => {
     if (!accessToken || !selectedChildId) {
@@ -532,7 +532,7 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Ad-Hoc Nap Button */}
+            {/* Rescue / Ad-Hoc Nap Button */}
             <AdHocNapDialog
               onSubmit={handleAdHocNapSubmit}
               trigger={
@@ -540,8 +540,8 @@ export default function Dashboard() {
                   variant="outline"
                   className="w-full gap-2 border-dashed border-muted-foreground/30 hover:border-blue-500/50 hover:bg-blue-500/5"
                 >
-                  <Car className="w-4 h-4 text-blue-500" />
-                  Log Car/Stroller Nap
+                  <LifeBuoy className="w-4 h-4 text-blue-500" />
+                  Log Rescue Nap
                 </Button>
               }
             />

@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils';
 import { getTodaySummary, type TodaySummary, type NapLocation } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 
-const LOCATION_LABELS: Record<Exclude<NapLocation, 'CRIB'>, string> = {
+const LOCATION_LABELS: Record<NapLocation, string> = {
+  CRIB: 'Crib (rescue)',
   CAR: 'Car',
   STROLLER: 'Stroller',
   CARRIER: 'Carrier',

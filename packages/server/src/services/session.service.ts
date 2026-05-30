@@ -685,6 +685,14 @@ export async function createAdHocSession(
 
   const asleepAt = new Date(input.asleepAt);
 
+  // CRIB rescue naps get FULL qualifiedRest credit (sleepMinutes) — the
+  // half-credit penalty only applies to naps in non-crib locations (car,
+  // stroller, etc.). Routing through calculateDurations with isAdHoc=false
+  // gives us the scheduled formula, which collapses to sleepMinutes when
+  // putDown = asleep and outOfCrib = wokeUp.
+  const isCribRescue = input.location === 'CRIB';
+  const useReducedCredit = !isCribRescue;
+
   // If wokeUpAt is provided, create a completed session
   if (input.wokeUpAt) {
     const wokeUpAt = new Date(input.wokeUpAt);
@@ -695,7 +703,7 @@ export async function createAdHocSession(
       asleepAt,
       wokeUpAt,
       wokeUpAt, // For ad-hoc, outOfCrib = woke up (no post-wake in crib)
-      true // isAdHoc = true
+      useReducedCredit
     );
 
     const session = await prisma.sleepSession.create({
@@ -952,13 +960,17 @@ async function recalculateSessionFromCycles(
   const cycles = session.sleepCycles;
 
   if (cycles.length === 0) {
-    // No wake events - use session timestamps directly
+    // No wake events - use session timestamps directly.
+    // CRIB rescue ad-hoc naps get full credit (reduced-credit only applies to
+    // non-crib locations), so we drop the isAdHoc flag for the duration math
+    // when location is CRIB.
+    const useReducedCredit = session.isAdHoc && session.location !== 'CRIB';
     const durations = calculateDurations(
       session.putDownAt,
       session.asleepAt,
       session.wokeUpAt,
       session.outOfCribAt,
-      session.isAdHoc
+      useReducedCredit
     );
 
     await prisma.sleepSession.update({

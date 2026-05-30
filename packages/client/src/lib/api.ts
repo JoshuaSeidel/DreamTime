@@ -374,7 +374,9 @@ export async function createAdHocSession(
   accessToken: string,
   childId: string,
   data: {
-    location: Exclude<NapLocation, 'CRIB'>;
+    // CRIB is allowed for in-crib rescue naps during the 2-to-1 transition and
+    // receives full qualifiedRest credit; other locations get half credit.
+    location: NapLocation;
     asleepAt: string;
     wokeUpAt?: string; // Optional - if omitted, starts in ASLEEP state
     notes?: string;

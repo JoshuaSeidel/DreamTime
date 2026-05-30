@@ -401,7 +401,7 @@ export async function sessionRoutes(app: FastifyInstance): Promise<void> {
           type: 'object',
           required: ['location', 'asleepAt'],
           properties: {
-            location: { type: 'string', enum: ['CAR', 'STROLLER', 'CARRIER', 'SWING', 'PLAYPEN', 'OTHER'] },
+            location: { type: 'string', enum: ['CRIB', 'CAR', 'STROLLER', 'CARRIER', 'SWING', 'PLAYPEN', 'OTHER'] },
             asleepAt: { type: 'string', format: 'date-time' },
             wokeUpAt: { type: 'string', format: 'date-time' }, // Optional - if omitted, starts in ASLEEP state
             notes: { type: 'string', maxLength: 500 },

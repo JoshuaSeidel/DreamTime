@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Car, Loader2 } from 'lucide-react';
+import { LifeBuoy, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,7 +20,11 @@ import {
 } from '@/components/ui/select';
 import type { NapLocation } from '@/lib/api';
 
-type AdHocLocation = Exclude<NapLocation, 'CRIB'>;
+// Rescue / ad-hoc naps can happen anywhere, including the crib (a brief
+// catch-up nap during the 2-to-1 transition). All locations skip the Nap 1 /
+// Nap 2 scheduling slot; CRIB additionally gets full qualifiedRest credit,
+// while all other locations get half credit.
+type AdHocLocation = NapLocation;
 
 interface AdHocNapDialogProps {
   open?: boolean;
@@ -33,6 +37,7 @@ interface AdHocNapDialogProps {
 }
 
 const LOCATION_OPTIONS: { value: AdHocLocation; label: string }[] = [
+  { value: 'CRIB', label: 'Crib (rescue nap — full credit)' },
   { value: 'CAR', label: 'Car' },
   { value: 'STROLLER', label: 'Stroller' },
   { value: 'CARRIER', label: 'Carrier' },
@@ -93,11 +98,13 @@ export default function AdHocNapDialog({
     <DialogContent className="sm:max-w-[350px]">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
-          <Car className="w-5 h-5 text-blue-500" />
-          Start Ad-Hoc Nap
+          <LifeBuoy className="w-5 h-5 text-blue-500" />
+          Log Rescue Nap
         </DialogTitle>
         <DialogDescription>
-          Baby fell asleep outside the crib? Start tracking now, tap "Awake" when they wake up.
+          Baby crashed somewhere unscheduled? Start tracking now and tap "Awake"
+          when they wake up. Crib rescue naps count fully toward sleep credit;
+          car / stroller / etc. count for half.
         </DialogDescription>
       </DialogHeader>
 

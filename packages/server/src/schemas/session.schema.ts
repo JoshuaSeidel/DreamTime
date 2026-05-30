@@ -46,12 +46,18 @@ export const listSessionsQuerySchema = z.object({
 
 export type ListSessionsQuery = z.infer<typeof listSessionsQuerySchema>;
 
-// Schema for creating ad-hoc naps (car, stroller, etc.)
+// Schema for creating ad-hoc / rescue naps (car, stroller, crib rescue, etc.)
 // Two modes:
 // 1. Start mode: location + asleepAt only - starts in ASLEEP state for real-time tracking
 // 2. Complete mode: location + asleepAt + wokeUpAt - logs completed nap after the fact
+//
+// CRIB is a valid location for "rescue naps in the crib" during the 2-to-1
+// transition. A CRIB ad-hoc gets full qualifiedRest credit (not the half-credit
+// non-crib ad-hoc naps receive), while still skipping the Nap 1 / Nap 2
+// scheduling slot (so it doesn't disrupt the day's schedule progression).
 export const createAdHocSessionSchema = z.object({
   location: z.enum([
+    NapLocation.CRIB,
     NapLocation.CAR,
     NapLocation.STROLLER,
     NapLocation.CARRIER,
