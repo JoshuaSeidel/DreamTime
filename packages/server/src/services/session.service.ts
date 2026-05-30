@@ -502,8 +502,11 @@ export async function updateSession(
       case 'woke_up':
         const wokeUpTime = input.wokeUpAt ? new Date(input.wokeUpAt) : now;
 
-        // For ad-hoc naps, woke_up goes directly to COMPLETED
-        if (session.isAdHoc) {
+        // Non-crib ad-hoc naps (car, stroller, …) collapse woke_up directly
+        // into COMPLETED — there's no crib post-wake period to track. Crib
+        // rescue naps run the full PENDING → ASLEEP → AWAKE → COMPLETED state
+        // machine like scheduled naps, so they fall into the else branch.
+        if (session.isAdHoc && session.location !== 'CRIB') {
           newState = SessionState.COMPLETED;
           if (!isValidStateTransition(currentState, newState)) {
             throw new SessionServiceError(
@@ -739,17 +742,27 @@ export async function createAdHocSession(
     return formatSession(session);
   }
 
-  // No wokeUpAt - start an ad-hoc nap in ASLEEP state (real-time tracking)
+  // No wokeUpAt - start a real-time tracked ad-hoc nap.
+  //
+  // Non-crib rescue naps (car, stroller, …) start in ASLEEP state: the parent
+  // hits the button after baby's already conked out, and we have no settling
+  // time to track.
+  //
+  // CRIB rescue naps run the full PENDING → ASLEEP → AWAKE → COMPLETED state
+  // machine like a regular scheduled nap. The input timestamp is treated as
+  // putDownAt; asleepAt is recorded later via the dashboard's "Fell Asleep"
+  // button, and credit math identical to a scheduled nap applies (settling
+  // and post-wake awake time at half credit, sleep at full).
   const session = await prisma.sleepSession.create({
     data: {
       childId,
       sessionType: 'NAP',
-      state: SessionState.ASLEEP,
+      state: isCribRescue ? SessionState.PENDING : SessionState.ASLEEP,
       napNumber: null, // Ad-hoc naps don't count as nap 1/2
       isAdHoc: true,
       location: input.location,
-      putDownAt: asleepAt, // For ad-hoc, putDown = asleep
-      asleepAt,
+      putDownAt: asleepAt,
+      asleepAt: isCribRescue ? null : asleepAt,
       notes: input.notes ?? null,
       timezone: timezone ?? null, // Store timezone for historical accuracy
       createdByUserId: userId,

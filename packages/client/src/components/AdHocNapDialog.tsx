@@ -102,9 +102,9 @@ export default function AdHocNapDialog({
           Log Rescue Nap
         </DialogTitle>
         <DialogDescription>
-          Baby crashed somewhere unscheduled? Start tracking now and tap "Awake"
-          when they wake up. Crib rescue naps count fully toward sleep credit;
-          car / stroller / etc. count for half.
+          {location === 'CRIB'
+            ? 'Crib rescue nap: tracks put down → asleep → awake → out of crib like a regular nap, and earns full sleep credit. Use this for an off-schedule catch-up nap during the 2-to-1 transition.'
+            : 'Baby crashed somewhere unscheduled? Start tracking now and tap "Awake" when they wake up. Non-crib rescue naps earn half credit toward sleep debt.'}
         </DialogDescription>
       </DialogHeader>
 
@@ -146,6 +146,8 @@ export default function AdHocNapDialog({
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Starting...
             </>
+          ) : location === 'CRIB' ? (
+            'Put in Crib'
           ) : (
             'Start Nap'
           )}

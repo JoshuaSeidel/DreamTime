@@ -410,9 +410,21 @@ export default function Dashboard() {
 
     if (result.success && result.data) {
       const locationLabel = data.location.charAt(0) + data.location.slice(1).toLowerCase();
-      toast.success(`${locationLabel} nap started`, `Tap "Awake" when ${selectedChildName} wakes up`);
+      // Crib rescue naps run the full put-down → asleep → awake → out-of-crib
+      // state machine, so the next action is "fell asleep", not "awake".
+      if (data.location === 'CRIB') {
+        toast.success(
+          'Crib rescue nap started',
+          `Tap "Fell Asleep" when ${selectedChildName} drifts off`
+        );
+      } else {
+        toast.success(
+          `${locationLabel} nap started`,
+          `Tap "Awake" when ${selectedChildName} wakes up`
+        );
+      }
 
-      // Reload to show active session - this will update currentState to 'asleep'
+      // Reload to show active session.
       loadSessionData();
       setSummaryRefreshTrigger(prev => prev + 1);
     } else {
