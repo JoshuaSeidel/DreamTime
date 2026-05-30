@@ -396,7 +396,10 @@ export default function Schedule() {
 
       const result = await updateTransition(accessToken, selectedChildId, {
         newNapTime: newTime,
-        currentWeek: currentTransition.currentWeek + 1,
+        // Bump from effectiveWeek (calendar-advanced) rather than the stored
+        // currentWeek so manual advances stick when the calendar has already
+        // moved past the stored value.
+        currentWeek: currentTransition.effectiveWeek + 1,
       });
       if (result.success) {
         toast.success('Progress saved', `Nap time moved to ${newTime}`);
@@ -526,13 +529,16 @@ export default function Schedule() {
   // Show active transition UI
   if (currentTransition && !currentTransition.completedAt) {
     const targetWeeks = currentTransition.targetWeeks || 6;
-    const progressPercent = Math.min(100, (currentTransition.currentWeek / targetWeeks) * 100);
+    // Use calendar-advanced effectiveWeek so display ticks forward without
+    // the parent having to bump the week by hand.
+    const displayWeek = currentTransition.effectiveWeek ?? currentTransition.currentWeek;
+    const progressPercent = Math.min(100, (displayWeek / targetWeeks) * 100);
 
     return (
       <div className="min-h-screen bg-background pb-20 md:pb-0">
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border px-4 py-4 md:border-b-0">
           <h1 className="text-xl font-bold">2-to-1 Nap Transition</h1>
-          <p className="text-sm text-muted-foreground">Week {currentTransition.currentWeek} of {targetWeeks}</p>
+          <p className="text-sm text-muted-foreground">Week {displayWeek} of {targetWeeks}</p>
         </header>
 
         <main className="px-4 py-6 space-y-6">
@@ -548,7 +554,7 @@ export default function Schedule() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Current Week</span>
-                <span className="font-bold text-2xl text-primary">{currentTransition.currentWeek} / {targetWeeks}</span>
+                <span className="font-bold text-2xl text-primary">{displayWeek} / {targetWeeks}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Target Nap Time</span>
@@ -647,7 +653,7 @@ export default function Schedule() {
               Push Nap 15 Minutes Later
             </Button>
 
-            {currentTransition.currentWeek >= 4 && (
+            {displayWeek >= 4 && (
               <Button
                 onClick={handleCompleteTransition}
                 variant="outline"
