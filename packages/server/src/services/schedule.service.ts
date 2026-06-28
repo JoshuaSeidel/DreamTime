@@ -360,15 +360,14 @@ export async function progressTransition(
   if (input.complete) {
     updateData.completedAt = new Date();
 
-    // Update the active schedule to ONE_NAP type
+    // Update the active schedule to ONE_NAP type AND persist consultant-aligned
+    // nap/wake-window timings centered on the transition's final nap time, so
+    // the calculator stops reading stale TWO_NAP values once the transition
+    // record drops out of getActiveTransition().
+    const finalNapTime = input.newNapTime ?? transition.currentNapTime;
     await prisma.sleepSchedule.updateMany({
-      where: {
-        childId,
-        isActive: true,
-      },
-      data: {
-        type: ScheduleType.ONE_NAP,
-      },
+      where: { childId, isActive: true },
+      data: oneNapScheduleOverrides(finalNapTime),
     });
   }
 
@@ -433,16 +432,82 @@ export async function getTransitionHistory(
   return transitions.map(formatTransition);
 }
 
+// Returns the schedule fields that should be written when a 2-to-1 transition
+// completes, given the transition's final currentNapTime. Without this, the
+// schedule retains its original TWO_NAP timings (nap1Earliest ~ 08:30,
+// wakeWindow1 ~ 2.5 hr) under a ONE_NAP type, and the calculator recommends
+// the single nap ~2 hr after wake instead of the consultant's 12:30 target.
+//
+// Defaults follow the consultant's after-transition rules from CLAUDE.md:
+//   single nap target: 12:30-13:00
+//   max duration:      150 min (2.5 hr)
+//   end by:            15:30
+//   wake window:       5-5.5 hr from wake to nap
+//   bedtime window:    4-5 hr from nap end to bedtime
+function oneNapScheduleOverrides(currentNapTime: string): {
+  type: string;
+  nap1Earliest: string;
+  nap1LatestStart: string;
+  nap1MaxDuration: number;
+  nap1EndBy: string;
+  wakeWindow1Min: number;
+  wakeWindow1Max: number;
+  wakeWindow2Min: null;
+  wakeWindow2Max: null;
+  wakeWindow3Min: number;
+  wakeWindow3Max: number;
+  nap2Earliest: null;
+  nap2LatestStart: null;
+  nap2MaxDuration: null;
+  nap2EndBy: null;
+  nap2ExceptionDuration: null;
+} {
+  const [hRaw, mRaw] = currentNapTime.split(':').map(Number);
+  const h = hRaw ?? 12;
+  const m = mRaw ?? 30;
+  const startMinutes = h * 60 + m;
+  const latestStartMinutes = startMinutes + 30; // ±30-min landing window
+  const latestH = Math.floor(latestStartMinutes / 60) % 24;
+  const latestM = latestStartMinutes % 60;
+  const nap1LatestStart = `${String(latestH).padStart(2, '0')}:${String(latestM).padStart(2, '0')}`;
+
+  return {
+    type: ScheduleType.ONE_NAP,
+    nap1Earliest: currentNapTime,
+    nap1LatestStart,
+    nap1MaxDuration: 150,
+    nap1EndBy: '15:30',
+    wakeWindow1Min: 300,
+    wakeWindow1Max: 330,
+    wakeWindow2Min: null,
+    wakeWindow2Max: null,
+    wakeWindow3Min: 240,
+    wakeWindow3Max: 300,
+    nap2Earliest: null,
+    nap2LatestStart: null,
+    nap2MaxDuration: null,
+    nap2EndBy: null,
+    nap2ExceptionDuration: null,
+  };
+}
+
 // Idempotent startup hook for the 2-to-1 transition state machine.
-// Runs two passes:
+// Runs three passes:
 //
 // 1. Auto-completes any open transition whose calendar duration
 //    (startedAt + targetWeeks * 7 days) has elapsed. The matching schedule
-//    is flipped to ONE_NAP so calculators stop treating it as a transition.
+//    is flipped to ONE_NAP with consultant-aligned nap/wake-window timings
+//    derived from the transition's final currentNapTime.
 //
 // 2. For every still-open transition, flips its active schedule from
 //    TWO_NAP to TRANSITION if it's drifted out of sync (e.g. transitions
 //    started before startTransition() began updating the schedule row).
+//
+// 3. Corrective backfill for users whose transition already completed before
+//    we started persisting the ONE_NAP timings — if the active schedule is
+//    ONE_NAP but its nap1Earliest still looks like a 2-nap value (before
+//    11:00 or missing), re-apply the overrides from the most recent
+//    completed transition.
 //
 // Safe to run on every server boot — it only touches affected rows.
 export async function backfillTransitionScheduleTypes(): Promise<{
@@ -452,7 +517,13 @@ export async function backfillTransitionScheduleTypes(): Promise<{
   // ---- Pass 1: auto-complete expired transitions ----
   const candidates = await prisma.scheduleTransition.findMany({
     where: { completedAt: null },
-    select: { id: true, childId: true, startedAt: true, targetWeeks: true },
+    select: {
+      id: true,
+      childId: true,
+      startedAt: true,
+      targetWeeks: true,
+      currentNapTime: true,
+    },
   });
 
   const msPerWeek = 7 * 24 * 60 * 60 * 1000;
@@ -471,7 +542,7 @@ export async function backfillTransitionScheduleTypes(): Promise<{
       }),
       prisma.sleepSchedule.updateMany({
         where: { childId: t.childId, isActive: true },
-        data: { type: ScheduleType.ONE_NAP },
+        data: oneNapScheduleOverrides(t.currentNapTime),
       }),
     ]);
     autoCompleted += 1;
@@ -483,22 +554,60 @@ export async function backfillTransitionScheduleTypes(): Promise<{
     select: { childId: true },
   });
 
-  if (stillOpen.length === 0) {
-    return { schedulesFlipped: 0, transitionsAutoCompleted: autoCompleted };
+  let flippedCount = 0;
+  if (stillOpen.length > 0) {
+    const childIds = stillOpen.map(t => t.childId);
+    const flipResult = await prisma.sleepSchedule.updateMany({
+      where: {
+        childId: { in: childIds },
+        isActive: true,
+        type: ScheduleType.TWO_NAP,
+      },
+      data: { type: ScheduleType.TRANSITION },
+    });
+    flippedCount = flipResult.count;
   }
 
-  const childIds = stillOpen.map(t => t.childId);
-  const flipResult = await prisma.sleepSchedule.updateMany({
+  // ---- Pass 3: corrective backfill for already-completed transitions ----
+  // Find ONE_NAP schedules whose nap1Earliest is still in the TWO_NAP morning
+  // range (or missing). If the child has a completed transition, re-apply the
+  // ONE_NAP overrides from the latest one. Idempotent — once nap1Earliest is
+  // >= 11:00, the heuristic no longer matches.
+  const stalSchedules = await prisma.sleepSchedule.findMany({
     where: {
-      childId: { in: childIds },
       isActive: true,
-      type: ScheduleType.TWO_NAP,
+      type: ScheduleType.ONE_NAP,
+      OR: [
+        { nap1Earliest: null },
+        { nap1Earliest: { lt: '11:00' } }, // String comparison works for HH:mm
+      ],
     },
-    data: { type: ScheduleType.TRANSITION },
+    select: { id: true, childId: true },
   });
 
+  let correctedCount = 0;
+  for (const sched of stalSchedules) {
+    const lastTransition = await prisma.scheduleTransition.findFirst({
+      where: {
+        childId: sched.childId,
+        toType: ScheduleType.ONE_NAP,
+        completedAt: { not: null },
+      },
+      orderBy: { completedAt: 'desc' },
+      select: { currentNapTime: true },
+    });
+
+    if (!lastTransition) continue;
+
+    await prisma.sleepSchedule.update({
+      where: { id: sched.id },
+      data: oneNapScheduleOverrides(lastTransition.currentNapTime),
+    });
+    correctedCount += 1;
+  }
+
   return {
-    schedulesFlipped: flipResult.count,
+    schedulesFlipped: flippedCount + correctedCount,
     transitionsAutoCompleted: autoCompleted,
   };
 }
