@@ -102,6 +102,13 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
   const stateTopic = getStateTopic(childId);
   const commandTopic = getCommandTopic(childId);
   const jsonAttributesTemplate = buildJsonAttributesTemplate(commandTopic);
+  const device = {
+    identifiers: [`dreamtime_${childId}`],
+    name: `DreamTime - ${childName}`,
+    manufacturer: 'DreamTime',
+    model: 'Sleep Tracker',
+    sw_version: '1.0.0',
+  };
 
   const discoveryPayload = {
     name: `${childName} Sleep Status`,
@@ -110,13 +117,7 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
     value_template: '{{ value_json.state }}',
     json_attributes_topic: stateTopic,
     icon: 'mdi:baby-face-outline',
-    device: {
-      identifiers: [`dreamtime_${childId}`],
-      name: `DreamTime - ${childName}`,
-      manufacturer: 'DreamTime',
-      model: 'Sleep Tracker',
-      sw_version: '1.0.0',
-    },
+    device,
     // Include child_id and command_topic as attributes for easy automation
     json_attributes_template: jsonAttributesTemplate,
   };
@@ -134,9 +135,7 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
     device_class: 'occupancy',
     json_attributes_topic: stateTopic,
     json_attributes_template: jsonAttributesTemplate,
-    device: {
-      identifiers: [`dreamtime_${childId}`],
-    },
+    device,
   };
 
   client.publish(occupancyDiscoveryTopic, JSON.stringify(occupancyPayload), { retain: true });
@@ -152,9 +151,7 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
     value_template: '{{ value_json.state }}',
     options: ['put_down', 'asleep', 'woke_up', 'out_of_crib'],
     icon: 'mdi:bed',
-    device: {
-      identifiers: [`dreamtime_${childId}`],
-    },
+    device,
   };
 
   client.publish(selectDiscoveryTopic, JSON.stringify(selectPayload), { retain: true });
