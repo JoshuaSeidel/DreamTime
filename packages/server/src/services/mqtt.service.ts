@@ -25,6 +25,7 @@ const ERROR_LOG_INTERVAL = 60000; // Only log errors every 60 seconds
 
 // Session state mapping for MQTT - user-friendly display values
 type MqttSessionState = 'Awake' | 'In Crib' | 'Asleep' | 'Awake in Crib';
+type MqttBinarySensorState = 'ON' | 'OFF';
 
 function mapSessionState(state: string | null): MqttSessionState {
   if (!state) return 'Awake';
@@ -38,6 +39,18 @@ function mapSessionState(state: string | null): MqttSessionState {
     case SessionState.COMPLETED:
     default:
       return 'Awake';
+  }
+}
+
+function mapCribOccupancyState(state: string | null): MqttBinarySensorState {
+  switch (state) {
+    case SessionState.PENDING:
+    case SessionState.ASLEEP:
+    case SessionState.AWAKE:
+      return 'ON';
+    case SessionState.COMPLETED:
+    default:
+      return 'OFF';
   }
 }
 
@@ -56,6 +69,21 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
 
+function buildJsonAttributesTemplate(commandTopic: string): string {
+  return JSON.stringify({
+    child_id: '{{ value_json.child_id }}',
+    child_name: '{{ value_json.child_name }}',
+    session_type: '{{ value_json.session_type }}',
+    put_down_at: '{{ value_json.put_down_at }}',
+    asleep_at: '{{ value_json.asleep_at }}',
+    woke_up_at: '{{ value_json.woke_up_at }}',
+    occupancy: '{{ value_json.occupancy }}',
+    occupied: '{{ value_json.occupied }}',
+    command_topic: commandTopic,
+    updated_at: '{{ value_json.updated_at }}',
+  });
+}
+
 // Publish Home Assistant MQTT Discovery config for a child
 async function publishDiscoveryConfig(childId: string, childName: string): Promise<void> {
   if (!client || !isConnected) {
@@ -68,10 +96,12 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
 
   // Discovery topic for sensor entity
   const discoveryTopic = `${HA_DISCOVERY_PREFIX}/sensor/${uniqueId}/config`;
+  const occupancyDiscoveryTopic = `${HA_DISCOVERY_PREFIX}/binary_sensor/${uniqueId}_crib_occupancy/config`;
 
   // State topic where we publish updates
   const stateTopic = getStateTopic(childId);
   const commandTopic = getCommandTopic(childId);
+  const jsonAttributesTemplate = buildJsonAttributesTemplate(commandTopic);
 
   const discoveryPayload = {
     name: `${childName} Sleep Status`,
@@ -88,20 +118,29 @@ async function publishDiscoveryConfig(childId: string, childName: string): Promi
       sw_version: '1.0.0',
     },
     // Include child_id and command_topic as attributes for easy automation
-    json_attributes_template: JSON.stringify({
-      child_id: '{{ value_json.child_id }}',
-      child_name: '{{ value_json.child_name }}',
-      session_type: '{{ value_json.session_type }}',
-      put_down_at: '{{ value_json.put_down_at }}',
-      asleep_at: '{{ value_json.asleep_at }}',
-      woke_up_at: '{{ value_json.woke_up_at }}',
-      command_topic: commandTopic,
-      updated_at: '{{ value_json.updated_at }}',
-    }).replace(/"/g, "'").replace(/'/g, '"'), // HA template syntax
+    json_attributes_template: jsonAttributesTemplate,
   };
 
   client.publish(discoveryTopic, JSON.stringify(discoveryPayload), { retain: true });
   console.log(`MQTT: Published HA discovery config for ${childName}`);
+
+  const occupancyPayload = {
+    name: `${childName} Crib Occupancy`,
+    unique_id: `${uniqueId}_crib_occupancy`,
+    state_topic: stateTopic,
+    value_template: '{{ value_json.occupancy }}',
+    payload_on: 'ON',
+    payload_off: 'OFF',
+    device_class: 'occupancy',
+    json_attributes_topic: stateTopic,
+    json_attributes_template: jsonAttributesTemplate,
+    device: {
+      identifiers: [`dreamtime_${childId}`],
+    },
+  };
+
+  client.publish(occupancyDiscoveryTopic, JSON.stringify(occupancyPayload), { retain: true });
+  console.log(`MQTT: Published HA discovery config for ${childName} crib occupancy`);
 
   // Also publish a select entity for commands
   const selectDiscoveryTopic = `${HA_DISCOVERY_PREFIX}/select/${uniqueId}_action/config`;
@@ -511,11 +550,14 @@ export async function publishState(childId: string, childName?: string): Promise
     });
 
     const state = mapSessionState(activeSession?.state || null);
+    const occupancy = mapCribOccupancyState(activeSession?.state || null);
     const stateTopic = getStateTopic(childId);
 
     // Publish state as JSON with all attributes for HA
     const statePayload = {
       state,
+      occupancy,
+      occupied: occupancy === 'ON',
       child_id: childId,
       child_name: name,
       session_type: activeSession?.sessionType || null,

@@ -57,62 +57,45 @@ DreamTime publishes to these topics:
 
 | Topic | Payload | When |
 |-------|---------|------|
-| `dreamtime/{childId}/state` | `awake`, `in_crib`, `asleep`, `awake_in_crib` | State changes |
-| `dreamtime/{childId}/session/start` | JSON | Session starts |
-| `dreamtime/{childId}/session/end` | JSON | Session ends |
-| `dreamtime/{childId}/recommendation` | JSON | Recommendation updates |
+| `dreamtime/{childId}/state` | JSON status payload | State changes |
+| `homeassistant/sensor/.../config` | MQTT Discovery JSON | DreamTime startup/reconnect |
+| `homeassistant/binary_sensor/.../config` | MQTT Discovery JSON | DreamTime startup/reconnect |
+| `homeassistant/select/.../config` | MQTT Discovery JSON | DreamTime startup/reconnect |
 
 ### State Topic Payloads
 
-**State Values:**
-```
-awake          - Baby is out of crib, awake
-in_crib        - Baby placed in crib (settling)
-asleep         - Baby is sleeping
-awake_in_crib  - Baby woke but still in crib
-```
-
-### Session Start Payload
+DreamTime publishes retained JSON on the state topic so Home Assistant can restore the latest state after restart.
 
 ```json
 {
-  "childId": "uuid",
-  "childName": "Oliver",
-  "sessionId": "uuid",
-  "type": "NAP",
-  "napNumber": 1,
-  "putDownAt": "2024-01-15T09:00:00Z",
-  "location": "CRIB"
+  "state": "Asleep",
+  "occupancy": "ON",
+  "occupied": true,
+  "child_id": "uuid",
+  "child_name": "Oliver",
+  "session_type": "NAP",
+  "put_down_at": "2026-07-13T13:00:00.000Z",
+  "asleep_at": "2026-07-13T13:12:00.000Z",
+  "woke_up_at": null,
+  "command_topic": "dreamtime/uuid/command",
+  "updated_at": "2026-07-13T13:12:00.000Z"
 }
 ```
 
-### Session End Payload
+**Sleep state values:**
 
-```json
-{
-  "childId": "uuid",
-  "childName": "Oliver",
-  "sessionId": "uuid",
-  "type": "NAP",
-  "napNumber": 1,
-  "duration": 90,
-  "qualifiedRest": 95,
-  "outOfCribAt": "2024-01-15T10:35:00Z"
-}
+```text
+Awake          - Baby is out of crib, awake
+In Crib        - Baby placed in crib and settling
+Asleep         - Baby is sleeping
+Awake in Crib  - Baby woke but is still in crib
 ```
 
-### Recommendation Payload
+**Crib occupancy values:**
 
-```json
-{
-  "childId": "uuid",
-  "childName": "Oliver",
-  "type": "NAP",
-  "napNumber": 2,
-  "status": "READY",
-  "targetTime": "2024-01-15T12:30:00Z",
-  "message": "Oliver is ready for Nap 2"
-}
+```text
+ON   - Baby has an active crib session: In Crib, Asleep, or Awake in Crib
+OFF  - Baby is out of crib with no active session
 ```
 
 ### Subscribed Topics
@@ -121,10 +104,11 @@ DreamTime listens on these topics for commands:
 
 | Topic | Payload | Action |
 |-------|---------|--------|
-| `dreamtime/{childId}/command/put_down` | `{}` | Start session |
-| `dreamtime/{childId}/command/fell_asleep` | `{}` | Mark asleep |
-| `dreamtime/{childId}/command/woke_up` | `{}` | Mark woke up |
-| `dreamtime/{childId}/command/out_of_crib` | `{}` | End session |
+| `dreamtime/{childId}/command` | `put_down` | Start session |
+| `dreamtime/{childId}/command` | `asleep` | Mark asleep |
+| `dreamtime/{childId}/command` | `woke_up` | Mark woke up |
+| `dreamtime/{childId}/command` | `out_of_crib` | End session |
+| `dreamtime/{childId}/command` | `status` | Republish current state |
 
 ---
 
@@ -143,27 +127,36 @@ mqtt:
   password: your_password
 ```
 
-### Step 2: Create MQTT Sensors
+### Step 2: Use MQTT Discovery
 
-Add sensors for each child:
+DreamTime publishes Home Assistant MQTT Discovery configs automatically when MQTT connects. After DreamTime starts, each child gets:
+
+- `sensor.<child>_sleep_status` for the friendly sleep state
+- `binary_sensor.<child>_crib_occupancy` with `device_class: occupancy`
+- `select.<child>_sleep_action` for command publishing
+
+The occupancy binary sensor is `on` whenever the baby has an active crib session (`In Crib`, `Asleep`, or `Awake in Crib`) and `off` after `out_of_crib`.
+
+If discovery is unavailable, add manual sensors for each child:
 
 ```yaml
 # configuration.yaml
 mqtt:
   sensor:
-    - name: "Oliver Sleep State"
+    - name: "Oliver Sleep Status"
       state_topic: "dreamtime/oliver-child-id/state"
+      value_template: "{{ value_json.state }}"
+      json_attributes_topic: "dreamtime/oliver-child-id/state"
       icon: mdi:sleep
 
-    - name: "Oliver Next Sleep"
-      state_topic: "dreamtime/oliver-child-id/recommendation"
-      value_template: "{{ value_json.message }}"
-      icon: mdi:clock-outline
-
-    - name: "Oliver Sleep Status"
-      state_topic: "dreamtime/oliver-child-id/recommendation"
-      value_template: "{{ value_json.status }}"
-      icon: mdi:information
+  binary_sensor:
+    - name: "Oliver Crib Occupancy"
+      state_topic: "dreamtime/oliver-child-id/state"
+      value_template: "{{ value_json.occupancy }}"
+      payload_on: "ON"
+      payload_off: "OFF"
+      device_class: occupancy
+      json_attributes_topic: "dreamtime/oliver-child-id/state"
 ```
 
 ### Step 3: Create Input Buttons
@@ -203,8 +196,8 @@ Link buttons to MQTT commands:
   action:
     service: mqtt.publish
     data:
-      topic: "dreamtime/oliver-child-id/command/put_down"
-      payload: "{}"
+      topic: "dreamtime/oliver-child-id/command"
+      payload: "put_down"
 
 - alias: "Oliver Fell Asleep Button"
   trigger:
@@ -213,8 +206,8 @@ Link buttons to MQTT commands:
   action:
     service: mqtt.publish
     data:
-      topic: "dreamtime/oliver-child-id/command/fell_asleep"
-      payload: "{}"
+      topic: "dreamtime/oliver-child-id/command"
+      payload: "asleep"
 
 - alias: "Oliver Woke Up Button"
   trigger:
@@ -223,8 +216,8 @@ Link buttons to MQTT commands:
   action:
     service: mqtt.publish
     data:
-      topic: "dreamtime/oliver-child-id/command/woke_up"
-      payload: "{}"
+      topic: "dreamtime/oliver-child-id/command"
+      payload: "woke_up"
 
 - alias: "Oliver Out of Crib Button"
   trigger:
@@ -233,8 +226,8 @@ Link buttons to MQTT commands:
   action:
     service: mqtt.publish
     data:
-      topic: "dreamtime/oliver-child-id/command/out_of_crib"
-      payload: "{}"
+      topic: "dreamtime/oliver-child-id/command"
+      payload: "out_of_crib"
 ```
 
 ---
@@ -276,9 +269,9 @@ Dim nursery lights when baby goes in crib:
 ```yaml
 - alias: "Dim Nursery When Baby In Crib"
   trigger:
-    platform: mqtt
-    topic: "dreamtime/oliver-child-id/state"
-    payload: "in_crib"
+    platform: state
+    entity_id: binary_sensor.oliver_crib_occupancy
+    to: "on"
   action:
     service: light.turn_on
     target:
@@ -295,9 +288,9 @@ Turn on white noise when baby is placed in crib:
 ```yaml
 - alias: "White Noise On When In Crib"
   trigger:
-    platform: mqtt
-    topic: "dreamtime/oliver-child-id/state"
-    payload: "in_crib"
+    platform: state
+    entity_id: binary_sensor.oliver_crib_occupancy
+    to: "on"
   action:
     service: media_player.play_media
     target:
@@ -308,35 +301,13 @@ Turn on white noise when baby is placed in crib:
 
 - alias: "White Noise Off When Out of Crib"
   trigger:
-    platform: mqtt
-    topic: "dreamtime/oliver-child-id/state"
-    payload: "awake"
+    platform: state
+    entity_id: binary_sensor.oliver_crib_occupancy
+    to: "off"
   action:
     service: media_player.stop
     target:
       entity_id: media_player.nursery_speaker
-```
-
-### Nap Reminder Announcement
-
-Announce nap time on speakers:
-
-```yaml
-- alias: "Announce Nap Time"
-  trigger:
-    platform: mqtt
-    topic: "dreamtime/oliver-child-id/recommendation"
-  condition:
-    - condition: template
-      value_template: "{{ trigger.payload_json.status == 'READY' }}"
-    - condition: template
-      value_template: "{{ trigger.payload_json.type == 'NAP' }}"
-  action:
-    service: tts.google_translate_say
-    target:
-      entity_id: media_player.living_room
-    data:
-      message: "{{ trigger.payload_json.message }}"
 ```
 
 ### Bedtime Mode
@@ -346,9 +317,9 @@ Activate bedtime mode for the house:
 ```yaml
 - alias: "Activate Bedtime Mode"
   trigger:
-    platform: mqtt
-    topic: "dreamtime/oliver-child-id/state"
-    payload: "asleep"
+    platform: state
+    entity_id: sensor.oliver_sleep_status
+    to: "Asleep"
   condition:
     - condition: time
       after: "18:00:00"
@@ -375,10 +346,10 @@ Create a baby monitoring dashboard:
 type: entities
 title: Oliver Sleep Tracker
 entities:
-  - entity: sensor.oliver_sleep_state
+  - entity: sensor.oliver_sleep_status
     name: Current State
-  - entity: sensor.oliver_next_sleep
-    name: Recommendation
+  - entity: binary_sensor.oliver_crib_occupancy
+    name: Crib Occupancy
   - type: buttons
     entities:
       - entity: input_button.oliver_put_down
@@ -402,8 +373,8 @@ Show different cards based on state:
 ```yaml
 type: conditional
 conditions:
-  - entity: sensor.oliver_sleep_state
-    state: "asleep"
+  - entity: sensor.oliver_sleep_status
+    state: "Asleep"
 card:
   type: markdown
   content: |
@@ -455,7 +426,7 @@ Response includes the child ID.
 ### Commands Not Working
 
 1. Verify topic matches exactly (including child ID)
-2. Ensure payload is valid JSON (`{}` for commands)
+2. Ensure the payload is one of the supported command strings, such as `put_down` or `out_of_crib`
 3. Check DreamTime server logs for errors
 4. Verify there's an active session for state transitions
 
@@ -485,7 +456,8 @@ Create a dedicated MQTT user for DreamTime with limited permissions:
 ```
 user dreamtime
 topic write dreamtime/#
-topic read dreamtime/+/command/#
+topic write homeassistant/#
+topic read dreamtime/+/command
 ```
 
 ### Firewall
@@ -493,4 +465,3 @@ topic read dreamtime/+/command/#
 Only allow MQTT from DreamTime server:
 - Block external access to port 1883/8883
 - Use internal network only
-

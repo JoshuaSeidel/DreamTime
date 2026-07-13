@@ -30,6 +30,15 @@ input_select:
 # These create friendly sensors from MQTT data
 
 template:
+  # Template - DreamTime auto-creates this via MQTT Discovery
+  # This is just for reference - you shouldn't need to manually define it
+  #
+  # - binary_sensor:
+  #     - name: "Baby Crib Occupancy"
+  #       unique_id: dreamtime_baby_crib_occupancy
+  #       state: "{{ is_state('binary_sensor.dreamtime_baby_crib_occupancy', 'on') }}"
+  #       device_class: occupancy
+
   - sensor:
       # Template - DreamTime auto-creates these via MQTT Discovery
       # This is just for reference - you shouldn't need to manually define them
@@ -62,7 +71,7 @@ template:
         unique_id: baby_time_in_crib
         state: >
           {% set put_down = state_attr('sensor.dreamtime_baby_sleep_status', 'put_down_at') %}
-          {% if put_down and states('sensor.dreamtime_baby_sleep_status') != 'Awake' %}
+          {% if put_down and is_state('binary_sensor.dreamtime_baby_crib_occupancy', 'on') %}
             {% set duration = (now() - (put_down | as_datetime)).total_seconds() / 60 %}
             {{ duration | round(0) }}
           {% else %}
@@ -85,3 +94,12 @@ template:
 #       value_template: "{{ value_json.state }}"
 #       json_attributes_topic: "dreamtime/CHILD_ID/state"
 #       icon: mdi:baby-face-outline
+#   binary_sensor:
+#     - name: "Baby Crib Occupancy"
+#       unique_id: dreamtime_baby_crib_occupancy_manual
+#       state_topic: "dreamtime/CHILD_ID/state"
+#       value_template: "{{ value_json.occupancy }}"
+#       payload_on: "ON"
+#       payload_off: "OFF"
+#       device_class: occupancy
+#       json_attributes_topic: "dreamtime/CHILD_ID/state"

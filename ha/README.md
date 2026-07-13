@@ -57,9 +57,9 @@ Once configured, you can use these Alexa commands:
 
 ## How It Works
 
-1. **MQTT Discovery**: DreamTime automatically publishes Home Assistant MQTT Discovery configs when it starts, creating sensor entities for each child
+1. **MQTT Discovery**: DreamTime automatically publishes Home Assistant MQTT Discovery configs when it starts, creating sleep status, crib occupancy, and action entities for each child
 2. **Voice Commands**: Alexa triggers Home Assistant automations that publish MQTT commands
-3. **State Updates**: DreamTime processes commands and publishes state updates back via MQTT
+3. **State Updates**: DreamTime processes commands and publishes state updates back via MQTT. The crib occupancy binary sensor is `on` while the child has an active crib session and `off` after `out_of_crib`
 4. **Entity Sync**: Home Assistant sensors update automatically via MQTT
 
 ## Troubleshooting
