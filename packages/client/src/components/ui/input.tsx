@@ -4,8 +4,33 @@ import { cn } from '@/lib/utils';
 export interface InputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {}
 
+// Input types that have a native browser picker (calendar / clock dialog).
+const PICKER_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
+
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, onClick, ...props }, ref) => {
+    const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+      onClick?.(e);
+      // Some Android browsers/PWAs don't reliably open the native picker on tap,
+      // so open it explicitly. showPicker() throws if the picker is unavailable
+      // (e.g. already open, no user activation) — the native behavior still applies then.
+      const input = e.currentTarget;
+      if (
+        !e.defaultPrevented &&
+        type &&
+        PICKER_TYPES.has(type) &&
+        !input.readOnly &&
+        !input.disabled &&
+        typeof input.showPicker === 'function'
+      ) {
+        try {
+          input.showPicker();
+        } catch {
+          // Fall back to the browser's default handling.
+        }
+      }
+    };
+
     return (
       <input
         type={type}
@@ -14,6 +39,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           className
         )}
         ref={ref}
+        onClick={handleClick}
         {...props}
       />
     );
